@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/client";
 
 export default function ForgotPasswordPage() {
@@ -11,12 +11,14 @@ export default function ForgotPasswordPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
     setError(null);
 
+    // Use your deployed site URL (set in Vercel as NEXT_PUBLIC_SITE_URL)
+    // Fallback is your production domain.
     const siteUrl =
       process.env.NEXT_PUBLIC_SITE_URL ?? "https://sleepfix-app.vercel.app";
 
@@ -34,27 +36,22 @@ export default function ForgotPasswordPage() {
     <div style={{ maxWidth: 420, margin: "40px auto" }}>
       <h1>Forgot password</h1>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
         <input
           type="email"
           placeholder="you@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          style={{ width: "100%", padding: 10, marginTop: 12 }}
         />
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ width: "100%", padding: 10, marginTop: 12 }}
-        >
-          {loading ? "Sending…" : "Send reset link"}
+        <button type="submit" disabled={loading}>
+          {loading ? "Sending..." : "Send reset email"}
         </button>
-      </form>
 
-      {message && <p style={{ marginTop: 12 }}>{message}</p>}
-      {error && <p style={{ marginTop: 12, color: "red" }}>{error}</p>}
+        {message && <p style={{ color: "green" }}>{message}</p>}
+        {error && <p style={{ color: "red" }}>{error}</p>}
+      </form>
     </div>
   );
 }
