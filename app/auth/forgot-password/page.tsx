@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { createClient } from "@/lib/client";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 export default function ForgotPasswordPage() {
-  const supabase = createClient();
+  const supabase = createBrowserSupabaseClient();
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,8 +17,6 @@ export default function ForgotPasswordPage() {
     setMessage(null);
     setError(null);
 
-    // Use your deployed site URL (set in Vercel as NEXT_PUBLIC_SITE_URL)
-    // Fallback is your production domain.
     const siteUrl =
       process.env.NEXT_PUBLIC_SITE_URL ?? "https://sleepfix-app.vercel.app";
 
