@@ -33,7 +33,7 @@ export function ForgotPasswordForm({
     try {
       // The url which will be included in the email. This URL needs to be configured in your redirect URLs in the Supabase dashboard at https://supabase.com/dashboard/project/_/auth/url-configuration
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: "https://sleepfix-app.vercel.app/auth/update-password",
+        redirectTo: "https://sleepfix-app.vercel.app/auth/callback?next=/auth/update-password",
       });
       if (error) throw error;
       setSuccess(true);
