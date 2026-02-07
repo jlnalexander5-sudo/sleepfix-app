@@ -17,9 +17,11 @@ export default function ForgotPasswordPage() {
     setMessage(null);
     setError(null);
 
-    // This is the key change: uses the domain the user is on right now
+    // Use the current site origin in the browser; fallback for safety
     const origin =
-      typeof window !== "undefined" ? window.location.origin : "https://sleepfix-app.vercel.app";
+      typeof window !== "undefined"
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_SITE_URL || "https://sleepfix-app.vercel.app";
 
     const redirectTo = `${origin}/auth/callback?next=/auth/update-password`;
 
@@ -34,30 +36,25 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div style={{ maxWidth: 420, margin: "48px auto" }}>
+    <div style={{ maxWidth: 420, margin: "40px auto" }}>
       <h1>Forgot password</h1>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
         <input
           type="email"
-          placeholder="you@example.com"
           value={email}
+          placeholder="you@example.com"
           onChange={(e) => setEmail(e.target.value)}
           required
-          style={{ width: "100%", padding: 10, marginTop: 12 }}
         />
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ width: "100%", padding: 10, marginTop: 12 }}
-        >
+        <button type="submit" disabled={loading}>
           {loading ? "Sending..." : "Send reset email"}
         </button>
-      </form>
 
-      {message && <p style={{ marginTop: 12 }}>{message}</p>}
-      {error && <p style={{ marginTop: 12 }}>{error}</p>}
+        {message && <p style={{ color: "green" }}>{message}</p>}
+        {error && <p style={{ color: "red" }}>{error}</p>}
+      </form>
     </div>
   );
 }
