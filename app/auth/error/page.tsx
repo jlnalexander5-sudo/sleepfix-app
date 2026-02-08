@@ -1,43 +1,66 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Suspense } from "react";
+// app/auth/error/page.tsx
 
-async function ErrorContent({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function safeString(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "string") return value;
+  return "";
+}
+
+function ErrorDetails({ searchParams }: { searchParams?: SearchParams }) {
+  const error = safeString(searchParams?.error);
+  const errorDescription = safeString(searchParams?.error_description);
+  const reason = safeString(searchParams?.reason);
+  const msg = safeString(searchParams?.msg);
+  const code = safeString(searchParams?.code);
+
+  // Show ALL params for debugging (safe)
+  const rawParams =
+    searchParams && Object.keys(searchParams).length > 0
+      ? Object.entries(searchParams)
+          .map(([k, v]) => `${k}=${safeString(v)}`)
+          .join("\n")
+      : "";
+
+  const hasAny =
+    Boolean(error) ||
+    Boolean(errorDescription) ||
+    Boolean(reason) ||
+    Boolean(msg) ||
+    Boolean(code) ||
+    Boolean(rawParams);
+
+  if (!hasAny) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Sorry, something went wrong. No additional error details were provided.
+      </p>
+    );
+  }
 
   return (
-    <>
-      {params?.reason ? (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Reason: {String(params.reason)}
-          </p>
-          {params?.msg && (
-            <p className="text-sm text-muted-foreground">
-              Message: {String(params.msg)}
-            </p>
-          )}
-          {params?.params && (
-            <p className="text-sm text-muted-foreground">
-              Params: {String(params.params)}
-            </p>
-          )}
-          <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-            {JSON.stringify(params, null, 2)}
-          </pre>
-        </div>
-      ) : params?.error ? (
+    <div className="space-y-3">
+      {error ? (
         <p className="text-sm text-muted-foreground">
-          Code error: {String(params.error)}
+          <span className="font-medium">Error:</span> {error}
         </p>
-      ) : (
+      ) : null}
+
+      {errorDescription ? (
         <p className="text-sm text-muted-foreground">
-          An unspecified error occurred.
+          <span className="font-medium">Description:</span> {errorDescription}
         </p>
-      )}
-    </>
-  );
-}
+      ) : null}
+
+      {reason ? (
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium">Reason:</span> {reason}
+        </p>
+      ) : null}
+
+      {msg ? (
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium">
