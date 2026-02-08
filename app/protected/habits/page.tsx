@@ -1,7 +1,5 @@
-import dynamic from "next/dynamic";
-
-const HabitsClient = dynamic(() => import("./HabitsClient"), { ssr: false });
+import HabitsClientWrapper from "./HabitsClientWrapper";
 
 export default function Page() {
-  return <HabitsClient />;
+  return <HabitsClientWrapper />;
 }
