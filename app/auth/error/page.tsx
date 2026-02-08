@@ -4,15 +4,34 @@ import { Suspense } from "react";
 async function ErrorContent({
   searchParams,
 }: {
-  searchParams: Promise<{ error: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
 
   return (
     <>
-      {params?.error ? (
+      {params?.reason ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Reason: {String(params.reason)}
+          </p>
+          {params?.msg && (
+            <p className="text-sm text-muted-foreground">
+              Message: {String(params.msg)}
+            </p>
+          )}
+          {params?.params && (
+            <p className="text-sm text-muted-foreground">
+              Params: {String(params.params)}
+            </p>
+          )}
+          <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+            {JSON.stringify(params, null, 2)}
+          </pre>
+        </div>
+      ) : params?.error ? (
         <p className="text-sm text-muted-foreground">
-          Code error: {params.error}
+          Code error: {String(params.error)}
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -20,32 +39,5 @@ async function ErrorContent({
         </p>
       )}
     </>
-  );
-}
-
-export default function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ error: string }>;
-}) {
-  return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">
-                Sorry, something went wrong.
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Suspense>
-                <ErrorContent searchParams={searchParams} />
-              </Suspense>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
   );
 }
