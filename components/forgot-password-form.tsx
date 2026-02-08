@@ -22,7 +22,9 @@ export default function ForgotPasswordForm() {
         ? window.location.origin
         : process.env.NEXT_PUBLIC_SITE_URL || "https://sleepfix-app.vercel.app";
 
-    const redirectTo = `${origin}/auth/callback?next=/auth/update-password`;
+   await supabase.auth.resetPasswordForEmail(email, {
+  redirectTo: `${origin}/auth/callback?next=/auth/update-password`,
+});
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
   redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
