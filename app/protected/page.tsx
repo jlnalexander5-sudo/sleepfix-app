@@ -7,14 +7,13 @@ type ProfileRow = {
   id: string;
   created_at: string;
   display_name: string | null;
-  target_bedtime: string | null;   // Postgres time -> usually comes back like "22:30:00"
-  target_wake_time: string | null; // same
+  target_bedtime: string | null; // "22:30:00"
+  target_wake_time: string | null; // "06:45:00"
 };
 
 function toHHMM(t: string | null) {
   if (!t) return "";
-  // convert "22:30:00" -> "22:30"
-  return t.length >= 5 ? t.slice(0, 5) : t;
+  return t.length >= 5 ? t.slice(0, 5) : t; // "22:30:00" -> "22:30"
 }
 
 export default function ProtectedPage() {
@@ -31,7 +30,7 @@ export default function ProtectedPage() {
 
   // form fields
   const [displayName, setDisplayName] = useState("");
-  const [bedtime, setBedtime] = useState("");   // "HH:MM"
+  const [bedtime, setBedtime] = useState(""); // "HH:MM"
   const [wakeTime, setWakeTime] = useState(""); // "HH:MM"
 
   useEffect(() => {
@@ -54,8 +53,6 @@ export default function ProtectedPage() {
 
       const user = userData.user;
       if (!user) {
-        // If middleware protects this route, you usually won't hit this,
-        // but it's good to handle it anyway.
         if (!cancelled) {
           setStatus("Not logged in.");
           setLoading(false);
@@ -132,8 +129,6 @@ export default function ProtectedPage() {
     setError(null);
     setStatus("Saving...");
 
-    // Postgres "time" expects "HH:MM" or "HH:MM:SS"
-    // We'll store "HH:MM:00" if user entered HH:MM
     const bed = bedtime ? `${bedtime}:00` : null;
     const wake = wakeTime ? `${wakeTime}:00` : null;
 
@@ -160,7 +155,10 @@ export default function ProtectedPage() {
 
   return (
     <main style={{ maxWidth: 720, margin: "40px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Dashboard</h1>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
+        Dashboard
+      </h1>
+
       <p style={{ opacity: 0.8, marginBottom: 16 }}>
         {email ? `Signed in as ${email}` : "Signed in"}
       </p>
@@ -180,9 +178,7 @@ export default function ProtectedPage() {
         {loading && <div>Loading...</div>}
 
         {error && (
-          <div style={{ marginTop: 8, color: "salmon" }}>
-            Error: {error}
-          </div>
+          <div style={{ marginTop: 8, color: "salmon" }}>Error: {error}</div>
         )}
       </div>
 
@@ -220,7 +216,9 @@ export default function ProtectedPage() {
             </label>
 
             <label style={{ display: "block" }}>
-              <div style={{ fontSize: 14, marginBottom: 6 }}>Target wake time</div>
+              <div style={{ fontSize: 14, marginBottom: 6 }}>
+                Target wake time
+              </div>
               <input
                 type="time"
                 value={wakeTime}
@@ -248,6 +246,7 @@ export default function ProtectedPage() {
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
             Raw profile JSON
           </h3>
+
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.9 }}>
             {JSON.stringify(profile, null, 2)}
           </pre>
