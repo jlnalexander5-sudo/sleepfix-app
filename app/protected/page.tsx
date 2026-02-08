@@ -1,16 +1,39 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+"use client";
 
-export default async function ProtectedPage() {
-  const supabase = await createClient();
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/browser";
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+export default function ProtectedPage() {
+  const router = useRouter();
+  const supabase = createClient();
 
-  if (error || !user) {
-    redirect("/login");
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const run = async () => {
+      const { data, error } = await supabase.auth.getUser();
+
+      if (error || !data?.user) {
+        router.replace("/login");
+        return;
+      }
+
+      setUser(data.user);
+      setLoading(false);
+    };
+
+    run();
+  }, [router, supabase]);
+
+  if (loading) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700 }}>Protected</h1>
+        <p style={{ opacity: 0.8, marginTop: 12 }}>Loading…</p>
+      </main>
+    );
   }
 
   return (
