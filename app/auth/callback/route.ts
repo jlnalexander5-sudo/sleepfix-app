@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const supabase = await createServerSupabaseClient();
+  const supabase = await createClient();
 
   // Newer flow (PKCE): code
   if (code) {
