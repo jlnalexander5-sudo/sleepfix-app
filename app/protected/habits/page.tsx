@@ -196,7 +196,7 @@ export default function HabitsPage() {
             <input
               type="date"
               value={date}
-              onChange={(e) => setdate(e.target.value)}
+              onChange={(date) => setdate(e.target.value)}
               style={{ width: "100%", padding: 10, borderRadius: 8 }}
             />
           </label>
@@ -272,4 +272,5 @@ export default function HabitsPage() {
     </main>
   );
 }
+
 
