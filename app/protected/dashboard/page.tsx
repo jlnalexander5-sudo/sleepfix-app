@@ -1,8 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+// other imports...
+
+// helper functions HERE (below imports)
+function formatDurationFromMs(ms: number) { ... }
+function circularMeanMinutes(values: number[]) { ... }
+// etc...
+
+export default function DashboardPage() {
+  ...
+}
 
 type DailyHabitRow = {
   id: string;
