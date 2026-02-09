@@ -101,7 +101,6 @@ export default function HabitsPage() {
 
       if (!finalRow) {
         setStatus("Creating today's habits row...");
-
         const { data: created, error: createErr } = await supabase
           .from("daily_habits")
           .insert({
@@ -298,6 +297,7 @@ export default function HabitsPage() {
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
             Raw daily_habits JSON
           </h3>
+
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.9 }}>
             {JSON.stringify(row, null, 2)}
           </pre>
