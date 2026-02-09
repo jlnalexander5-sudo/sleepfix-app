@@ -258,13 +258,17 @@ export default function DashboardPage() {
   const habitsByDate = new Map(habits7.map((r) => [r.date, r]));
 
   function dayScore(d: string) {
-    const r = habitsByDate.get(d);
-    if (!r) return { symbol: "—", label: d, ok: false };
-    // "Good day" = all checkboxes true (you can change this rule later)
-    const ok =
-      !!r.caffeine_after_2pm && !!r.alcohol && !!r.exercise && !!r.screens_last_hour;
-    return { symbol: ok ? "✅" : "❌", label: d, ok };
-  }
+  const r = habitsByDate.get(d);
+  if (!r) return { symbol: "—", label: d, ok: false };
+
+  const ok =
+    r.caffeine_after_2pm === false &&
+    r.alcohol === false &&
+    r.exercise === true &&
+    r.screens_last_hour === false;
+
+  return { symbol: ok ? "✅" : "❌", label: d, ok };
+}
 
   const goodDays = dayList.filter((d) => dayScore(d).ok).length;
 
