@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type DailyHabitRow = {
-  id: string; // uuid
-  user_id: string; // uuid
+  id: string;
+  user_id: string;
   created_at: string;
   date: string; // YYYY-MM-DD
   caffeine_after_2pm: boolean | null;
@@ -31,7 +31,9 @@ export default function HabitsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
-  const [date, setDate] = useState<string>(toYYYYMMDDLocal());
+  // IMPORTANT: don't call new Date() during initial render
+  const [date, setDate] = useState<string>("");
+
   const [row, setRow] = useState<DailyHabitRow | null>(null);
 
   // form fields
@@ -40,7 +42,6 @@ export default function HabitsPage() {
   const [exercise, setExercise] = useState(false);
   const [screensLastHour, setScreensLastHour] = useState(false);
 
-  // Load auth + today's row
   useEffect(() => {
     let cancelled = false;
 
@@ -48,6 +49,10 @@ export default function HabitsPage() {
       setLoading(true);
       setError(null);
       setStatus("Checking session...");
+
+      // compute date ONLY in effect (client-only)
+      const today = toYYYYMMDDLocal();
+      setDate(today);
 
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) {
@@ -74,9 +79,6 @@ export default function HabitsPage() {
       setEmail(user.email ?? null);
       setStatus("Loading today's habits...");
 
-      const today = toYYYYMMDDLocal();
-      setDate(today);
-
       const { data: existing, error: readErr } = await supabase
         .from("daily_habits")
         .select(
@@ -97,7 +99,6 @@ export default function HabitsPage() {
 
       let finalRow = existing;
 
-      // Create if missing
       if (!finalRow) {
         setStatus("Creating today's habits row...");
 
@@ -148,7 +149,7 @@ export default function HabitsPage() {
   }, [supabase]);
 
   async function save() {
-    if (!userId) return;
+    if (!userId || !date) return;
 
     setError(null);
     setStatus("Saving...");
@@ -187,7 +188,8 @@ export default function HabitsPage() {
       </h1>
 
       <p style={{ opacity: 0.8, marginBottom: 16 }}>
-        {email ? `Signed in as ${email}` : "Signed in"} • Date: {date}
+        {email ? `Signed in as ${email}` : "Signed in"}
+        {date ? ` • Date: ${date}` : ""}
       </p>
 
       <div
@@ -231,7 +233,12 @@ export default function HabitsPage() {
           </label>
 
           <label
-            style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              marginTop: 10,
+            }}
           >
             <input
               type="checkbox"
@@ -242,7 +249,12 @@ export default function HabitsPage() {
           </label>
 
           <label
-            style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              marginTop: 10,
+            }}
           >
             <input
               type="checkbox"
@@ -253,7 +265,12 @@ export default function HabitsPage() {
           </label>
 
           <label
-            style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              marginTop: 10,
+            }}
           >
             <input
               type="checkbox"
