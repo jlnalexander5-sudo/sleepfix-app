@@ -390,9 +390,43 @@ export default function DashboardPage() {
 
             {/* NEW: 7-day streak */}
             <hr style={{ margin: "16px 0", opacity: 0.2 }} />
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>
-              Last 7 days (good days): {goodDays}/7
-            </div>
+         <div style={{ marginTop: 16 }}>
+  <div style={{ fontWeight: 600, marginBottom: 8 }}>
+    Last 7 days (good days): {goodDays}/7
+  </div>
+
+  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+    {dayList.map((d) => {
+      const s = dayScore(d);
+      const short = d.slice(5); // MM-DD
+
+      return (
+        <div
+          key={d}
+          style={{
+            width: 64,
+            height: 56,
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.12)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            opacity: s.ok ? 1 : 0.9,
+          }}
+        >
+          <div style={{ fontSize: 12, opacity: 0.8 }}>{short}</div>
+          <div style={{ fontSize: 18, lineHeight: 1 }}>{s.symbol}</div>
+        </div>
+      );
+    })}
+  </div>
+
+  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+    Rule used: a “good day” means all 4 boxes are ticked (we can change this later).
+  </div>
+</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {dayList.map((d) => {
                 const s = dayScore(d);
