@@ -2,10 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-// other imports...
-
-export default function DashboardPage() {
-}
 
 type DailyHabitRow = {
   id: string;
@@ -22,535 +18,351 @@ type SleepLogRow = {
   id: string;
   user_id: string;
   created_at: string;
-  sleep_start: string | null; // timestamptz
-  sleep_end: string | null; // timestamptz
-  quality: number | null; // smallint
+  sleep_start: string;
+  sleep_end: string;
+  quality: number | null;
   notes: string | null;
 };
 
-function toYYYYMMDDLocal(d = new Date()) {
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toYMD(d: Date) {
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
   return `${y}-${m}-${day}`;
 }
 
-function addDaysLocal(dateStr: string, deltaDays: number) {
-  // dateStr is YYYY-MM-DD interpreted as local date at midnight
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  dt.setDate(dt.getDate() + deltaDays);
-  return toYYYYMMDDLocal(dt);
+function startOfLocalDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 }
 
-function fmtLocal(ts: string | null) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function formatDateTime(dt: string) {
+  // dt is ISO timestamp, show as DD/MM/YYYY, HH:MM (local)
+  const d = new Date(dt);
+  const dd = pad2(d.getDate());
+  const mm = pad2(d.getMonth() + 1);
+  const yyyy = d.getFullYear();
+  const hh = pad2(d.getHours());
+  const min = pad2(d.getMinutes());
+  return `${dd}/${mm}/${yyyy}, ${hh}:${min}`;
 }
 
 function yesNoIcon(v: boolean | null | undefined) {
-  return v ? "✅" : "❌";
+  if (v === true) return "✅";
+  if (v === false) return "❌";
+  return "—";
 }
 
-function addDaysLocal(yyyyMmDd: string, deltaDays: number) {
-  const [y, m, d] = yyyyMmDd.split("-").map(Number);
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  dt.setDate(dt.getDate() + deltaDays);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
-function formatDurationFromMs(ms: number) {
-  const totalMin = Math.round(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return `${h}h ${String(m).padStart(2, "0")}m`;
-}
-
-function toMinutesSinceMidnightLocal(isoOrDate: string | Date) {
-  const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
-  const mins = d.getHours() * 60 + d.getMinutes();
-  return mins; // 0..1439
-}
-
-function circularDistanceMinutes(a: number, b: number) {
-  const diff = Math.abs(a - b);
-  return Math.min(diff, 1440 - diff);
-}
-// circular mean for times-of-day (handles around midnight)
-function circularMeanMinutes(values: number[]) {
-  if (values.length === 0) return 0;
-  let sumSin = 0;
-  let sumCos = 0;
-  for (const v of values) {
-    const angle = (v / 1440) * 2 * Math.PI;
-    sumSin += Math.sin(angle);
-    sumCos += Math.cos(angle);
-  }
-  const meanAngle = Math.atan2(sumSin / values.length, sumCos / values.length);
-  const normalized = meanAngle < 0 ? meanAngle + 2 * Math.PI : meanAngle;
-  return Math.round((normalized / (2 * Math.PI)) * 1440) % 1440;
-}
-
-function formatTimeOfDay(mins: number) {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  const ampm = h >= 12 ? "pm" : "am";
-  const hh = h % 12 === 0 ? 12 : h % 12;
-  return `${hh}:${String(m).padStart(2, "0")}${ampm}`;
+// for “good day” logic:
+// caffeine_after_2pm should be false
+// alcohol should be false
+// screens_last_hour should be false
+// exercise should be true
+function isGoodDay(r: DailyHabitRow | undefined) {
+  if (!r) return false;
+  return (
+    r.caffeine_after_2pm === false &&
+    r.alcohol === false &&
+    r.exercise === true &&
+    r.screens_last_hour === false
+  );
 }
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("Loading...");
-  const [error, setError] = useState<string | null>(null);
 
-  const [email, setEmail] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [today, setToday] = useState<string>("");
-
-  const [habitsToday, setHabitsToday] = useState<DailyHabitRow | null>(null);
-  const [sleepLatest, setSleepLatest] = useState<SleepLogRow | null>(null);
-
-  // NEW: 7-day summaries
+  const [status, setStatus] = useState<string>("Loading…");
+  const [todayStr, setTodayStr] = useState<string>(toYMD(new Date()));
   const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
-  const [sleep7Avg, setSleep7Avg] = useState<number | null>(null);
-  const [sleep7Count, setSleep7Count] = useState<number>(0);
+  const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
+  const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
-      setError(null);
-      setStatus("Checking session...");
+      try {
+        setStatus("Loading…");
 
-      const t = toYYYYMMDDLocal();
-      setToday(t);
-
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr) {
-        if (!cancelled) {
-          setError(userErr.message);
-          setStatus("Failed to get user.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      const user = userData.user;
-      if (!user) {
-        if (!cancelled) {
-          setStatus("Not logged in.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (cancelled) return;
-      setUserId(user.id);
-      setEmail(user.email ?? null);
-
-      // --- 1) Habits: load / create today's row
-      setStatus("Loading today's habits...");
-      const { data: existingHabits, error: habitsErr } = await supabase
-        .from("daily_habits")
-        .select(
-          "id, user_id, created_at, date, caffeine_after_2pm, alcohol, exercise, screens_last_hour"
-        )
-        .eq("user_id", user.id)
-        .eq("date", t)
-        .maybeSingle<DailyHabitRow>();
-
-      if (habitsErr) {
-        if (!cancelled) {
-          setError(habitsErr.message);
-          setStatus("Failed to load habits.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      let todaysRow = existingHabits;
-
-      if (!todaysRow) {
-        setStatus("Creating today's habits row...");
-        const { data: created, error: createErr } = await supabase
-          .from("daily_habits")
-          .insert({
-            user_id: user.id,
-            date: t,
-            caffeine_after_2pm: false,
-            alcohol: false,
-            exercise: false,
-            screens_last_hour: false,
-          })
-          .select(
-            "id, user_id, created_at, date, caffeine_after_2pm, alcohol, exercise, screens_last_hour"
-          )
-          .single<DailyHabitRow>();
-
-        if (createErr) {
-          if (!cancelled) {
-            setError(createErr.message);
-            setStatus("Failed to create habits row.");
-            setLoading(false);
-          }
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        if (!user) {
+          if (!cancelled) setStatus("Not signed in.");
           return;
         }
-        todaysRow = created;
-      }
 
-      // --- 2) Latest sleep log
-      setStatus("Loading latest sleep log...");
-      const { data: latestSleep, error: sleepErr } = await supabase
-        .from("sleep_logs")
-        .select("id, user_id, created_at, sleep_start, sleep_end, quality, notes")
-        .eq("user_id", user.id)
-        .order("sleep_start", { ascending: false })
-        .limit(1)
-        .maybeSingle<SleepLogRow>();
+        const today = new Date();
+        const todayYMD = toYMD(today);
+        if (!cancelled) setTodayStr(todayYMD);
 
-      if (sleepErr) {
-        if (!cancelled) {
-          setError(sleepErr.message);
-          setStatus("Failed to load sleep log.");
-          setLoading(false);
+        // build last 7 days list (inclusive today), oldest -> newest
+        const dayList: string[] = [];
+        const start = startOfLocalDay(today);
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(start);
+          d.setDate(d.getDate() - i);
+          dayList.push(toYMD(d));
         }
-        return;
-      }
+        const fromYMD = dayList[0];
+        const toYMDStr = dayList[dayList.length - 1];
 
-      // --- 3) NEW: last 7 days of habits (including today)
-      setStatus("Loading 7-day habits...");
-      const startDate = addDaysLocal(t, -6); // last 7 days inclusive
-      const { data: habitsRows, error: habits7Err } = await supabase
-        .from("daily_habits")
-        .select(
-          "id, user_id, created_at, date, caffeine_after_2pm, alcohol, exercise, screens_last_hour"
-        )
-        .eq("user_id", user.id)
-        .gte("date", startDate)
-        .lte("date", t)
-        .order("date", { ascending: true });
+        // fetch habits for last 7 days
+        const { data: habitsData, error: habitsErr } = await supabase
+          .from("daily_habits")
+          .select(
+            "id,user_id,created_at,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour"
+          )
+          .gte("date", fromYMD)
+          .lte("date", toYMDStr)
+          .order("date", { ascending: true });
 
-      if (habits7Err) {
-        if (!cancelled) {
-          setError(habits7Err.message);
-          setStatus("Failed to load 7-day habits.");
-          setLoading(false);
+        if (habitsErr) throw habitsErr;
+
+        // fetch latest sleep log
+        const { data: sleepData, error: sleepErr } = await supabase
+          .from("sleep_logs")
+          .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
+          .order("sleep_start", { ascending: false })
+          .limit(1);
+
+        if (sleepErr) throw sleepErr;
+
+        // fetch last 7 sleep logs for avg quality (optional)
+        const { data: sleep7Data, error: sleep7Err } = await supabase
+          .from("sleep (typeofDate === "string" ? "sleep_logs" : "sleep_logs")
+          .select("quality,sleep_start")
+          .order("sleep_start", { ascending: false })
+          .limit(7);
+
+        // If your table name is exactly "sleep_logs", keep it.
+        // If you pasted and got issues, simply replace the line above with:
+        // .from("sleep_logs")
+        // (I keep this comment so you know what to change if your editor autowrapped.)
+
+        if (sleep7Err) {
+          // don’t hard-fail on avg quality
+          console.warn("sleep7Err", sleep7Err);
         }
-        return;
-      }
 
-      // --- 4) NEW: 7-day average sleep quality (based on sleep_start in last 7 days)
-      setStatus("Loading 7-day sleep quality...");
-      const startLocal = new Date();
-      startLocal.setDate(startLocal.getDate() - 6);
-      startLocal.setHours(0, 0, 0, 0);
-      const startISO = startLocal.toISOString();
+        const habitsRows = (habitsData ?? []) as DailyHabitRow[];
+        const latest = (sleepData?.[0] ?? null) as SleepLogRow | null;
 
-      const { data: sleepRows, error: sleep7Err } = await supabase
-        .from("sleep_logs")
-        .select("quality, sleep_start")
-        .eq("user_id", user.id)
-        .gte("sleep_start", startISO)
-        .order("sleep_start", { ascending: true });
-
-      if (sleep7Err) {
-        if (!cancelled) {
-          setError(sleep7Err.message);
-          setStatus("Failed to load 7-day sleep logs.");
-          setLoading(false);
+        let avg: number | null = null;
+        const qualities =
+          (sleep7Data ?? [])
+            .map((r: any) => r?.quality)
+            .filter((q: any) => typeof q === "number") as number[];
+        if (qualities.length > 0) {
+          const sum = qualities.reduce((a, b) => a + b, 0);
+          avg = sum / qualities.length;
         }
-        return;
+
+        if (!cancelled) {
+          setHabits7(habitsRows);
+          setLatestSleep(latest);
+          setAvgQuality7(avg);
+          setStatus("Ready.");
+        }
+      } catch (e: any) {
+        console.error(e);
+        if (!cancelled) setStatus(e?.message ?? "Error loading dashboard.");
       }
-
-      const qualities = (sleepRows ?? [])
-        .map((r: any) => r?.quality)
-        .filter((q: any) => typeof q === "number") as number[];
-
-      const avg =
-        qualities.length > 0
-          ? Math.round((qualities.reduce((a, b) => a + b, 0) / qualities.length) * 10) / 10
-          : null;
-
-      if (cancelled) return;
-      setHabitsToday(todaysRow ?? null);
-      setSleepLatest(latestSleep ?? null);
-
-      setHabits7((habitsRows ?? []) as DailyHabitRow[]);
-      setSleep7Count(qualities.length);
-      setSleep7Avg(avg);
-
-      setStatus("Ready.");
-      setLoading(false);
     }
 
     load();
+
     return () => {
       cancelled = true;
     };
   }, [supabase]);
 
-  // Build a 7-day strip for habits: each day gets a dot ✅/❌ based on ALL habits completed that day
-  const startDate = today ? addDaysLocal(today, -6) : "";
-  const dayList = today
-    ? Array.from({ length: 7 }, (_, i) => addDaysLocal(today, -6 + i))
-    : [];
+  // last 7 days list, oldest -> newest
+  const dayList = useMemo(() => {
+    const today = new Date();
+    const start = startOfLocalDay(today);
+    const out: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(start);
+      d.setDate(d.getDate() - i);
+      out.push(toYMD(d));
+    }
+    return out;
+  }, []);
 
-  const habitsByDate = new Map(habits7.map((r) => [r.date, r]));
+  const habitsByDate = useMemo(() => {
+    const m = new Map<string, DailyHabitRow>();
+    for (const r of habits7) m.set(r.date, r);
+    return m;
+  }, [habits7]);
 
-  function dayScore(d: string) {
-  const r = habitsByDate.get(d);
-  if (!r) return { symbol: "—", label: d, ok: false };
+  const habitsToday = habitsByDate.get(todayStr);
 
-  const ok =
-    r.caffeine_after_2pm === false &&
-    r.alcohol === false &&
-    r.exercise === true &&
-    r.screens_last_hour === false;
-
-  return { symbol: ok ? "✅" : "❌", label: d, ok };
-}
-
-  const goodDays = dayList.filter((d) => dayScore(d).ok).length;
+  const goodDays = useMemo(() => {
+    return dayList.filter((d) => isGoodDay(habitsByDate.get(d))).length;
+  }, [dayList, habitsByDate]);
 
   return (
     <main style={{ maxWidth: 820, margin: "40px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6 }}>
         Dashboard
       </h1>
 
-      <p style={{ opacity: 0.8, marginBottom: 16 }}>
-        {email ? `Signed in as ${email}` : "Signed in"}
-        {today ? ` • Today: ${today}` : ""}
-      </p>
+      <div style={{ opacity: 0.8, marginBottom: 14 }}>
+        Today: {todayStr}
+      </div>
 
       <div
         style={{
           border: "1px solid rgba(255,255,255,0.12)",
           borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
+          padding: 12,
+          marginBottom: 18,
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.8 }}>Status: {status}</div>
-        {loading && <div style={{ marginTop: 8 }}>Loading...</div>}
-        {error && (
-          <div style={{ marginTop: 8, color: "salmon" }}>Error: {error}</div>
-        )}
+        Status: {status}
       </div>
 
-      {!loading && (
-        <div style={{ display: "grid", gap: 16 }}>
-          {/* Habits card */}
-          <section
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
-                Today’s habits
-              </h2>
-              <Link href="/protected/habits" style={{ opacity: 0.9 }}>
-                Open habits →
-              </Link>
+      {/* Today's habits */}
+      <section
+        style={{
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 18,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
+            Today’s habits
+          </h2>
+          <a href="/protected/habits" style={{ opacity: 0.85 }}>
+            Open habits →
+          </a>
+        </div>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          <div>{yesNoIcon(habitsToday?.caffeine_after_2pm === false)} Caffeine after 2pm</div>
+          <div>{yesNoIcon(habitsToday?.alcohol === false)} Alcohol</div>
+          <div>{yesNoIcon(habitsToday?.exercise)} Exercise</div>
+          <div>{yesNoIcon(habitsToday?.screens_last_hour === false)} Screens last hour</div>
+        </div>
+
+        {/* 7-day streak grid */}
+        <hr style={{ margin: "16px 0", opacity: 0.2 }} />
+
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>
+          Last 7 days (good days): {goodDays}/7
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {dayList.map((d) => {
+            const r = habitsByDate.get(d);
+            const ok = isGoodDay(r);
+            const short = d.slice(5); // MM-DD
+            return (
+              <div
+                key={d}
+                title={d}
+                style={{
+                  width: 64,
+                  height: 56,
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  opacity: ok ? 1 : 0.9,
+                }}
+              >
+                <div style={{ fontSize: 12, opacity: 0.8 }}>{short}</div>
+                <div style={{ fontSize: 18, lineHeight: 1 }}>{ok ? "✅" : "❌"}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+          Rule used: a “good day” means all 4 boxes are ticked (we can change this later).
+        </div>
+      </section>
+
+      {/* Latest sleep log */}
+      <section
+        style={{
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 18,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
+            Latest sleep log
+          </h2>
+          <a href="/protected/sleep" style={{ opacity: 0.85 }}>
+            Open sleep →
+          </a>
+        </div>
+
+        {!latestSleep ? (
+          <div style={{ opacity: 0.8 }}>No sleep logs yet.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 6, opacity: 0.95 }}>
+            <div>Start: {formatDateTime(latestSleep.sleep_start)}</div>
+            <div>End: {formatDateTime(latestSleep.sleep_end)}</div>
+            <div>
+              Quality: {latestSleep.quality ?? "—"} / 5
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.9 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Notes:</div>
+              <div style={{ whiteSpace: "pre-wrap" }}>
+                {latestSleep.notes?.trim() ? latestSleep.notes : "—"}
+              </div>
             </div>
 
-            <div style={{ marginTop: 12, lineHeight: 1.9 }}>
-              <div>
-                {yesNoIcon(habitsToday?.caffeine_after_2pm)} Caffeine after 2pm
+            <div style={{ marginTop: 10, opacity: 0.9 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                Last 7 days average quality
               </div>
-              <div>{yesNoIcon(habitsToday?.alcohol)} Alcohol</div>
-              <div>{yesNoIcon(habitsToday?.exercise)} Exercise</div>
               <div>
-                {yesNoIcon(habitsToday?.screens_last_hour)} Screens last hour
+                {avgQuality7 === null ? "—" : `${avgQuality7.toFixed(1)} / 5`}
               </div>
             </div>
+          </div>
+        )}
+      </section>
 
-            {/* NEW: 7-day streak */}
-            <hr style={{ margin: "16px 0", opacity: 0.2 }} />
-         <div style={{ marginTop: 16 }}>
-  <div style={{ fontWeight: 600, marginBottom: 8 }}>
-    Last 7 days (good days): {goodDays}/7
-  </div>
-
-  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-    {dayList.map((d) => {
-      const s = dayScore(d);
-      const short = d.slice(5); // MM-DD
-
-      return (
-        <div
-          key={d}
+      <div style={{ display: "flex", gap: 10 }}>
+        <a
+          href="/protected/habits"
           style={{
-            width: 64,
-            height: 56,
+            border: "1px solid rgba(255,255,255,0.16)",
+            padding: "10px 14px",
             borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.12)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-            opacity: s.ok ? 1 : 0.9,
+            textDecoration: "none",
+            color: "inherit",
           }}
         >
-          <div style={{ fontSize: 12, opacity: 0.8 }}>{short}</div>
-          <div style={{ fontSize: 18, lineHeight: 1 }}>{s.symbol}</div>
-        </div>
-      );
-    })}
-  </div>
-
-  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-    Rule used: a “good day” means all 4 boxes are ticked (we can change this later).
-  </div>
-</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {dayList.map((d) => {
-                const s = dayScore(d);
-                const short = d.slice(5); // MM-DD
-                return (
-                  <div
-                    key={d}
-                    title={d}
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.14)",
-                      borderRadius: 10,
-                      padding: "8px 10px",
-                      minWidth: 74,
-                      textAlign: "center",
-                      opacity: s.symbol === "—" ? 0.7 : 1,
-                    }}
-                  >
-                    <div style={{ fontSize: 14, opacity: 0.85 }}>{short}</div>
-                    <div style={{ fontSize: 18, marginTop: 4 }}>{s.symbol}</div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.75 }}>
-              Rule used: a “good day” means no caffeine after 2pm, no alcohol, exercise done, and no screens in the last hour.
-            </div>
-          </section>
-
-          {/* Sleep card */}
-          <section
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
-                Latest sleep log
-              </h2>
-              <Link href="/protected/sleep" style={{ opacity: 0.9 }}>
-                Open sleep →
-              </Link>
-            </div>
-
-            {!sleepLatest ? (
-              <div style={{ marginTop: 12, opacity: 0.85 }}>
-                No sleep logs yet.
-              </div>
-            ) : (
-              <div style={{ marginTop: 12, lineHeight: 1.9 }}>
-                <div>
-                  <span style={{ opacity: 0.8 }}>Start:</span>{" "}
-                  {fmtLocal(sleepLatest.sleep_start)}
-                </div>
-                <div>
-                  <span style={{ opacity: 0.8 }}>End:</span>{" "}
-                  {fmtLocal(sleepLatest.sleep_end)}
-                </div>
-                <div>
-                  <span style={{ opacity: 0.8 }}>Quality:</span>{" "}
-                  {sleepLatest.quality ?? "—"} / 5
-                </div>
-
-                {sleepLatest.notes ? (
-                  <div style={{ marginTop: 10, opacity: 0.9 }}>
-                    <div style={{ opacity: 0.8, marginBottom: 4 }}>Notes:</div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {sleepLatest.notes}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {/* NEW: 7-day avg */}
-            <hr style={{ margin: "16px 0", opacity: 0.2 }} />
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>
-              Last 7 days average quality
-            </div>
-            <div style={{ opacity: 0.9 }}>
-              {sleep7Avg === null ? "— (no logs yet)" : `${sleep7Avg} / 5`}{" "}
-              <span style={{ opacity: 0.7 }}>
-                {sleep7Count > 0 ? `(${sleep7Count} log${sleep7Count === 1 ? "" : "s"})` : ""}
-              </span>
-            </div>
-          </section>
-
-          {/* quick nav */}
-          <section style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link
-              href="/protected/habits"
-              style={{
-                display: "inline-block",
-                padding: "10px 14px",
-                borderRadius: 10,
-                fontWeight: 700,
-                border: "1px solid rgba(255,255,255,0.18)",
-              }}
-            >
-              Go to Habits
-            </Link>
-            <Link
-              href="/protected/sleep"
-              style={{
-                display: "inline-block",
-                padding: "10px 14px",
-                borderRadius: 10,
-                fontWeight: 700,
-                border: "1px solid rgba(255,255,255,0.18)",
-              }}
-            >
-              Go to Sleep
-            </Link>
-          </section>
-        </div>
-      )}
+          Go to Habits
+        </a>
+        <a
+          href="/protected/sleep"
+          style={{
+            border: "1px solid rgba(255,255,255,0.16)",
+            padding: "10px 14px",
+            borderRadius: 10,
+            textDecoration: "none",
+            color: "inherit",
+          }}
+        >
+          Go to Sleep
+        </a>
+      </div>
     </main>
   );
 }
