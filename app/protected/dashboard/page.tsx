@@ -56,6 +56,56 @@ function yesNoIcon(v: boolean | null | undefined) {
   return v ? "✅" : "❌";
 }
 
+function addDaysLocal(yyyyMmDd: string, deltaDays: number) {
+  const [y, m, d] = yyyyMmDd.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+  dt.setDate(dt.getDate() + deltaDays);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function formatDurationFromMs(ms: number) {
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+function toMinutesSinceMidnightLocal(isoOrDate: string | Date) {
+  const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  const mins = d.getHours() * 60 + d.getMinutes();
+  return mins; // 0..1439
+}
+
+function circularDistanceMinutes(a: number, b: number) {
+  const diff = Math.abs(a - b);
+  return Math.min(diff, 1440 - diff);
+}
+// circular mean for times-of-day (handles around midnight)
+function circularMeanMinutes(values: number[]) {
+  if (values.length === 0) return 0;
+  let sumSin = 0;
+  let sumCos = 0;
+  for (const v of values) {
+    const angle = (v / 1440) * 2 * Math.PI;
+    sumSin += Math.sin(angle);
+    sumCos += Math.cos(angle);
+  }
+  const meanAngle = Math.atan2(sumSin / values.length, sumCos / values.length);
+  const normalized = meanAngle < 0 ? meanAngle + 2 * Math.PI : meanAngle;
+  return Math.round((normalized / (2 * Math.PI)) * 1440) % 1440;
+}
+
+function formatTimeOfDay(mins: number) {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  const ampm = h >= 12 ? "pm" : "am";
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${hh}:${String(m).padStart(2, "0")}${ampm}`;
+}
+
 export default function DashboardPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [loading, setLoading] = useState(true);
