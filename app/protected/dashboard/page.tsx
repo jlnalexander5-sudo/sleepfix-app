@@ -132,7 +132,7 @@ export default function DashboardPage() {
 
         // fetch last 7 sleep logs for avg quality (optional)
         const { data: sleep7Data, error: sleep7Err } = await supabase
-          .from("sleep (typeofDate === "string" ? "sleep_logs" : "sleep_logs")
+          .from("sleep_logs")
           .select("quality,sleep_start")
           .order("sleep_start", { ascending: false })
           .limit(7);
