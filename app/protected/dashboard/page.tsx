@@ -5,7 +5,6 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 // other imports...
 
 export default function DashboardPage() {
-  ...
 }
 
 type DailyHabitRow = {
