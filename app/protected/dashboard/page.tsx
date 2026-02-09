@@ -364,8 +364,7 @@ export default function DashboardPage() {
               })}
             </div>
             <div style={{ marginTop: 10, fontSize: 13, opacity: 0.75 }}>
-              Rule used: a “good day” means all 4 boxes are ticked (we can change
-              this later).
+              Rule used: a “good day” means no caffeine after 2pm, no alcohol, exercise done, and no screens in the last hour.
             </div>
           </section>
 
