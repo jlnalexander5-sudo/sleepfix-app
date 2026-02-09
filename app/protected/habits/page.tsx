@@ -21,6 +21,10 @@ function toYYYYMMDDLocal(d = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+function formatTime(d = new Date()) {
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 export default function HabitsPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
@@ -49,6 +53,12 @@ export default function HabitsPage() {
       setLoading(true);
       setError(null);
       setStatus("Checking session...");
+
+      // Restore last saved status (persists across refresh)
+      const lastSaved = localStorage.getItem("habits:lastSavedAt");
+      if (lastSaved) {
+        setStatus(`Saved ✅ (${lastSaved})`);
+      }
 
       // compute date ONLY in effect (client-only)
       const today = toYYYYMMDDLocal();
@@ -101,6 +111,7 @@ export default function HabitsPage() {
 
       if (!finalRow) {
         setStatus("Creating today's habits row...");
+
         const { data: created, error: createErr } = await supabase
           .from("daily_habits")
           .insert({
@@ -136,7 +147,10 @@ export default function HabitsPage() {
       setExercise(!!finalRow.exercise);
       setScreensLastHour(!!finalRow.screens_last_hour);
 
-      setStatus("Ready.");
+      // If we already have a saved message, keep it. Otherwise show Ready.
+      const stillSaved = localStorage.getItem("habits:lastSavedAt");
+      setStatus(stillSaved ? `Saved ✅ (${stillSaved})` : "Ready.");
+
       setLoading(false);
     }
 
@@ -177,7 +191,10 @@ export default function HabitsPage() {
     }
 
     setRow(data);
-    setStatus("Saved ✅");
+
+    const t = formatTime();
+    localStorage.setItem("habits:lastSavedAt", t);
+    setStatus(`Saved ✅ (${t})`);
   }
 
   return (
@@ -279,6 +296,7 @@ export default function HabitsPage() {
             Screens in the last hour
           </label>
 
+          {/* SAME BUTTON */}
           <button
             onClick={save}
             style={{
