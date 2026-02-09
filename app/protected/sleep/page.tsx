@@ -6,64 +6,37 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 type SleepLogRow = {
   id: string;
   user_id: string;
-  date: string; // YYYY-MM-DD
-  sleep_quality: number | null; // 1..5
-  sleep_latency_min: number | null;
-  wake_ups: number | null;
+  sleep_start: string | null;
+  sleep_end: string | null;
+  quality: number | null;
   notes: string | null;
-  created_at: string;
-  updated_at: string;
 };
 
-function toYYYYMMDDLocal(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-export default function SleepLogPage() {
+export default function SleepPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading...");
   const [error, setError] = useState<string | null>(null);
 
-  const [userId, setUserId] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [date, setDate] = useState<string>("");
-
   const [row, setRow] = useState<SleepLogRow | null>(null);
 
-  // form fields
-  const [sleepQuality, setSleepQuality] = useState<number>(3);
-  const [latency, setLatency] = useState<number>(20);
-  const [wakeUps, setWakeUps] = useState<number>(0);
-  const [notes, setNotes] = useState<string>("");
+  const [sleepStart, setSleepStart] = useState("");
+  const [sleepEnd, setSleepEnd] = useState("");
+  const [quality, setQuality] = useState<number>(3);
+  const [notes, setNotes] = useState("");
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setLoading(true);
-      setError(null);
       setStatus("Checking session...");
 
-      const today = toYYYYMMDDLocal();
-      setDate(today);
+      const { data: userData, error: userErr } =
+        await supabase.auth.getUser();
 
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr) {
-        if (!cancelled) {
-          setError(userErr.message);
-          setStatus("Failed to get user.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      const user = userData.user;
-      if (!user) {
+      if (userErr || !userData.user) {
         if (!cancelled) {
           setStatus("Not logged in.");
           setLoading(false);
@@ -71,123 +44,97 @@ export default function SleepLogPage() {
         return;
       }
 
-      if (cancelled) return;
-      setUserId(user.id);
-      setEmail(user.email ?? null);
+      const userId = userData.user.id;
 
-      setStatus("Loading today's sleep log...");
-
-      const { data: existing, error: readErr } = await supabase
+      const { data, error } = await supabase
         .from("sleep_logs")
-        .select(
-          "id, user_id, date, sleep_quality, sleep_latency_min, wake_ups, notes, created_at, updated_at"
-        )
-        .eq("user_id", user.id)
-        .eq("date", today)
+        .select("id,user_id,sleep_start,sleep_end,quality,notes")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle<SleepLogRow>();
 
-      if (readErr) {
+      if (error) {
         if (!cancelled) {
-          setError(readErr.message);
+          setError(error.message);
           setStatus("Failed to load sleep log.");
           setLoading(false);
         }
         return;
       }
 
-      // If none exists, create one with safe defaults
-      let finalRow = existing;
-
-      if (!finalRow) {
-        setStatus("Creating today's sleep log...");
-        const { data: created, error: createErr } = await supabase
-          .from("sleep_logs")
-          .insert({
-            user_id: user.id,
-            date: today,
-            sleep_quality: null,
-            sleep_latency_min: null,
-            wake_ups: null,
-            notes: null,
-          })
-          .select(
-            "id, user_id, date, sleep_quality, sleep_latency_min, wake_ups, notes, created_at, updated_at"
-          )
-          .single<SleepLogRow>();
-
-        if (createErr) {
-          if (!cancelled) {
-            setError(createErr.message);
-            setStatus("Failed to create sleep log.");
-            setLoading(false);
-          }
-          return;
-        }
-
-        finalRow = created;
+      if (data) {
+        setRow(data);
+        setSleepStart(data.sleep_start ?? "");
+        setSleepEnd(data.sleep_end ?? "");
+        setQuality(data.quality ?? 3);
+        setNotes(data.notes ?? "");
       }
 
-      if (cancelled) return;
-
-      setRow(finalRow);
-      setSleepQuality(finalRow.sleep_quality ?? 3);
-      setLatency(finalRow.sleep_latency_min ?? 20);
-      setWakeUps(finalRow.wake_ups ?? 0);
-      setNotes(finalRow.notes ?? "");
-
-      setStatus("Ready.");
-      setLoading(false);
+      if (!cancelled) {
+        setStatus("Ready.");
+        setLoading(false);
+      }
     }
 
     load();
-
     return () => {
       cancelled = true;
     };
   }, [supabase]);
 
   async function save() {
-    if (!userId || !date) return;
-
-    setError(null);
     setStatus("Saving...");
+    setError(null);
+
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+
+    if (!user) {
+      setStatus("Not logged in.");
+      return;
+    }
 
     const payload = {
-      user_id: userId,
-      date,
-      sleep_quality: sleepQuality,
-      sleep_latency_min: latency,
-      wake_ups: wakeUps,
-      notes: notes.trim() ? notes.trim() : null,
+      user_id: user.id,
+      sleep_start: sleepStart || null,
+      sleep_end: sleepEnd || null,
+      quality,
+      notes: notes || null,
     };
 
-    const { data, error: upErr } = await supabase
-      .from("sleep_logs")
-      .upsert(payload, { onConflict: "user_id,date" })
-      .select(
-        "id, user_id, date, sleep_quality, sleep_latency_min, wake_ups, notes, created_at, updated_at"
-      )
-      .single<SleepLogRow>();
+    let result;
 
-    if (upErr) {
-      setError(upErr.message);
+    if (row) {
+      result = await supabase
+        .from("sleep_logs")
+        .update(payload)
+        .eq("id", row.id)
+        .select()
+        .single<SleepLogRow>();
+    } else {
+      result = await supabase
+        .from("sleep_logs")
+        .insert(payload)
+        .select()
+        .single<SleepLogRow>();
+    }
+
+    if (result.error) {
+      setError(result.error.message);
       setStatus("Save failed.");
       return;
     }
 
-    setRow(data);
+    setRow(result.data);
     setStatus("Saved ✅");
   }
 
   return (
-    <main style={{ maxWidth: 760, margin: "40px auto", padding: "0 16px" }}>
+    <main style={{ maxWidth: 720, margin: "40px auto", padding: "0 16px" }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
         Sleep log
       </h1>
-      <p style={{ opacity: 0.8, marginBottom: 16 }}>
-        {email ? `Signed in as ${email}` : "Signed in"}
-        {date ? ` • Date: ${date}` : ""}
-      </p>
 
       <div
         style={{
@@ -197,14 +144,11 @@ export default function SleepLogPage() {
           marginBottom: 16,
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 8 }}>
-          Status: {status}
-        </div>
-
-        {loading && <div>Loading...</div>}
-
+        Status: {status}
         {error && (
-          <div style={{ marginTop: 8, color: "salmon" }}>Error: {error}</div>
+          <div style={{ marginTop: 8, color: "salmon" }}>
+            Error: {error}
+          </div>
         )}
       </div>
 
@@ -216,76 +160,52 @@ export default function SleepLogPage() {
             padding: 16,
           }}
         >
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-            Today’s outcome
-          </h2>
-
           <label style={{ display: "block", marginBottom: 12 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>
-              Sleep quality (1–5)
-            </div>
-            <select
-              value={sleepQuality}
-              onChange={(e) => setSleepQuality(Number(e.target.value))}
-              style={{ width: "100%", padding: 10, borderRadius: 8 }}
-            >
-              <option value={1}>1 — Bad</option>
-              <option value={2}>2</option>
-              <option value={3}>3 — OK</option>
-              <option value={4}>4</option>
-              <option value={5}>5 — Great</option>
-            </select>
+            Bed time
+            <input
+              type="datetime-local"
+              value={sleepStart}
+              onChange={(e) => setSleepStart(e.target.value)}
+              style={{ display: "block", marginTop: 4 }}
+            />
           </label>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <label style={{ display: "block" }}>
-              <div style={{ fontSize: 14, marginBottom: 6 }}>
-                Sleep latency (minutes)
-              </div>
-              <select
-                value={latency}
-                onChange={(e) => setLatency(Number(e.target.value))}
-                style={{ width: "100%", padding: 10, borderRadius: 8 }}
-              >
-                {[5, 10, 20, 30, 60, 90, 120].map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            Wake time
+            <input
+              type="datetime-local"
+              value={sleepEnd}
+              onChange={(e) => setSleepEnd(e.target.value)}
+              style={{ display: "block", marginTop: 4 }}
+            />
+          </label>
 
-            <label style={{ display: "block" }}>
-              <div style={{ fontSize: 14, marginBottom: 6 }}>Wake-ups</div>
-              <select
-                value={wakeUps}
-                onChange={(e) => setWakeUps(Number(e.target.value))}
-                style={{ width: "100%", padding: 10, borderRadius: 8 }}
-              >
-                {[0, 1, 2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            Sleep quality (1–5)
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={quality}
+              onChange={(e) => setQuality(Number(e.target.value))}
+              style={{ display: "block", marginTop: 4 }}
+            />
+          </label>
 
-          <label style={{ display: "block", marginTop: 12 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>Notes (optional)</div>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            Notes
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Anything notable? Heat, pain, noise, stress, etc."
               rows={3}
-              style={{ width: "100%", padding: 10, borderRadius: 8 }}
+              style={{ display: "block", width: "100%", marginTop: 4 }}
             />
           </label>
 
           <button
             onClick={save}
             style={{
-              marginTop: 14,
+              marginTop: 8,
               padding: "10px 14px",
               borderRadius: 10,
               fontWeight: 600,
@@ -294,15 +214,6 @@ export default function SleepLogPage() {
           >
             Save
           </button>
-
-          <hr style={{ margin: "18px 0", opacity: 0.2 }} />
-
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-            Raw sleep_logs JSON
-          </h3>
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.9 }}>
-            {JSON.stringify(row, null, 2)}
-          </pre>
         </div>
       )}
     </main>
