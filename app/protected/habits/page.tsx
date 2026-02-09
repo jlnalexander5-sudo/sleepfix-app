@@ -67,7 +67,7 @@ export default function HabitsPage() {
       setWakeTime("");
       setQuality(3);
       setNotes("");
-      setStatus("No entry for this day yet.");
+      setStatus("No entry for this date yet.");
       return;
     }
 
@@ -123,7 +123,7 @@ export default function HabitsPage() {
     };
   }, [supabase]); // only run once
 
-  // When day changes (after initial load)
+  // When date changes (after initial load)
   useEffect(() => {
     if (!userId) return;
     loadForDate(userId, date);
@@ -192,11 +192,11 @@ export default function HabitsPage() {
           }}
         >
           <label style={{ display: "block", marginBottom: 12 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>Day</div>
+            <div style={{ fontSize: 14, marginBottom: 6 }}>date</div>
             <input
               type="date"
-              value={day}
-              onChange={(e) => setDay(e.target.value)}
+              value={date}
+              onChange={(e) => setdate(e.target.value)}
               style={{ width: "100%", padding: 10, borderRadius: 8 }}
             />
           </label>
@@ -272,3 +272,4 @@ export default function HabitsPage() {
     </main>
   );
 }
+
