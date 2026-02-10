@@ -70,7 +70,22 @@ function isGoodDay(r: DailyHabitRow | undefined) {
     r.screens_last_hour === false
   );
 }
+function durationMinutes(startIso?: string | null, endIso?: string | null) {
+  if (!startIso || !endIso) return null;
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const diffMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return null;
+  return Math.round(diffMs / 60000);
+}
 
+function formatMinutesHuman(mins: number) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h <= 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
 export default function DashboardPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
