@@ -40,6 +40,49 @@ function startOfLocalDay(d: Date) {
 }
 
 function formatDateTime(dt: string) {
+  function minutesToHM(mins: number | null) {
+  if (mins === null || !Number.isFinite(mins)) return "—";
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  if (h <= 0) return `${m}m`;
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+// circular mean + circular stdev for times-of-day in minutes [0..1439]
+function circularMeanMinutes(values: number[]) {
+  if (values.length === 0) return null;
+  let sumSin = 0;
+  let sumCos = 0;
+  for (const v of values) {
+    const angle = (v / 1440) * 2 * Math.PI;
+    sumSin += Math.sin(angle);
+    sumCos += Math.cos(angle);
+  }
+  const meanAngle = Math.atan2(sumSin / values.length, sumCos / values.length);
+  const normalized = meanAngle < 0 ? meanAngle + 2 * Math.PI : meanAngle;
+  return Math.round((normalized / (2 * Math.PI)) * 1440) % 1440;
+}
+
+// variability in minutes (approx circular stdev)
+function circularStdMinutes(values: number[]) {
+  if (values.length < 2) return null;
+  let sumSin = 0;
+  let sumCos = 0;
+  for (const v of values) {
+    const angle = (v / 1440) * 2 * Math.PI;
+    sumSin += Math.sin(angle);
+    sumCos += Math.cos(angle);
+  }
+  const R = Math.sqrt((sumSin / values.length) ** 2 + (sumCos / values.length) ** 2);
+  // For circular data, std ≈ sqrt(-2 ln R) in radians; convert to minutes
+  const stdRadians = Math.sqrt(Math.max(0, -2 * Math.log(Math.max(R, 1e-8))));
+  return Math.round((stdRadians / (2 * Math.PI)) * 1440);
+}
+
+function minutesOfDayFromISO(iso: string) {
+  const d = new Date(iso);
+  return d.getHours() * 60 + d.getMinutes();
+}
   // dt is ISO timestamp, show as DD/MM/YYYY, HH:MM (local)
   const d = new Date(dt);
   const dd = pad2(d.getDate());
