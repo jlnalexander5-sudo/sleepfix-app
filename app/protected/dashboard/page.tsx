@@ -84,8 +84,16 @@ export default function DashboardPage() {
     let cancelled = false;
 
    setTodayStr(toYMD(new Date()));
-
-  async function load() {
+const today = new Date();
+const start = startOfLocalDay(today);
+const out: string[] = [];
+for (let i = 6; i >= 0; i--) {
+  const d = new Date(start);
+  d.setDate(d.getDate() - i);
+  out.push(toYMD(d));
+}
+setDayList(out);
+    async function load() {
     try {
       setStatus("Loading...");
 
