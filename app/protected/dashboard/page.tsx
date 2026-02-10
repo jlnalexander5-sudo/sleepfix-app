@@ -138,6 +138,9 @@ export default function DashboardPage() {
   const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
   const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
   const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
+  const [avgDuration7, setAvgDuration7] = useState<number | null>(null); // minutes
+  const [bedtimeMean7, setBedtimeMean7] = useState<number | null>(null);  // minutes-of-day
+  const [bedtimeVar7, setBedtimeVar7] = useState<number | null>(null);    // minutes variability
   const latestDurationMins = durationMinutes(latestSleep?.sleep_start, latestSleep?.sleep_end);
   useEffect(() => {
     let cancelled = false;
