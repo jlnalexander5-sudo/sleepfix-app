@@ -162,6 +162,19 @@ setDayList(out);
           .select("quality,sleep_start")
           .order("sleep_start", { ascending: false })
           .limit(7);
+      if (sleep7Err) {
+  console.warn("sleep7Err", sleep7Err);
+  setAvgQuality7(null);
+} else {
+  const vals = (sleep7Data ?? [])
+    .map((r) => r.quality)
+    .filter((q): q is number => typeof q === "number");
+
+  const avg =
+    vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+
+  setAvgQuality7(avg);
+}
 
         // If your table name is exactly "sleep_logs", keep it.
         // If you pasted and got issues, simply replace the line above with:
