@@ -174,9 +174,7 @@ setDayList(out);
         const dayList: string[] = [];
         const start = startOfLocalDay(today);
         for (let i = 6; i >= 0; i--) {
-       setBedtimeVar7(bedtimes.length ? circularStdMinutes(bedtimes) : null);
-
-          const d = new Date(start);
+        const d = new Date(start);
           d.setDate(d.getDate() - i);
           dayList.push(toYMD(d));
         }
