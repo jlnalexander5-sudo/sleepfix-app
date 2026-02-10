@@ -7,7 +7,7 @@ type DailyHabitRow = {
   id: string;
   user_id: string;
   created_at: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   caffeine_after_2pm: boolean | null;
   alcohol: boolean | null;
   exercise: boolean | null;
@@ -29,10 +29,7 @@ function pad2(n: number) {
 }
 
 function toYMD(d: Date) {
-  const y = d.getFullYear();
-  const m = pad2(d.getMonth() + 1);
-  const day = pad2(d.getDate());
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function startOfLocalDay(d: Date) {
@@ -40,57 +37,10 @@ function startOfLocalDay(d: Date) {
 }
 
 function formatDateTime(dt: string) {
-  function minutesToHM(mins: number | null) {
-  if (mins === null || !Number.isFinite(mins)) return "—";
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  if (h <= 0) return `${m}m`;
-  return `${h}h ${String(m).padStart(2, "0")}m`;
-}
-
-// circular mean + circular stdev for times-of-day in minutes [0..1439]
-function circularMeanMinutes(values: number[]) {
-  if (values.length === 0) return null;
-  let sumSin = 0;
-  let sumCos = 0;
-  for (const v of values) {
-    const angle = (v / 1440) * 2 * Math.PI;
-    sumSin += Math.sin(angle);
-    sumCos += Math.cos(angle);
-  }
-  const meanAngle = Math.atan2(sumSin / values.length, sumCos / values.length);
-  const normalized = meanAngle < 0 ? meanAngle + 2 * Math.PI : meanAngle;
-  return Math.round((normalized / (2 * Math.PI)) * 1440) % 1440;
-}
-
-// variability in minutes (approx circular stdev)
-function circularStdMinutes(values: number[]) {
-  if (values.length < 2) return null;
-  let sumSin = 0;
-  let sumCos = 0;
-  for (const v of values) {
-    const angle = (v / 1440) * 2 * Math.PI;
-    sumSin += Math.sin(angle);
-    sumCos += Math.cos(angle);
-  }
-  const R = Math.sqrt((sumSin / values.length) ** 2 + (sumCos / values.length) ** 2);
-  // For circular data, std ≈ sqrt(-2 ln R) in radians; convert to minutes
-  const stdRadians = Math.sqrt(Math.max(0, -2 * Math.log(Math.max(R, 1e-8))));
-  return Math.round((stdRadians / (2 * Math.PI)) * 1440);
-}
-
-function minutesOfDayFromISO(iso: string) {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-}
-  // dt is ISO timestamp, show as DD/MM/YYYY, HH:MM (local)
   const d = new Date(dt);
-  const dd = pad2(d.getDate());
-  const mm = pad2(d.getMonth() + 1);
-  const yyyy = d.getFullYear();
-  const hh = pad2(d.getHours());
-  const min = pad2(d.getMinutes());
-  return `${dd}/${mm}/${yyyy}, ${hh}:${min}`;
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}, ${pad2(
+    d.getHours()
+  )}:${pad2(d.getMinutes())}`;
 }
 
 function yesNoIcon(v: boolean | null | undefined) {
@@ -99,11 +49,6 @@ function yesNoIcon(v: boolean | null | undefined) {
   return "—";
 }
 
-// for “good day” logic:
-// caffeine_after_2pm should be false
-// alcohol should be false
-// screens_last_hour should be false
-// exercise should be true
 function isGoodDay(r: DailyHabitRow | undefined) {
   if (!r) return false;
   return (
@@ -113,54 +58,27 @@ function isGoodDay(r: DailyHabitRow | undefined) {
     r.screens_last_hour === false
   );
 }
-function durationMinutes(startIso?: string | null, endIso?: string | null) {
-  if (!startIso || !endIso) return null;
-  const start = new Date(startIso);
-  const end = new Date(endIso);
-  const diffMs = end.getTime() - start.getTime();
-  if (!Number.isFinite(diffMs) || diffMs <= 0) return null;
-  return Math.round(diffMs / 60000);
-}
 
-function formatMinutesHuman(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h <= 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-}
 export default function DashboardPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
-  const [status, setStatus] = useState<string>("Loading…");
- const [todayStr, setTodayStr] = useState<string>("");
+  const [status, setStatus] = useState("Loading…");
+  const [todayStr, setTodayStr] = useState("");
   const [dayList, setDayList] = useState<string[]>([]);
   const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
   const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
   const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
-  const [avgDuration7, setAvgDuration7] = useState<number | null>(null); // minutes
-  const [bedtimeMean7, setBedtimeMean7] = useState<number | null>(null);  // minutes-of-day
-  const [bedtimeVar7, setBedtimeVar7] = useState<number | null>(null);    // minutes variability
-  const latestDurationMins = durationMinutes(latestSleep?.sleep_start, latestSleep?.sleep_end);
+
   useEffect(() => {
     let cancelled = false;
 
-   setTodayStr(toYMD(new Date()));
-const today = new Date();
-const start = startOfLocalDay(today);
-const out: string[] = [];
-for (let i = 6; i >= 0; i--) {
-  const d = new Date(start);
-  d.setDate(d.getDate() - i);
-  out.push(toYMD(d));
-}
-setDayList(out);
     async function load() {
-    try {
-      setStatus("Loading...");
+      try {
+        setStatus("Loading...");
 
         const { data: auth } = await supabase.auth.getUser();
         const user = auth?.user;
+
         if (!user) {
           if (!cancelled) setStatus("Not signed in.");
           return;
@@ -170,18 +88,19 @@ setDayList(out);
         const todayYMD = toYMD(today);
         if (!cancelled) setTodayStr(todayYMD);
 
-        // build last 7 days list (inclusive today), oldest -> newest
-        const dayList: string[] = [];
         const start = startOfLocalDay(today);
+        const days: string[] = [];
         for (let i = 6; i >= 0; i--) {
-        const d = new Date(start);
+          const d = new Date(start);
           d.setDate(d.getDate() - i);
-          dayList.push(toYMD(d));
+          days.push(toYMD(d));
         }
-        const fromYMD = dayList[0];
-        const toYMDStr = dayList[dayList.length - 1];
 
-        // fetch habits for last 7 days
+        if (!cancelled) setDayList(days);
+
+        const fromYMD = days[0];
+        const toYMDStr = days[days.length - 1];
+
         const { data: habitsData, error: habitsErr } = await supabase
           .from("daily_habits")
           .select(
@@ -193,7 +112,6 @@ setDayList(out);
 
         if (habitsErr) throw habitsErr;
 
-        // fetch latest sleep log
         const { data: sleepData, error: sleepErr } = await supabase
           .from("sleep_logs")
           .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
@@ -201,70 +119,33 @@ setDayList(out);
           .limit(1);
 
         if (sleepErr) throw sleepErr;
-        setLatestSleep(sleepData?.[0] ?? null);
-        // fetch last 7 sleep logs for avg quality (optional)
+
         const { data: sleep7Data, error: sleep7Err } = await supabase
           .from("sleep_logs")
-          .select("quality,sleep_start")
+          .select("quality")
           .order("sleep_start", { ascending: false })
           .limit(7);
-      if (!sleep7Err && sleep7Data && sleep7Data.length > 0) {
-  const vals = sleep7Data
-    .map(r => r.quality)
-    .filter((q): q is number => typeof q === "number");
 
-  if (vals.length > 0) {
-    const avg =
-      vals.reduce((a, b) => a + b, 0) / vals.length;
+        if (!sleep7Err && sleep7Data) {
+          const vals = sleep7Data
+            .map((r) => r.quality)
+            .filter((q): q is number => typeof q === "number");
 
-    if (!cancelled) {
-      setAvgQuality7(Number(avg.toFixed(1)));
-    }
-  } else {
-    if (!cancelled) setAvgQuality7(null);
-  }
-}
-      if (sleep7Err) {
-  console.warn("sleep7Err", sleep7Err);
-  setAvgQuality7(null);
-} else {
-  const vals = (sleep7Data ?? [])
-    .map((r) => r.quality)
-    .filter((q): q is number => typeof q === "number");
+          const avg =
+            vals.length > 0
+              ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) /
+                10
+              : null;
 
-  const avg =
-    vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
-
-  setAvgQuality7(avg);
-}
-
-        // If your table name is exactly "sleep_logs", keep it.
-        // If you pasted and got issues, simply replace the line above with:
-        // .from("sleep_logs")
-        // (I keep this comment so you know what to change if your editor autowrapped.)
-
-        if (sleep7Err) {
-          // don’t hard-fail on avg quality
+          if (!cancelled) setAvgQuality7(avg);
+        } else {
           console.warn("sleep7Err", sleep7Err);
-        }
-
-        const habitsRows = (habitsData ?? []) as DailyHabitRow[];
-        const latest = (sleepData?.[0] ?? null) as SleepLogRow | null;
-
-        let avg: number | null = null;
-        const qualities =
-          (sleep7Data ?? [])
-            .map((r: any) => r?.quality)
-            .filter((q: any) => typeof q === "number") as number[];
-        if (qualities.length > 0) {
-          const sum = qualities.reduce((a, b) => a + b, 0);
-          avg = sum / qualities.length;
+          if (!cancelled) setAvgQuality7(null);
         }
 
         if (!cancelled) {
-          setHabits7(habitsRows);
-          setLatestSleep(latest);
-          setAvgQuality7(avg);
+          setHabits7((habitsData ?? []) as DailyHabitRow[]);
+          setLatestSleep((sleepData?.[0] ?? null) as SleepLogRow | null);
           setStatus("Ready.");
         }
       } catch (e: any) {
@@ -280,8 +161,6 @@ setDayList(out);
     };
   }, [supabase]);
 
-  // last 7 days list, oldest -> newest
- 
   const habitsByDate = useMemo(() => {
     const m = new Map<string, DailyHabitRow>();
     for (const r of habits7) m.set(r.date, r);
@@ -315,7 +194,6 @@ setDayList(out);
         Status: {status}
       </div>
 
-      {/* Today's habits */}
       <section
         style={{
           border: "1px solid rgba(255,255,255,0.12)",
@@ -334,26 +212,32 @@ setDayList(out);
         </div>
 
         <div style={{ display: "grid", gap: 8 }}>
-          <div>{yesNoIcon(habitsToday?.caffeine_after_2pm === false)} Caffeine after 2pm</div>
+          <div>
+            {yesNoIcon(habitsToday?.caffeine_after_2pm === false)} Caffeine after
+            2pm
+          </div>
           <div>{yesNoIcon(habitsToday?.alcohol === false)} Alcohol</div>
           <div>{yesNoIcon(habitsToday?.exercise)} Exercise</div>
-          <div>{yesNoIcon(habitsToday?.screens_last_hour === false)} Screens last hour</div>
+          <div>
+            {yesNoIcon(habitsToday?.screens_last_hour === false)} Screens last
+            hour
+          </div>
         </div>
 
-        {/* 7-day streak grid */}
         <hr style={{ margin: "16px 0", opacity: 0.2 }} />
 
         <div style={{ fontWeight: 700, marginBottom: 8 }}>
           Last 7 days (good days): {goodDays}/7
         </div>
-<div style={{ fontSize: 13, opacity: 0.8 }}>
-  Avg sleep quality (last 7): {avgQuality7 ?? "–"}
-</div>
+
+        <div style={{ fontSize: 13, opacity: 0.8 }}>
+          Avg sleep quality (last 7): {avgQuality7 ?? "–"}
+        </div>
+
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {dayList.map((d) => {
-            const r = habitsByDate.get(d);
-            const ok = isGoodDay(r);
-            const short = d.slice(5); // MM-DD
+            const ok = isGoodDay(habitsByDate.get(d));
+            const short = d.slice(5);
             return (
               <div
                 key={d}
@@ -368,22 +252,20 @@ setDayList(out);
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 6,
-                  opacity: ok ? 1 : 0.9,
                 }}
               >
                 <div style={{ fontSize: 12, opacity: 0.8 }}>{short}</div>
-                <div style={{ fontSize: 18, lineHeight: 1 }}>{ok ? "✅" : "❌"}</div>
+                <div style={{ fontSize: 18 }}>{ok ? "✅" : "❌"}</div>
               </div>
             );
           })}
         </div>
 
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-          Rule used: a “good day” means all 4 boxes are ticked (we can change this later).
+          Rule used: a “good day” means all 4 boxes are ticked.
         </div>
       </section>
 
-      {/* Latest sleep log */}
       <section
         style={{
           border: "1px solid rgba(255,255,255,0.12)",
@@ -404,21 +286,20 @@ setDayList(out);
         {!latestSleep ? (
           <div style={{ opacity: 0.8 }}>No sleep logs yet.</div>
         ) : (
-          <div style={{ display: "grid", gap: 6, opacity: 0.95 }}>
+          <div style={{ display: "grid", gap: 6 }}>
             <div>Start: {formatDateTime(latestSleep.sleep_start)}</div>
             <div>End: {formatDateTime(latestSleep.sleep_end)}</div>
-            <div>
-              Quality: {latestSleep.quality ?? "—"} / 5
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.9 }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Notes:</div>
+            <div>Quality: {latestSleep.quality ?? "—"} / 5</div>
+
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 700 }}>Notes:</div>
               <div style={{ whiteSpace: "pre-wrap" }}>
-                {latestSleep.notes?.trim() ? latestSleep.notes : "—"}
+                {latestSleep.notes?.trim() || "—"}
               </div>
             </div>
 
-            <div style={{ marginTop: 10, opacity: 0.9 }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 700 }}>
                 Last 7 days average quality
               </div>
               <div>
