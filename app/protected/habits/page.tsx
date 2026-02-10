@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type DailyHabitRow = {
-  id: string;
+  id?: string;
   user_id: string;
-  created_at: string;
+  created_at?: string;
   date: string; // YYYY-MM-DD
   caffeine_after_2pm: boolean | null;
   alcohol: boolean | null;
@@ -14,313 +14,248 @@ type DailyHabitRow = {
   screens_last_hour: boolean | null;
 };
 
-function toYYYYMMDDLocal(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
 }
 
-function formatTime(d = new Date()) {
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function toYMD(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function startOfLocalDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
 }
 
 export default function HabitsPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<string>("Loading...");
-  const [error, setError] = useState<string | null>(null);
-
+  const [status, setStatus] = useState<string>("Loading…");
+  const [todayStr, setTodayStr] = useState<string>("");
+  const [dayList, setDayList] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
 
-  // IMPORTANT: don't call new Date() during initial render
-  const [date, setDate] = useState<string>("");
+  const [rows, setRows] = useState<Record<string, DailyHabitRow | undefined>>(
+    {}
+  );
 
-  const [row, setRow] = useState<DailyHabitRow | null>(null);
+  // Build today + last 7 days on client only (avoid new Date() during prerender)
+  useEffect(() => {
+    const today = new Date();
+    const todayYMD = toYMD(today);
+    setTodayStr(todayYMD);
 
-  // form fields
-  const [caffeineAfter2pm, setCaffeineAfter2pm] = useState(false);
-  const [alcohol, setAlcohol] = useState(false);
-  const [exercise, setExercise] = useState(false);
-  const [screensLastHour, setScreensLastHour] = useState(false);
+    const start = startOfLocalDay(today);
+    const out: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(start);
+      d.setDate(d.getDate() - i);
+      out.push(toYMD(d));
+    }
+    setDayList(out);
+  }, []);
 
+  // Load data
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
-      setError(null);
-      setStatus("Checking session...");
+      try {
+        setStatus("Loading…");
 
-      // Restore last saved status (persists across refresh)
-      const lastSaved = localStorage.getItem("habits:lastSavedAt");
-      if (lastSaved) {
-        setStatus(`Saved ✅ (${lastSaved})`);
-      }
-
-      // compute date ONLY in effect (client-only)
-      const today = toYYYYMMDDLocal();
-      setDate(today);
-
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr) {
-        if (!cancelled) {
-          setError(userErr.message);
-          setStatus("Failed to get user.");
-          setLoading(false);
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        if (!user) {
+          if (!cancelled) setStatus("Not signed in.");
+          return;
         }
-        return;
-      }
+        if (!cancelled) setUserId(user.id);
 
-      const user = userData.user;
-      if (!user) {
-        if (!cancelled) {
-          setStatus("Not logged in.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (cancelled) return;
-
-      setUserId(user.id);
-      setEmail(user.email ?? null);
-      setStatus("Loading today's habits...");
-
-      const { data: existing, error: readErr } = await supabase
-        .from("daily_habits")
-        .select(
-          "id, user_id, created_at, date, caffeine_after_2pm, alcohol, exercise, screens_last_hour"
-        )
-        .eq("user_id", user.id)
-        .eq("date", today)
-        .maybeSingle<DailyHabitRow>();
-
-      if (readErr) {
-        if (!cancelled) {
-          setError(readErr.message);
-          setStatus("Failed to load daily habits.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      let finalRow = existing;
-
-      if (!finalRow) {
-        setStatus("Creating today's habits row...");
-
-        const { data: created, error: createErr } = await supabase
-          .from("daily_habits")
-          .insert({
-            user_id: user.id,
-            date: today,
-            caffeine_after_2pm: false,
-            alcohol: false,
-            exercise: false,
-            screens_last_hour: false,
-          })
-          .select(
-            "id, user_id, created_at, date, caffeine_after_2pm, alcohol, exercise, screens_last_hour"
-          )
-          .single<DailyHabitRow>();
-
-        if (createErr) {
-          if (!cancelled) {
-            setError(createErr.message);
-            setStatus("Failed to create daily habits row.");
-            setLoading(false);
-          }
+        // Need dayList ready
+        if (dayList.length !== 7) {
+          if (!cancelled) setStatus("Loading…");
           return;
         }
 
-        finalRow = created;
+        const fromYMD = dayList[0];
+        const toYMDStr = dayList[dayList.length - 1];
+
+        const { data, error } = await supabase
+          .from("daily_habits")
+          .select(
+            "id,user_id,created_at,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour"
+          )
+          .eq("user_id", user.id)
+          .gte("date", fromYMD)
+          .lte("date", toYMDStr)
+          .order("date", { ascending: true });
+
+        if (error) throw error;
+
+        const map: Record<string, DailyHabitRow | undefined> = {};
+        for (const r of (data ?? []) as DailyHabitRow[]) {
+          map[r.date] = r;
+        }
+
+        if (!cancelled) {
+          setRows(map);
+          setStatus("Ready.");
+        }
+      } catch (e: any) {
+        if (!cancelled) setStatus(e?.message ?? "Failed to load.");
       }
-
-      if (cancelled) return;
-
-      setRow(finalRow);
-      setCaffeineAfter2pm(!!finalRow.caffeine_after_2pm);
-      setAlcohol(!!finalRow.alcohol);
-      setExercise(!!finalRow.exercise);
-      setScreensLastHour(!!finalRow.screens_last_hour);
-
-      // If we already have a saved message, keep it. Otherwise show Ready.
-      const stillSaved = localStorage.getItem("habits:lastSavedAt");
-      setStatus(stillSaved ? `Saved ✅ (${stillSaved})` : "Ready.");
-
-      setLoading(false);
     }
 
     load();
-
     return () => {
       cancelled = true;
     };
-  }, [supabase]);
+  }, [supabase, dayList]);
 
-  async function save() {
-    if (!userId || !date) return;
+  async function upsertField(date: string, patch: Partial<DailyHabitRow>) {
+    if (!userId) return;
 
-    setError(null);
-    setStatus("Saving...");
+    // optimistic update
+    setRows((prev) => {
+      const current = prev[date];
+      const next: DailyHabitRow = {
+        id: current?.id,
+        user_id: userId,
+        created_at: current?.created_at,
+        date,
+        caffeine_after_2pm: current?.caffeine_after_2pm ?? null,
+        alcohol: current?.alcohol ?? null,
+        exercise: current?.exercise ?? null,
+        screens_last_hour: current?.screens_last_hour ?? null,
+        ...patch,
+      };
+      return { ...prev, [date]: next };
+    });
 
-    const payload = {
-      user_id: userId,
-      date,
-      caffeine_after_2pm: caffeineAfter2pm,
-      alcohol,
-      exercise,
-      screens_last_hour: screensLastHour,
-    };
+    try {
+      setStatus("Saving…");
 
-    const { data, error: upErr } = await supabase
-      .from("daily_habits")
-      .upsert(payload, { onConflict: "user_id,date" })
-      .select(
-        "id, user_id, created_at, date, caffeine_after_2pm, alcohol, exercise, screens_last_hour"
-      )
-      .single<DailyHabitRow>();
+      const payload: DailyHabitRow = {
+        user_id: userId,
+        date,
+        caffeine_after_2pm: patch.caffeine_after_2pm ?? rows[date]?.caffeine_after_2pm ?? null,
+        alcohol: patch.alcohol ?? rows[date]?.alcohol ?? null,
+        exercise: patch.exercise ?? rows[date]?.exercise ?? null,
+        screens_last_hour: patch.screens_last_hour ?? rows[date]?.screens_last_hour ?? null,
+      };
 
-    if (upErr) {
-      setError(upErr.message);
-      setStatus("Save failed.");
-      return;
+      // Note: assumes you have a unique constraint on (user_id, date)
+      const { error } = await supabase
+        .from("daily_habits")
+        .upsert(payload as any, { onConflict: "user_id,date" });
+
+      if (error) throw error;
+      setStatus("Ready.");
+    } catch (e: any) {
+      setStatus(e?.message ?? "Save failed.");
     }
+  }
 
-    setRow(data);
+  function checkbox(
+    date: string,
+    key: keyof Pick<
+      DailyHabitRow,
+      "caffeine_after_2pm" | "alcohol" | "exercise" | "screens_last_hour"
+    >,
+    label: string
+  ) {
+    const r = rows[date];
+    const checked = r?.[key] === true;
 
-    const t = formatTime();
-    localStorage.setItem("habits:lastSavedAt", t);
-    setStatus(`Saved ✅ (${t})`);
+    return (
+      <label
+        key={String(key)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 0",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => upsertField(date, { [key]: e.target.checked } as any)}
+        />
+        <span>{label}</span>
+      </label>
+    );
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: "40px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
-        Daily habits
-      </h1>
-
-      <p style={{ opacity: 0.8, marginBottom: 16 }}>
-        {email ? `Signed in as ${email}` : "Signed in"}
-        {date ? ` • Date: ${date}` : ""}
-      </p>
-
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 8 }}>
-          Status: {status}
+    <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Habits</h1>
+          <div style={{ marginTop: 6, opacity: 0.8 }}>
+            Today: {todayStr || "—"}
+          </div>
         </div>
 
-        {loading && <div>Loading...</div>}
+        <div style={{ textAlign: "right" }}>
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.03)",
+              minWidth: 180,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Status</div>
+            <div style={{ opacity: 0.9 }}>{status}</div>
+          </div>
 
-        {error && (
-          <div style={{ marginTop: 8, color: "salmon" }}>Error: {error}</div>
-        )}
+          <div style={{ marginTop: 10, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <a href="/protected/dashboard" style={{ textDecoration: "underline" }}>
+              Dashboard →
+            </a>
+            <a href="/protected/sleep" style={{ textDecoration: "underline" }}>
+              Sleep →
+            </a>
+          </div>
+        </div>
       </div>
 
-      {!loading && (
+      <div style={{ marginTop: 18 }}>
+        <div style={{ opacity: 0.75, marginBottom: 10 }}>
+          Last 7 days (oldest → newest)
+        </div>
+
         <div
           style={{
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 12,
-            padding: 16,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: 12,
           }}
         >
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-            Today’s checklist
-          </h2>
+          {dayList.map((d) => (
+            <div
+              key={d}
+              style={{
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.03)",
+                padding: 14,
+              }}
+            >
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>{d}</div>
 
-          <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={caffeineAfter2pm}
-              onChange={(e) => setCaffeineAfter2pm(e.target.checked)}
-            />
-            Caffeine after 2pm
-          </label>
-
-          <label
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              marginTop: 10,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={alcohol}
-              onChange={(e) => setAlcohol(e.target.checked)}
-            />
-            Alcohol
-          </label>
-
-          <label
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              marginTop: 10,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={exercise}
-              onChange={(e) => setExercise(e.target.checked)}
-            />
-            Exercise
-          </label>
-
-          <label
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              marginTop: 10,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={screensLastHour}
-              onChange={(e) => setScreensLastHour(e.target.checked)}
-            />
-            Screens in the last hour
-          </label>
-
-          {/* SAME BUTTON */}
-          <button
-            onClick={save}
-            style={{
-              marginTop: 14,
-              padding: "10px 14px",
-              borderRadius: 10,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Save
-          </button>
-
-          <hr style={{ margin: "18px 0", opacity: 0.2 }} />
-
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-            Raw daily_habits JSON
-          </h3>
-
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.9 }}>
-            {JSON.stringify(row, null, 2)}
-          </pre>
+              {checkbox(d, "caffeine_after_2pm", "Caffeine after 2pm")}
+              {checkbox(d, "alcohol", "Alcohol")}
+              {checkbox(d, "exercise", "Exercise")}
+              {checkbox(d, "screens_last_hour", "Screens last hour")}
+            </div>
+          ))}
         </div>
-      )}
-    </main>
+      </div>
+    </div>
   );
 }
