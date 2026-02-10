@@ -75,7 +75,7 @@ export default function DashboardPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   const [status, setStatus] = useState<string>("Loading…");
-  const [todayStr, setTodayStr] = useState<string>(toYMD(new Date()));
+ const [todayStr, setTodayStr] = useState<string>("");
   const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
   const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
   const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
@@ -83,9 +83,11 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      try {
-        setStatus("Loading…");
+   setTodayStr(toYMD(new Date()));
+
+  async function load() {
+    try {
+      setStatus("Loading...");
 
         const { data: auth } = await supabase.auth.getUser();
         const user = auth?.user;
