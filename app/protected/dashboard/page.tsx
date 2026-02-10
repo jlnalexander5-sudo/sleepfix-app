@@ -182,18 +182,7 @@ export default function DashboardPage() {
   }, [supabase]);
 
   // last 7 days list, oldest -> newest
-  const dayList = useMemo(() => {
-    const today = new Date();
-    const start = startOfLocalDay(today);
-    const out: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(start);
-      d.setDate(d.getDate() - i);
-      out.push(toYMD(d));
-    }
-    return out;
-  }, []);
-
+ 
   const habitsByDate = useMemo(() => {
     const m = new Map<string, DailyHabitRow>();
     for (const r of habits7) m.set(r.date, r);
