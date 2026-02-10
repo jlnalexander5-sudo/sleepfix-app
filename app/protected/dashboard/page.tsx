@@ -76,6 +76,7 @@ export default function DashboardPage() {
 
   const [status, setStatus] = useState<string>("Loading…");
  const [todayStr, setTodayStr] = useState<string>("");
+  const [dayList, setDayList] = useState<string[]>([]);
   const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
   const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
   const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
