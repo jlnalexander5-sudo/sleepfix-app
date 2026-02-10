@@ -174,24 +174,7 @@ setDayList(out);
         const dayList: string[] = [];
         const start = startOfLocalDay(today);
         for (let i = 6; i >= 0; i--) {
-          // --- NEW: avg duration (last 7) + bedtime consistency ---
-const durations = (sleep7Data ?? [])
-  .map((r) => durationMinutes(r.sleep_start ?? null, (r as any).sleep_end ?? null))
-  .filter((m): m is number => typeof m === "number" && Number.isFinite(m) && m > 0);
-
-const avgDur =
-  durations.length > 0
-    ? Math.round((durations.reduce((a, b) => a + b, 0) / durations.length) * 10) / 10
-    : null;
-
-setAvgDuration7(avgDur);
-
-const bedtimes = (sleep7Data ?? [])
-  .map((r) => (r.sleep_start ? minutesOfDayFromISO(r.sleep_start) : null))
-  .filter((m): m is number => typeof m === "number" && Number.isFinite(m));
-
-setBedtimeMean7(bedtimes.length ? circularMeanMinutes(bedtimes) : null);
-setBedtimeVar7(bedtimes.length ? circularStdMinutes(bedtimes) : null);
+       setBedtimeVar7(bedtimes.length ? circularStdMinutes(bedtimes) : null);
 
           const d = new Date(start);
           d.setDate(d.getDate() - i);
