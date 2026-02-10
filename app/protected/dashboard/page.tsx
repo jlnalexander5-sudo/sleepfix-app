@@ -155,7 +155,7 @@ setDayList(out);
           .limit(1);
 
         if (sleepErr) throw sleepErr;
-
+        setLatestSleep(sleepData?.[0] ?? null);
         // fetch last 7 sleep logs for avg quality (optional)
         const { data: sleep7Data, error: sleep7Err } = await supabase
           .from("sleep_logs")
