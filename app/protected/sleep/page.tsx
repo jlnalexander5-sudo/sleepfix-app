@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type SleepLogRow = {
-  id: string; // uuid
-  user_id: string; // uuid
+  id: string;
+  user_id: string;
   created_at: string;
-  sleep_start: string | null; // timestamptz
-  sleep_end: string | null; // timestamptz
-  quality: number | null; // smallint
+  sleep_start: string | null; // ISO
+  sleep_end: string | null; // ISO
+  quality: number | null; // 1-5
   notes: string | null;
 };
 
@@ -17,320 +17,290 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function toDatetimeLocalValue(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  // datetime-local expects local time: YYYY-MM-DDTHH:mm
-  const y = d.getFullYear();
-  const m = pad2(d.getMonth() + 1);
-  const day = pad2(d.getDate());
-  const hh = pad2(d.getHours());
-  const mm = pad2(d.getMinutes());
-  return `${y}-${m}-${day}T${hh}:${mm}`;
+function fmt(dtIso: string | null) {
+  if (!dtIso) return "—";
+  const d = new Date(dtIso);
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}, ${pad2(
+    d.getHours()
+  )}:${pad2(d.getMinutes())}`;
 }
 
-function fromDatetimeLocalValue(value: string): string | null {
-  if (!value) return null;
-  // value like "2026-02-09T22:30" interpreted as local time
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+function durationMinutes(startIso: string | null, endIso: string | null) {
+  if (!startIso || !endIso) return null;
+  const a = new Date(startIso).getTime();
+  const b = new Date(endIso).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  const mins = Math.round((b - a) / 60000);
+  return mins > 0 ? mins : null;
 }
 
-function startOfTodayLocal(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-}
-
-function startOfTomorrowLocal(): Date {
-  const t = startOfTodayLocal();
-  t.setDate(t.getDate() + 1);
-  return t;
+function formatMinutesHuman(mins: number | null) {
+  if (mins == null) return "—";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h <= 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 export default function SleepPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<string>("Loading...");
-  const [error, setError] = useState<string | null>(null);
 
+  const [status, setStatus] = useState("Loading…");
   const [userId, setUserId] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
 
-  const [row, setRow] = useState<SleepLogRow | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null); // update this if we found today's row
+  const [logs, setLogs] = useState<SleepLogRow[]>([]);
 
-  // form fields
-  const [sleepStartLocal, setSleepStartLocal] = useState<string>("");
-  const [sleepEndLocal, setSleepEndLocal] = useState<string>("");
+  // form state
+  const [startLocal, setStartLocal] = useState<string>("");
+  const [endLocal, setEndLocal] = useState<string>("");
   const [quality, setQuality] = useState<number>(3);
   const [notes, setNotes] = useState<string>("");
+
+  // set default times on client only
+  useEffect(() => {
+    const now = new Date();
+    const end = new Date(now);
+    const start = new Date(now);
+    start.setHours(start.getHours() - 8);
+
+    const toLocalInput = (d: Date) => {
+      // YYYY-MM-DDTHH:mm (local)
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(
+        d.getHours()
+      )}:${pad2(d.getMinutes())}`;
+    };
+
+    setStartLocal(toLocalInput(start));
+    setEndLocal(toLocalInput(end));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
-      setError(null);
-      setStatus("Checking session...");
+      try {
+        setStatus("Loading…");
 
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr) {
-        if (!cancelled) {
-          setError(userErr.message);
-          setStatus("Failed to get user.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      const user = userData.user;
-      if (!user) {
-        if (!cancelled) {
-          setStatus("Not logged in.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (cancelled) return;
-      setUserId(user.id);
-      setEmail(user.email ?? null);
-
-      // Prefer loading "today's" sleep log (based on sleep_start in local day),
-      // otherwise load the latest entry for convenience.
-      setStatus("Loading sleep log...");
-
-      const todayStart = startOfTodayLocal().toISOString();
-      const tomorrowStart = startOfTomorrowLocal().toISOString();
-
-      const { data: todaysRow, error: todayErr } = await supabase
-        .from("sleep_logs")
-        .select("id, user_id, created_at, sleep_start, sleep_end, quality, notes")
-        .eq("user_id", user.id)
-        .gte("sleep_start", todayStart)
-        .lt("sleep_start", tomorrowStart)
-        .order("sleep_start", { ascending: false })
-        .limit(1)
-        .maybeSingle<SleepLogRow>();
-
-      if (todayErr) {
-        if (!cancelled) {
-          setError(todayErr.message);
-          setStatus("Failed to load sleep logs.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      let final = todaysRow;
-
-      if (!final) {
-        const { data: latestRow, error: latestErr } = await supabase
-          .from("sleep_logs")
-          .select("id, user_id, created_at, sleep_start, sleep_end, quality, notes")
-          .eq("user_id", user.id)
-          .order("sleep_start", { ascending: false })
-          .limit(1)
-          .maybeSingle<SleepLogRow>();
-
-        if (latestErr) {
-          if (!cancelled) {
-            setError(latestErr.message);
-            setStatus("Failed to load sleep logs.");
-            setLoading(false);
-          }
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        if (!user) {
+          if (!cancelled) setStatus("Not signed in.");
           return;
         }
+        if (!cancelled) setUserId(user.id);
 
-        final = latestRow ?? null;
+        const { data, error } = await supabase
+          .from("sleep_logs")
+          .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
+          .eq("user_id", user.id)
+          .order("sleep_start", { ascending: false })
+          .limit(20);
+
+        if (error) throw error;
+
+        if (!cancelled) {
+          setLogs((data ?? []) as SleepLogRow[]);
+          setStatus("Ready.");
+        }
+      } catch (e: any) {
+        if (!cancelled) setStatus(e?.message ?? "Failed to load.");
       }
-
-      if (cancelled) return;
-
-      setRow(final);
-
-      // If we found a row for today, we "edit" it (update by id). Otherwise, Save will create a new one.
-      if (todaysRow?.id) setEditingId(todaysRow.id);
-      else setEditingId(null);
-
-      // Pre-fill form if we have a row
-      if (final) {
-        setSleepStartLocal(toDatetimeLocalValue(final.sleep_start));
-        setSleepEndLocal(toDatetimeLocalValue(final.sleep_end));
-        setQuality(
-          typeof final.quality === "number" && final.quality >= 1 && final.quality <= 5
-            ? final.quality
-            : 3
-        );
-        setNotes(final.notes ?? "");
-      } else {
-        setSleepStartLocal("");
-        setSleepEndLocal("");
-        setQuality(3);
-        setNotes("");
-      }
-
-      setStatus("Ready.");
-      setLoading(false);
     }
 
     load();
-
     return () => {
       cancelled = true;
     };
   }, [supabase]);
 
-  async function save() {
+  async function addLog() {
     if (!userId) return;
 
-    setError(null);
-    setStatus("Saving...");
+    try {
+      setStatus("Saving…");
 
-    const payload = {
-      user_id: userId,
-      sleep_start: fromDatetimeLocalValue(sleepStartLocal),
-      sleep_end: fromDatetimeLocalValue(sleepEndLocal),
-      quality: Math.max(1, Math.min(5, Number(quality) || 3)),
-      notes: notes || null,
-    };
+      const startIso = startLocal ? new Date(startLocal).toISOString() : null;
+      const endIso = endLocal ? new Date(endLocal).toISOString() : null;
 
-    // If we found a "today" row, update it. Otherwise insert a new row.
-    if (editingId) {
-      const { data, error: upErr } = await supabase
+      const payload = {
+        user_id: userId,
+        sleep_start: startIso,
+        sleep_end: endIso,
+        quality: Number.isFinite(quality) ? quality : null,
+        notes: notes.trim() ? notes.trim() : null,
+      };
+
+      const { error } = await supabase.from("sleep_logs").insert(payload as any);
+      if (error) throw error;
+
+      // reload list
+      const { data, error: err2 } = await supabase
         .from("sleep_logs")
-        .update(payload)
-        .eq("id", editingId)
-        .select("id, user_id, created_at, sleep_start, sleep_end, quality, notes")
-        .single<SleepLogRow>();
+        .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
+        .eq("user_id", userId)
+        .order("sleep_start", { ascending: false })
+        .limit(20);
 
-      if (upErr) {
-        setError(upErr.message);
-        setStatus("Save failed.");
-        return;
-      }
+      if (err2) throw err2;
 
-      setRow(data);
-      setStatus("Saved ✅");
-      return;
+      setLogs((data ?? []) as SleepLogRow[]);
+      setStatus("Ready.");
+      setNotes("");
+    } catch (e: any) {
+      setStatus(e?.message ?? "Save failed.");
     }
-
-    const { data, error: insErr } = await supabase
-      .from("sleep_logs")
-      .insert(payload)
-      .select("id, user_id, created_at, sleep_start, sleep_end, quality, notes")
-      .single<SleepLogRow>();
-
-    if (insErr) {
-      setError(insErr.message);
-      setStatus("Save failed.");
-      return;
-    }
-
-    // If the inserted row is for today (sleep_start today), treat it as editable on refresh
-    setRow(data);
-    setEditingId(data.id);
-    setStatus("Saved ✅");
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: "40px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Sleep log</h1>
-
-      <p style={{ opacity: 0.8, marginBottom: 16 }}>
-        {email ? `Signed in as ${email}` : "Signed in"}
-      </p>
-
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 8 }}>
-          Status: {status}
+    <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Sleep</h1>
+          <div style={{ marginTop: 6, opacity: 0.8 }}>Log your sleep + quality</div>
         </div>
-        {loading && <div>Loading...</div>}
-        {error && <div style={{ marginTop: 8, color: "salmon" }}>Error: {error}</div>}
+
+        <div style={{ textAlign: "right" }}>
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.03)",
+              minWidth: 180,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Status</div>
+            <div style={{ opacity: 0.9 }}>{status}</div>
+          </div>
+
+          <div style={{ marginTop: 10, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <a href="/protected/dashboard" style={{ textDecoration: "underline" }}>
+              Dashboard →
+            </a>
+            <a href="/protected/habits" style={{ textDecoration: "underline" }}>
+              Habits →
+            </a>
+          </div>
+        </div>
       </div>
 
-      {!loading && (
-        <div
-          style={{
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 12,
-            padding: 16,
-          }}
-        >
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Bed time</div>
+      {/* Add form */}
+      <div
+        style={{
+          marginTop: 18,
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.03)",
+          padding: 14,
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: 10 }}>Add sleep log</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ opacity: 0.85 }}>Start</span>
             <input
               type="datetime-local"
-              value={sleepStartLocal}
-              onChange={(e) => setSleepStartLocal(e.target.value)}
-              style={{ width: "100%", padding: 10, borderRadius: 10 }}
+              value={startLocal}
+              onChange={(e) => setStartLocal(e.target.value)}
+              style={{ padding: 10, borderRadius: 10 }}
             />
           </label>
 
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Wake time</div>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ opacity: 0.85 }}>End</span>
             <input
               type="datetime-local"
-              value={sleepEndLocal}
-              onChange={(e) => setSleepEndLocal(e.target.value)}
-              style={{ width: "100%", padding: 10, borderRadius: 10 }}
+              value={endLocal}
+              onChange={(e) => setEndLocal(e.target.value)}
+              style={{ padding: 10, borderRadius: 10 }}
             />
           </label>
 
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Sleep quality (1–5)</div>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ opacity: 0.85 }}>Quality (1–5)</span>
             <input
               type="number"
               min={1}
               max={5}
               value={quality}
-              onChange={(e) => setQuality(parseInt(e.target.value || "3", 10))}
-              style={{ width: "100%", padding: 10, borderRadius: 10 }}
+              onChange={(e) => setQuality(Number(e.target.value))}
+              style={{ padding: 10, borderRadius: 10 }}
             />
           </label>
+        </div>
 
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Notes</div>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={5}
-              style={{ width: "100%", padding: 10, borderRadius: 10 }}
-            />
-          </label>
+        <label style={{ display: "grid", gap: 6, marginTop: 10 }}>
+          <span style={{ opacity: 0.85 }}>Notes</span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            style={{ padding: 10, borderRadius: 10 }}
+            placeholder="e.g., terrible sleep, woke up twice…"
+          />
+        </label>
 
-          {/* Keep the same button */}
+        <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
           <button
-            onClick={save}
+            onClick={addLog}
             style={{
-              marginTop: 8,
               padding: "10px 14px",
-              borderRadius: 10,
-              fontWeight: 600,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.18)",
+              background: "rgba(255,255,255,0.06)",
               cursor: "pointer",
+              fontWeight: 700,
             }}
           >
             Save
           </button>
-
-          <hr style={{ margin: "18px 0", opacity: 0.2 }} />
-
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-            Raw sleep_logs JSON
-          </h3>
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.9 }}>
-            {JSON.stringify(row, null, 2)}
-          </pre>
         </div>
-      )}
-    </main>
+      </div>
+
+      {/* List */}
+      <div style={{ marginTop: 14 }}>
+        <div style={{ opacity: 0.75, marginBottom: 10 }}>Latest 20 logs</div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {logs.map((r) => {
+            const mins = durationMinutes(r.sleep_start, r.sleep_end);
+            return (
+              <div
+                key={r.id}
+                style={{
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.03)",
+                  padding: 14,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontWeight: 800 }}>{fmt(r.sleep_start)} → {fmt(r.sleep_end)}</div>
+                  <div style={{ opacity: 0.85 }}>
+                    Duration: {formatMinutesHuman(mins)}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 6, opacity: 0.9 }}>
+                  Quality: {r.quality ?? "—"} / 5
+                </div>
+
+                {r.notes ? (
+                  <div style={{ marginTop: 8, opacity: 0.85, whiteSpace: "pre-wrap" }}>
+                    Notes: {r.notes}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+
+          {logs.length === 0 ? (
+            <div style={{ opacity: 0.75 }}>No sleep logs yet.</div>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
