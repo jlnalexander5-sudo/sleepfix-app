@@ -162,6 +162,22 @@ setDayList(out);
           .select("quality,sleep_start")
           .order("sleep_start", { ascending: false })
           .limit(7);
+      if (!sleep7Err && sleep7Data && sleep7Data.length > 0) {
+  const vals = sleep7Data
+    .map(r => r.quality)
+    .filter((q): q is number => typeof q === "number");
+
+  if (vals.length > 0) {
+    const avg =
+      vals.reduce((a, b) => a + b, 0) / vals.length;
+
+    if (!cancelled) {
+      setAvgQuality7(Number(avg.toFixed(1)));
+    }
+  } else {
+    if (!cancelled) setAvgQuality7(null);
+  }
+}
       if (sleep7Err) {
   console.warn("sleep7Err", sleep7Err);
   setAvgQuality7(null);
