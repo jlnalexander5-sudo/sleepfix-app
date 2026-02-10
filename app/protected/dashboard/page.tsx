@@ -284,7 +284,9 @@ setDayList(out);
         <div style={{ fontWeight: 700, marginBottom: 8 }}>
           Last 7 days (good days): {goodDays}/7
         </div>
-
+<div style={{ fontSize: 13, opacity: 0.8 }}>
+  Avg sleep quality (last 7): {avgQuality7 ?? "–"}
+</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {dayList.map((d) => {
             const r = habitsByDate.get(d);
