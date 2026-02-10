@@ -95,7 +95,7 @@ export default function DashboardPage() {
   const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
   const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
   const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
-
+  const latestDurationMins = durationMinutes(latestSleep?.sleep_start, latestSleep?.sleep_end);
   useEffect(() => {
     let cancelled = false;
 
