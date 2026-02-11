@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type DailyHabitRow = {
   id: string;
