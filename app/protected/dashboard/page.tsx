@@ -1,13 +1,17 @@
+// NOTE: This file was patched to compute avg duration + bedtime consistency + RRSM from sleep7Data
+// and to avoid the “snippets everywhere” problem.
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import Link from "next/link";
+import { createBrowserSupabaseClient } from "@/utils/supabase/client";
 
 type DailyHabitRow = {
   id: string;
   user_id: string;
   created_at: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   caffeine_after_2pm: boolean | null;
   alcohol: boolean | null;
   exercise: boolean | null;
@@ -18,35 +22,83 @@ type SleepLogRow = {
   id: string;
   user_id: string;
   created_at: string;
-  sleep_start: string;
-  sleep_end: string;
-  quality: number | null;
+  sleep_start: string | null; // ISO
+  sleep_end: string | null; // ISO
+  quality: number | null; // 1-5
   notes: string | null;
 };
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
 function toYMD(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function startOfLocalDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function minutesOfDayFromISO(iso: string) {
+  const d = new Date(iso);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+// Circular mean for minutes-of-day (handles wraparound near midnight)
+function circularMeanMinutes(values: number[]) {
+  const toRad = (m: number) => (m / (24 * 60)) * 2 * Math.PI;
+  const xs = values.map((m) => Math.cos(toRad(m)));
+  const ys = values.map((m) => Math.sin(toRad(m)));
+  const meanX = xs.reduce((a, b) => a + b, 0) / values.length;
+  const meanY = ys.reduce((a, b) => a + b, 0) / values.length;
+  const ang = Math.atan2(meanY, meanX);
+  const norm = ang < 0 ? ang + 2 * Math.PI : ang;
+  const mins = (norm / (2 * Math.PI)) * (24 * 60);
+  return mins;
+}
+
+// Circular standard deviation (minutes)
+function circularStdMinutes(values: number[]) {
+  const toRad = (m: number) => (m / (24 * 60)) * 2 * Math.PI;
+  const xs = values.map((m) => Math.cos(toRad(m)));
+  const ys = values.map((m) => Math.sin(toRad(m)));
+  const meanX = xs.reduce((a, b) => a + b, 0) / values.length;
+  const meanY = ys.reduce((a, b) => a + b, 0) / values.length;
+  const R = Math.sqrt(meanX * meanX + meanY * meanY);
+  // circular std in radians:
+  const stdRad = Math.sqrt(-2 * Math.log(Math.max(R, 1e-9)));
+  // convert to minutes:
+  return (stdRad / (2 * Math.PI)) * (24 * 60);
 }
 
 function formatDateTime(dt: string) {
   const d = new Date(dt);
-  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}, ${pad2(
-    d.getHours()
-  )}:${pad2(d.getMinutes())}`;
+  const day = String(d.getDate()).padStart(2, "0");
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const y = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${mo}/${y}, ${hh}:${mm}`;
 }
 
-function yesNoIcon(v: boolean | null | undefined) {
-  if (v === true) return "✅";
-  if (v === false) return "❌";
-  return "—";
+function durationMinutes(startIso?: string | null, endIso?: string | null) {
+  if (!startIso || !endIso) return null;
+  const a = new Date(startIso).getTime();
+  const b = new Date(endIso).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  const diff = Math.round((b - a) / 60000);
+  if (!Number.isFinite(diff)) return null;
+  return diff;
+}
+
+function formatMinutesHuman(mins: number) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h <= 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 function isGoodDay(r: DailyHabitRow | undefined) {
@@ -62,23 +114,29 @@ function isGoodDay(r: DailyHabitRow | undefined) {
 export default function DashboardPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
-  const [status, setStatus] = useState("Loading…");
-  const [todayStr, setTodayStr] = useState("");
+  const [status, setStatus] = useState<string>("Loading…");
+  const [todayStr, setTodayStr] = useState<string>("");
   const [dayList, setDayList] = useState<string[]>([]);
   const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
   const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
+
   const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
+  const [avgDuration7, setAvgDuration7] = useState<number | null>(null); // minutes
+  const [bedtimeMean7, setBedtimeMean7] = useState<number | null>(null); // minutes-of-day
+  const [bedtimeVar7, setBedtimeVar7] = useState<number | null>(null); // minutes variability
+  const [rrsmScore7, setRrsmScore7] = useState<number | null>(null);
+
+  const latestDurationMins = durationMinutes(latestSleep?.sleep_start, latestSleep?.sleep_end);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        setStatus("Loading...");
+        setStatus("Loading…");
 
         const { data: auth } = await supabase.auth.getUser();
         const user = auth?.user;
-
         if (!user) {
           if (!cancelled) setStatus("Not signed in.");
           return;
@@ -88,30 +146,30 @@ export default function DashboardPage() {
         const todayYMD = toYMD(today);
         if (!cancelled) setTodayStr(todayYMD);
 
+        // build last 7 days list (inclusive today), oldest -> newest
+        const out: string[] = [];
         const start = startOfLocalDay(today);
-        const days: string[] = [];
         for (let i = 6; i >= 0; i--) {
           const d = new Date(start);
           d.setDate(d.getDate() - i);
-          days.push(toYMD(d));
+          out.push(toYMD(d));
         }
+        if (!cancelled) setDayList(out);
 
-        if (!cancelled) setDayList(days);
+        const fromYMD = out[0];
+        const toYMDStr = out[out.length - 1];
 
-        const fromYMD = days[0];
-        const toYMDStr = days[days.length - 1];
-
+        // fetch habits for last 7 days
         const { data: habitsData, error: habitsErr } = await supabase
           .from("daily_habits")
-          .select(
-            "id,user_id,created_at,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour"
-          )
+          .select("id,user_id,created_at,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour")
           .gte("date", fromYMD)
           .lte("date", toYMDStr)
           .order("date", { ascending: true });
 
         if (habitsErr) throw habitsErr;
 
+        // fetch latest sleep log
         const { data: sleepData, error: sleepErr } = await supabase
           .from("sleep_logs")
           .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
@@ -120,37 +178,80 @@ export default function DashboardPage() {
 
         if (sleepErr) throw sleepErr;
 
+        const latest = (sleepData ?? [])[0] ?? null;
+
+        // fetch last 7 sleep logs (for averages + consistency)
         const { data: sleep7Data, error: sleep7Err } = await supabase
           .from("sleep_logs")
-          .select("quality")
+          .select("sleep_start,sleep_end,quality")
           .order("sleep_start", { ascending: false })
           .limit(7);
 
-        if (!sleep7Err && sleep7Data) {
-          const vals = sleep7Data
-            .map((r) => r.quality)
-            .filter((q): q is number => typeof q === "number");
+        // compute: avg quality, avg duration, bedtime mean + variability, RRSM score (0-100)
+        let avgQ: number | null = null;
+        let avgDur: number | null = null; // minutes
+        let bedMean: number | null = null; // minutes-of-day
+        let bedVar: number | null = null; // minutes (circular std)
+        let rrsm: number | null = null;
 
-          const avg =
-            vals.length > 0
-              ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) /
-                10
-              : null;
-
-          if (!cancelled) setAvgQuality7(avg);
-        } else {
+        if (sleep7Err) {
           console.warn("sleep7Err", sleep7Err);
-          if (!cancelled) setAvgQuality7(null);
+        } else {
+          const qualities = (sleep7Data ?? [])
+            .map((r: any) => r?.quality)
+            .filter((q: any) => typeof q === "number") as number[];
+          if (qualities.length) {
+            avgQ = Math.round((qualities.reduce((a, b) => a + b, 0) / qualities.length) * 10) / 10;
+          }
+
+          const durations = (sleep7Data ?? [])
+            .map((r: any) => durationMinutes(r?.sleep_start ?? null, r?.sleep_end ?? null))
+            .filter((m: any) => typeof m === "number" && Number.isFinite(m) && m > 0) as number[];
+          if (durations.length) {
+            avgDur = Math.round((durations.reduce((a, b) => a + b, 0) / durations.length) * 10) / 10;
+          }
+
+          const bedtimes = (sleep7Data ?? [])
+            .map((r: any) => (r?.sleep_start ? minutesOfDayFromISO(r.sleep_start) : null))
+            .filter((m: any) => typeof m === "number" && Number.isFinite(m)) as number[];
+          if (bedtimes.length) {
+            bedMean = circularMeanMinutes(bedtimes);
+            bedVar = circularStdMinutes(bedtimes);
+          }
+
+          // RRSM v1 (tweak anytime)
+          // Quality (1-5) -> 0..50
+          const qScore = avgQ == null ? 0 : Math.max(0, Math.min(50, ((avgQ - 1) / 4) * 50));
+          // Duration: target 8h, score drops to 0 at +/- 3h
+          const durScore =
+            avgDur == null
+              ? 0
+              : (() => {
+                  const idealMin = 8 * 60;
+                  const diff = Math.abs(avgDur - idealMin);
+                  const score = 25 * Math.max(0, 1 - diff / (3 * 60));
+                  return Math.max(0, Math.min(25, score));
+                })();
+          // Bedtime variability (circular std): 0min ->15, 120min+ ->0
+          const varScore =
+            bedVar == null ? 0 : Math.max(0, Math.min(15, 15 * (1 - Math.min(bedVar, 120) / 120)));
+
+          rrsm = Math.round((qScore + durScore + varScore) * 10) / 10;
         }
 
         if (!cancelled) {
-          setHabits7((habitsData ?? []) as DailyHabitRow[]);
-          setLatestSleep((sleepData?.[0] ?? null) as SleepLogRow | null);
+          setHabits7(habitsData ?? []);
+          setLatestSleep(latest);
+          setAvgQuality7(avgQ);
+          setAvgDuration7(avgDur);
+          setBedtimeMean7(bedMean);
+          setBedtimeVar7(bedVar);
+          setRrsmScore7(rrsm);
           setStatus("Ready.");
         }
       } catch (e: any) {
         console.error(e);
-        if (!cancelled) setStatus(e?.message ?? "Error loading dashboard.");
+        if (!cancelled) setStatus(e?.message ?? "Error");
       }
     }
 
@@ -167,175 +268,127 @@ export default function DashboardPage() {
     return m;
   }, [habits7]);
 
-  const habitsToday = habitsByDate.get(todayStr);
-
-  const goodDays = useMemo(() => {
-    return dayList.filter((d) => isGoodDay(habitsByDate.get(d))).length;
+  const goodDaysCount = useMemo(() => {
+    let c = 0;
+    for (const d of dayList) {
+      if (isGoodDay(habitsByDate.get(d))) c++;
+    }
+    return c;
   }, [dayList, habitsByDate]);
 
   return (
-    <main style={{ maxWidth: 820, margin: "40px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6 }}>
-        Dashboard
-      </h1>
-
-      <div style={{ opacity: 0.8, marginBottom: 14 }}>
-        Today: {todayStr}
+    <div className="w-full max-w-4xl mx-auto space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <div className="text-sm opacity-70">Today: {todayStr || "—"}</div>
       </div>
 
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 12,
-          padding: 12,
-          marginBottom: 18,
-        }}
-      >
-        Status: {status}
+      <div className="rounded-xl border p-4">
+        <div className="font-medium">Status: {status}</div>
       </div>
 
-      <section
-        style={{
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 18,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
-            Today’s habits
-          </h2>
-          <a href="/protected/habits" style={{ opacity: 0.85 }}>
+      <div className="rounded-xl border p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Today’s habits</h2>
+          <Link className="underline opacity-80 hover:opacity-100" href="/protected/habits">
             Open habits →
-          </a>
+          </Link>
         </div>
 
-        <div style={{ display: "grid", gap: 8 }}>
-          <div>
-            {yesNoIcon(habitsToday?.caffeine_after_2pm === false)} Caffeine after
-            2pm
-          </div>
-          <div>{yesNoIcon(habitsToday?.alcohol === false)} Alcohol</div>
-          <div>{yesNoIcon(habitsToday?.exercise)} Exercise</div>
-          <div>
-            {yesNoIcon(habitsToday?.screens_last_hour === false)} Screens last
-            hour
-          </div>
-        </div>
-
-        <hr style={{ margin: "16px 0", opacity: 0.2 }} />
-
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>
-          Last 7 days (good days): {goodDays}/7
-        </div>
-
-        <div style={{ fontSize: 13, opacity: 0.8 }}>
-          Avg sleep quality (last 7): {avgQuality7 ?? "–"}
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {dayList.map((d) => {
-            const ok = isGoodDay(habitsByDate.get(d));
-            const short = d.slice(5);
+        <div className="space-y-2">
+          {(() => {
+            const r = habitsByDate.get(todayStr);
             return (
-              <div
-                key={d}
-                title={d}
-                style={{
-                  width: 64,
-                  height: 56,
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.8 }}>{short}</div>
-                <div style={{ fontSize: 18 }}>{ok ? "✅" : "❌"}</div>
+              <div className="text-sm space-y-2">
+                <div> {r?.caffeine_after_2pm === false ? "✅" : "❌"} Caffeine after 2pm</div>
+                <div> {r?.alcohol === false ? "✅" : "❌"} Alcohol</div>
+                <div> {r?.exercise === true ? "✅" : "—"} Exercise</div>
+                <div> {r?.screens_last_hour === false ? "✅" : "❌"} Screens last hour</div>
               </div>
             );
-          })}
+          })()}
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-          Rule used: a “good day” means all 4 boxes are ticked.
-        </div>
-      </section>
+        <div className="pt-2 space-y-2">
+          <div className="text-sm font-medium">Last 7 days (good days): {goodDaysCount}/{dayList.length || 7}</div>
 
-      <section
-        style={{
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 18,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
-            Latest sleep log
-          </h2>
-          <a href="/protected/sleep" style={{ opacity: 0.85 }}>
+          <div className="text-sm opacity-80">
+            Avg sleep quality (last 7): {avgQuality7 == null ? "—" : avgQuality7}
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            {dayList.map((d) => {
+              const ok = isGoodDay(habitsByDate.get(d));
+              return (
+                <div
+                  key={d}
+                  className="border rounded-lg px-3 py-2 text-xs flex items-center gap-2"
+                  title={d}
+                >
+                  <div className="opacity-70">{d.slice(5)}</div>
+                  <div>{ok ? "✅" : "❌"}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="text-xs opacity-70 pt-1">
+            Rule used: a “good day” means all 4 boxes are ticked.
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Latest sleep log</h2>
+          <Link className="underline opacity-80 hover:opacity-100" href="/protected/sleep">
             Open sleep →
-          </a>
+          </Link>
         </div>
 
-        {!latestSleep ? (
-          <div style={{ opacity: 0.8 }}>No sleep logs yet.</div>
-        ) : (
-          <div style={{ display: "grid", gap: 6 }}>
-            <div>Start: {formatDateTime(latestSleep.sleep_start)}</div>
-            <div>End: {formatDateTime(latestSleep.sleep_end)}</div>
+        {latestSleep ? (
+          <div className="text-sm space-y-1">
+            <div>Start: {latestSleep.sleep_start ? formatDateTime(latestSleep.sleep_start) : "—"}</div>
+            <div>End: {latestSleep.sleep_end ? formatDateTime(latestSleep.sleep_end) : "—"}</div>
             <div>Quality: {latestSleep.quality ?? "—"} / 5</div>
+            <div className="pt-2 font-semibold">Notes:</div>
+            <div className="opacity-90 whitespace-pre-wrap">{latestSleep.notes || "—"}</div>
 
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontWeight: 700 }}>Notes:</div>
-              <div style={{ whiteSpace: "pre-wrap" }}>
-                {latestSleep.notes?.trim() || "—"}
+            <div className="pt-3 space-y-1">
+              <div className="font-semibold">Last 7 days average quality</div>
+              <div>{avgQuality7 == null ? "—" : `${avgQuality7} / 5`}</div>
+
+              <div className="font-semibold pt-2">Last 7 days average duration</div>
+              <div>{avgDuration7 == null ? "—" : formatMinutesHuman(Math.round(avgDuration7))}</div>
+
+              <div className="font-semibold pt-2">Bedtime consistency</div>
+              <div>
+                {bedtimeVar7 == null
+                  ? "—"
+                  : `±${Math.round(bedtimeVar7)} min (lower = more consistent)`}
               </div>
+
+              <div className="font-semibold pt-2">RRSM score (v1)</div>
+              <div>{rrsmScore7 == null ? "—" : rrsmScore7}</div>
             </div>
 
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 700 }}>
-                Last 7 days average quality
-              </div>
-              <div>
-                {avgQuality7 === null ? "—" : `${avgQuality7.toFixed(1)} / 5`}
-              </div>
+            <div className="pt-3 text-xs opacity-70">
+              Latest duration: {latestDurationMins == null ? "—" : formatMinutesHuman(latestDurationMins)}
             </div>
           </div>
+        ) : (
+          <div className="text-sm opacity-70">No sleep logs yet.</div>
         )}
-      </section>
-
-      <div style={{ display: "flex", gap: 10 }}>
-        <a
-          href="/protected/habits"
-          style={{
-            border: "1px solid rgba(255,255,255,0.16)",
-            padding: "10px 14px",
-            borderRadius: 10,
-            textDecoration: "none",
-            color: "inherit",
-          }}
-        >
-          Go to Habits
-        </a>
-        <a
-          href="/protected/sleep"
-          style={{
-            border: "1px solid rgba(255,255,255,0.16)",
-            padding: "10px 14px",
-            borderRadius: 10,
-            textDecoration: "none",
-            color: "inherit",
-          }}
-        >
-          Go to Sleep
-        </a>
       </div>
-    </main>
+
+      <div className="flex gap-4">
+        <Link className="underline" href="/protected/habits">
+          Go to Habits
+        </Link>
+        <Link className="underline" href="/protected/sleep">
+          Go to Sleep
+        </Link>
+      </div>
+    </div>
   );
 }
