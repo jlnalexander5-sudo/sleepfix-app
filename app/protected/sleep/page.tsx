@@ -1,306 +1,334 @@
-"use client";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { supabase } from "@/lib/supabase";
+import { useUser } from "@/providers/AuthProvider";
 
-import { useEffect, useMemo, useState } from "react";
-import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-
-type SleepLogRow = {
+type SleepLog = {
   id: string;
   user_id: string;
-  created_at: string;
-  sleep_start: string | null; // ISO
-  sleep_end: string | null; // ISO
-  quality: number | null; // 1-5
+  sleep_date: string; // YYYY-MM-DD
+  bedtime: string | null; // "HH:MM"
+  wake_time: string | null; // "HH:MM"
   notes: string | null;
+  created_at: string;
 };
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
+type LatestNightRRSM = {
+  user_id: string;
+  night_id: string;
+  computed_at: string;
+  model_version: string | null;
+
+  // risk snapshot
+  risk_score: number | null;
+  risk_band: string | null;
+
+  // explanations / guidance
+  primary_risk: string | null;
+  dominant_factor: string | null;
+  what_factors: string | null;
+  what_protocol: string | null;
+
+  tonight_action: string | null;
+  why_this_matters: string | null;
+  avoid_tonight: string | null;
+  encouragement: string | null;
+
+  // (optional) extra sleep stats that might exist in the view
+  sleep_start?: string | null;
+  sleep_end?: string | null;
+  latency_mins?: number | null;
+  wakeups_count?: number | null;
+  quality_score?: number | null;
+};
+
+function todayYMD() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-function fmt(dtIso: string | null) {
-  if (!dtIso) return "—";
-  const d = new Date(dtIso);
-  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}, ${pad2(
-    d.getHours()
-  )}:${pad2(d.getMinutes())}`;
-}
-
-function durationMinutes(startIso: string | null, endIso: string | null) {
-  if (!startIso || !endIso) return null;
-  const a = new Date(startIso).getTime();
-  const b = new Date(endIso).getTime();
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  const mins = Math.round((b - a) / 60000);
-  return mins > 0 ? mins : null;
-}
-
-function formatMinutesHuman(mins: number | null) {
-  if (mins == null) return "—";
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h <= 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+function niceBand(band?: string | null) {
+  if (!band) return "—";
+  return band.toUpperCase();
 }
 
 export default function SleepPage() {
-  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+  const { user } = useUser();
 
-  const [status, setStatus] = useState("Loading…");
-  const [userId, setUserId] = useState<string | null>(null);
+  // Manual sleep logs (your existing feature)
+  const [logs, setLogs] = useState<SleepLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
-  const [logs, setLogs] = useState<SleepLogRow[]>([]);
-
-  // form state
-  const [startLocal, setStartLocal] = useState<string>("");
-  const [endLocal, setEndLocal] = useState<string>("");
-  const [quality, setQuality] = useState<number>(3);
+  const [sleepDate, setSleepDate] = useState<string>(todayYMD());
+  const [bedtime, setBedtime] = useState<string>("");
+  const [wakeTime, setWakeTime] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
 
-  // set default times on client only
-  useEffect(() => {
-    const now = new Date();
-    const end = new Date(now);
-    const start = new Date(now);
-    start.setHours(start.getHours() - 8);
+  // Latest RRSM (new wiring)
+  const [latest, setLatest] = useState<LatestNightRRSM | null>(null);
+  const [loadingLatest, setLoadingLatest] = useState(false);
 
-    const toLocalInput = (d: Date) => {
-      // YYYY-MM-DDTHH:mm (local)
-      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(
-        d.getHours()
-      )}:${pad2(d.getMinutes())}`;
-    };
-
-    setStartLocal(toLocalInput(start));
-    setEndLocal(toLocalInput(end));
-  }, []);
+  const canQuery = useMemo(() => !!user?.id, [user?.id]);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!canQuery) return;
+    void Promise.all([fetchLatestRRSM(), fetchLogs()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canQuery]);
 
-    async function load() {
-      try {
-        setStatus("Loading…");
+  async function fetchLatestRRSM() {
+    if (!user?.id) return;
 
-        const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user) {
-          if (!cancelled) setStatus("Not signed in.");
-          return;
-        }
-        if (!cancelled) setUserId(user.id);
+    setLoadingLatest(true);
+    try {
+      const { data, error } = await supabase
+        .from("v_latest_night_rrsm")
+        .select(
+          [
+            "user_id",
+            "night_id",
+            "computed_at",
+            "model_version",
+            "risk_score",
+            "risk_band",
+            "primary_risk",
+            "dominant_factor",
+            "what_factors",
+            "what_protocol",
+            "tonight_action",
+            "why_this_matters",
+            "avoid_tonight",
+            "encouragement",
+            "sleep_start",
+            "sleep_end",
+            "latency_mins",
+            "wakeups_count",
+            "quality_score",
+          ].join(",")
+        )
+        .eq("user_id", user.id)
+        .order("computed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-        const { data, error } = await supabase
-          .from("sleep_logs")
-          .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
-          .eq("user_id", user.id)
-          .order("sleep_start", { ascending: false })
-          .limit(20);
+      if (error) throw error;
+      setLatest((data as LatestNightRRSM) ?? null);
+    } catch (e: any) {
+      // Keep it simple: don’t crash the page, just show no insights
+      console.warn("fetchLatestRRSM error:", e?.message ?? e);
+      setLatest(null);
+    } finally {
+      setLoadingLatest(false);
+    }
+  }
 
-        if (error) throw error;
+  async function fetchLogs() {
+    if (!user?.id) return;
 
-        if (!cancelled) {
-          setLogs((data ?? []) as SleepLogRow[]);
-          setStatus("Ready.");
-        }
-      } catch (e: any) {
-        if (!cancelled) setStatus(e?.message ?? "Failed to load.");
-      }
+    setLoadingLogs(true);
+    try {
+      const { data, error } = await supabase
+        .from("sleep_logs")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("sleep_date", { ascending: false })
+        .limit(30);
+
+      if (error) throw error;
+      setLogs((data ?? []) as SleepLog[]);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to load sleep logs");
+    } finally {
+      setLoadingLogs(false);
+    }
+  }
+
+  async function saveLog() {
+    if (!user?.id) return;
+
+    if (!sleepDate) {
+      Alert.alert("Missing", "Please enter a sleep date (YYYY-MM-DD).");
+      return;
     }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [supabase]);
-
-  async function addLog() {
-    if (!userId) return;
-
     try {
-      setStatus("Saving…");
-
-      const startIso = startLocal ? new Date(startLocal).toISOString() : null;
-      const endIso = endLocal ? new Date(endLocal).toISOString() : null;
-
       const payload = {
-        user_id: userId,
-        sleep_start: startIso,
-        sleep_end: endIso,
-        quality: Number.isFinite(quality) ? quality : null,
+        user_id: user.id,
+        sleep_date: sleepDate,
+        bedtime: bedtime.trim() ? bedtime.trim() : null,
+        wake_time: wakeTime.trim() ? wakeTime.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
       };
 
-      const { error } = await supabase.from("sleep_logs").insert(payload as any);
+      const { error } = await supabase.from("sleep_logs").insert(payload);
       if (error) throw error;
 
-      // reload list
-      const { data, error: err2 } = await supabase
-        .from("sleep_logs")
-        .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
-        .eq("user_id", userId)
-        .order("sleep_start", { ascending: false })
-        .limit(20);
-
-      if (err2) throw err2;
-
-      setLogs((data ?? []) as SleepLogRow[]);
-      setStatus("Ready.");
+      setBedtime("");
+      setWakeTime("");
       setNotes("");
+
+      await fetchLogs();
+      Alert.alert("Saved", "Sleep log saved.");
     } catch (e: any) {
-      setStatus(e?.message ?? "Save failed.");
+      Alert.alert("Error", e?.message ?? "Failed to save sleep log");
     }
   }
 
   return (
-    <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Sleep</h1>
-          <div style={{ marginTop: 6, opacity: 0.8 }}>Log your sleep + quality</div>
-        </div>
+    <ScrollView style={{ flex: 1, padding: 16 }}>
+      <Text style={{ fontSize: 24, fontWeight: "700", marginBottom: 12 }}>Sleep</Text>
 
-        <div style={{ textAlign: "right" }}>
-          <div
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.03)",
-              minWidth: 180,
-            }}
-          >
-            <div style={{ fontWeight: 700 }}>Status</div>
-            <div style={{ opacity: 0.9 }}>{status}</div>
-          </div>
+      {/* NEW: Latest RRSM Insights */}
+      <View style={{ padding: 14, borderRadius: 12, borderWidth: 1, borderColor: "#222", marginBottom: 18 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={{ fontSize: 18, fontWeight: "700" }}>Latest Insights</Text>
 
-          <div style={{ marginTop: 10, display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <a href="/protected/dashboard" style={{ textDecoration: "underline" }}>
-              Dashboard →
-            </a>
-            <a href="/protected/habits" style={{ textDecoration: "underline" }}>
-              Habits →
-            </a>
-          </div>
-        </div>
-      </div>
+          <TouchableOpacity onPress={fetchLatestRRSM} style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: "#222" }}>
+            <Text style={{ fontWeight: "600" }}>{loadingLatest ? "…" : "Refresh"}</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Add form */}
-      <div
-        style={{
-          marginTop: 18,
-          borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.03)",
-          padding: 14,
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 10 }}>Add sleep log</div>
+        {loadingLatest ? (
+          <View style={{ paddingTop: 10 }}>
+            <ActivityIndicator />
+          </View>
+        ) : !latest ? (
+          <Text style={{ marginTop: 10, opacity: 0.8 }}>
+            No insights yet. Once a night is processed, they’ll show up here.
+          </Text>
+        ) : (
+          <View style={{ marginTop: 10, gap: 10 }}>
+            <Text style={{ fontSize: 16 }}>
+              <Text style={{ fontWeight: "700" }}>Risk: </Text>
+              {latest.risk_score ?? "—"} ({niceBand(latest.risk_band)})
+            </Text>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ opacity: 0.85 }}>Start</span>
-            <input
-              type="datetime-local"
-              value={startLocal}
-              onChange={(e) => setStartLocal(e.target.value)}
-              style={{ padding: 10, borderRadius: 10 }}
-            />
-          </label>
+            {latest.primary_risk ? (
+              <Text>
+                <Text style={{ fontWeight: "700" }}>Primary risk: </Text>
+                {latest.primary_risk}
+              </Text>
+            ) : null}
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ opacity: 0.85 }}>End</span>
-            <input
-              type="datetime-local"
-              value={endLocal}
-              onChange={(e) => setEndLocal(e.target.value)}
-              style={{ padding: 10, borderRadius: 10 }}
-            />
-          </label>
+            {latest.dominant_factor ? (
+              <Text>
+                <Text style={{ fontWeight: "700" }}>Dominant factor: </Text>
+                {latest.dominant_factor}
+              </Text>
+            ) : null}
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ opacity: 0.85 }}>Quality (1–5)</span>
-            <input
-              type="number"
-              min={1}
-              max={5}
-              value={quality}
-              onChange={(e) => setQuality(Number(e.target.value))}
-              style={{ padding: 10, borderRadius: 10 }}
-            />
-          </label>
-        </div>
+            {latest.what_protocol ? (
+              <Text>
+                <Text style={{ fontWeight: "700" }}>Protocol: </Text>
+                {latest.what_protocol}
+              </Text>
+            ) : null}
 
-        <label style={{ display: "grid", gap: 6, marginTop: 10 }}>
-          <span style={{ opacity: 0.85 }}>Notes</span>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            style={{ padding: 10, borderRadius: 10 }}
-            placeholder="e.g., terrible sleep, woke up twice…"
-          />
-        </label>
+            {latest.tonight_action ? (
+              <Text>
+                <Text style={{ fontWeight: "700" }}>Tonight: </Text>
+                {latest.tonight_action}
+              </Text>
+            ) : null}
 
-        <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={addLog}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.18)",
-              background: "rgba(255,255,255,0.06)",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
-          >
-            Save
-          </button>
-        </div>
-      </div>
+            {latest.avoid_tonight ? (
+              <Text>
+                <Text style={{ fontWeight: "700" }}>Avoid tonight: </Text>
+                {latest.avoid_tonight}
+              </Text>
+            ) : null}
 
-      {/* List */}
-      <div style={{ marginTop: 14 }}>
-        <div style={{ opacity: 0.75, marginBottom: 10 }}>Latest 20 logs</div>
+            {latest.why_this_matters ? (
+              <Text>
+                <Text style={{ fontWeight: "700" }}>Why this matters: </Text>
+                {latest.why_this_matters}
+              </Text>
+            ) : null}
 
-        <div style={{ display: "grid", gap: 10 }}>
-          {logs.map((r) => {
-            const mins = durationMinutes(r.sleep_start, r.sleep_end);
-            return (
-              <div
-                key={r.id}
-                style={{
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.03)",
-                  padding: 14,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div style={{ fontWeight: 800 }}>{fmt(r.sleep_start)} → {fmt(r.sleep_end)}</div>
-                  <div style={{ opacity: 0.85 }}>
-                    Duration: {formatMinutesHuman(mins)}
-                  </div>
-                </div>
+            {latest.encouragement ? (
+              <Text>
+                <Text style={{ fontWeight: "700" }}>Encouragement: </Text>
+                {latest.encouragement}
+              </Text>
+            ) : null}
 
-                <div style={{ marginTop: 6, opacity: 0.9 }}>
-                  Quality: {r.quality ?? "—"} / 5
-                </div>
+            <Text style={{ marginTop: 6, opacity: 0.7, fontSize: 12 }}>
+              Updated: {new Date(latest.computed_at).toLocaleString()}
+            </Text>
+          </View>
+        )}
+      </View>
 
-                {r.notes ? (
-                  <div style={{ marginTop: 8, opacity: 0.85, whiteSpace: "pre-wrap" }}>
-                    Notes: {r.notes}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+      {/* Manual sleep log form (unchanged behavior) */}
+      <View style={{ padding: 14, borderRadius: 12, borderWidth: 1, borderColor: "#222", marginBottom: 18 }}>
+        <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 10 }}>Add Sleep Log</Text>
 
-          {logs.length === 0 ? (
-            <div style={{ opacity: 0.75 }}>No sleep logs yet.</div>
-          ) : null}
-        </div>
-      </div>
-    </div>
+        <Text style={{ fontWeight: "600" }}>Sleep date (YYYY-MM-DD)</Text>
+        <TextInput
+          value={sleepDate}
+          onChangeText={setSleepDate}
+          placeholder="2026-02-14"
+          style={{ borderWidth: 1, borderColor: "#333", padding: 10, borderRadius: 10, marginTop: 6, marginBottom: 10 }}
+        />
+
+        <Text style={{ fontWeight: "600" }}>Bedtime (HH:MM)</Text>
+        <TextInput
+          value={bedtime}
+          onChangeText={setBedtime}
+          placeholder="23:00"
+          style={{ borderWidth: 1, borderColor: "#333", padding: 10, borderRadius: 10, marginTop: 6, marginBottom: 10 }}
+        />
+
+        <Text style={{ fontWeight: "600" }}>Wake time (HH:MM)</Text>
+        <TextInput
+          value={wakeTime}
+          onChangeText={setWakeTime}
+          placeholder="07:00"
+          style={{ borderWidth: 1, borderColor: "#333", padding: 10, borderRadius: 10, marginTop: 6, marginBottom: 10 }}
+        />
+
+        <Text style={{ fontWeight: "600" }}>Notes</Text>
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Any notes…"
+          multiline
+          style={{ borderWidth: 1, borderColor: "#333", padding: 10, borderRadius: 10, marginTop: 6, marginBottom: 12, minHeight: 70 }}
+        />
+
+        <TouchableOpacity onPress={saveLog} style={{ backgroundColor: "#111", padding: 12, borderRadius: 12, alignItems: "center" }}>
+          <Text style={{ color: "#fff", fontWeight: "700" }}>Save</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Logs list */}
+      <View style={{ padding: 14, borderRadius: 12, borderWidth: 1, borderColor: "#222" }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <Text style={{ fontSize: 18, fontWeight: "700" }}>Recent Logs</Text>
+          <TouchableOpacity onPress={fetchLogs} style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: "#222" }}>
+            <Text style={{ fontWeight: "600" }}>{loadingLogs ? "…" : "Refresh"}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {loadingLogs ? (
+          <ActivityIndicator />
+        ) : logs.length === 0 ? (
+          <Text style={{ opacity: 0.8 }}>No logs yet.</Text>
+        ) : (
+          logs.map((l) => (
+            <View key={l.id} style={{ paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#222" }}>
+              <Text style={{ fontWeight: "700" }}>{l.sleep_date}</Text>
+              <Text style={{ opacity: 0.85 }}>
+                Bed: {l.bedtime ?? "—"} • Wake: {l.wake_time ?? "—"}
+              </Text>
+              {l.notes ? <Text style={{ marginTop: 4 }}>{l.notes}</Text> : null}
+            </View>
+          ))
+        )}
+      </View>
+    </ScrollView>
   );
 }
