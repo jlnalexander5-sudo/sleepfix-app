@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 // ✅ NO @ alias — relative imports instead
-import { supabase } from "@/lib/supabase";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 type LatestNightRRSM = {
   user_id: string;
@@ -21,6 +21,7 @@ type LatestNightRRSM = {
 };
 
 export default function SleepPage() {
+  const supabase = createBrowserSupabaseClient()
   const { user } = useUser();
 
   const [loading, setLoading] = useState(true);
