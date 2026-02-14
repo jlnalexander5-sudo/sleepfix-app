@@ -22,7 +22,7 @@ type LatestNightRRSM = {
 
 export default function SleepPage() {
   const supabase = createBrowserSupabaseClient()
-  const { user } = useUser();
+  const userId = null; // TODO: wire auth later
 
   const [loading, setLoading] = useState(true);
   const [row, setRow] = useState<LatestNightRRSM | null>(null);
