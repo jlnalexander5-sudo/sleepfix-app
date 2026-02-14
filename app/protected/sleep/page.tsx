@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useUser } from "@/providers/AuthProvider";
+
+// ✅ NO @ alias — relative imports instead
+import { supabase } from "../../../lib/supabase";
+import { useUser } from "../../../providers/AuthProvider";
 
 type LatestNightRRSM = {
   user_id: string;
@@ -11,19 +13,12 @@ type LatestNightRRSM = {
   risk_score: number | null;
   risk_band: string | null;
 
-  // messages / insights (these exist in your view output)
   why_this_matters?: string | null;
   avoid_tonight?: string | null;
   encouragement?: string | null;
   what_protocol?: string | null;
   tonight_action?: string | null;
   tonight_action_plan?: string | null;
-
-  // scores (optional)
-  latency_score?: number | null;
-  wakeups_score?: number | null;
-  quality_score?: number | null;
-  duration_score?: number | null;
 };
 
 export default function SleepPage() {
@@ -47,7 +42,6 @@ export default function SleepPage() {
           return;
         }
 
-        // IMPORTANT: use the view you built
         const { data, error } = await supabase
           .from("v_latest_night_rrsm")
           .select("*")
