@@ -3,8 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 // ✅ NO @ alias — relative imports instead
-import { supabase } from "../../../lib/supabase";
-import { useUser } from "../../../providers/AuthProvider";
+import { supabase } from "@/lib/supabase";
+import { useUser } from "@/providers/AuthProvider";
 
 type LatestNightRRSM = {
   user_id: string;
