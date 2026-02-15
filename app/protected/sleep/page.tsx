@@ -1,20 +1,14 @@
 "use client";
 
-// (Line ~1) Full working file. No AuthProvider. No useUser.
-// Uses Supabase auth directly, so build won't fail due to missing providers.
-
 import React, { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
-// (Line ~10) Match your view columns. Add/remove fields if your DB returns more/less.
 type LatestNightRRSM = {
   user_id: string;
-  night_id?: string | null;
-  computed_at?: string | null;
-
-  risk_score?: number | null;
-  risk_band?: string | null;
-
+  night_id: string;
+  computed_at: string;
+  risk_score: number | null;
+  risk_band: string | null;
   why_this_matters?: string | null;
   avoid_tonight?: string | null;
   encouragement?: string | null;
@@ -24,16 +18,14 @@ type LatestNightRRSM = {
 };
 
 export default function SleepPage() {
-  // (Line ~28) Create Supabase client once.
-  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+  const supabase = createBrowserSupabaseClient();
 
-  // (Line ~31) State
+  const userId = null; // 🔁 Replace with real auth later
+
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [row, setRow] = useState<LatestNightRRSM | null>(null);
+  const [rows, setRows] = useState<LatestNightRRSM[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // (Line ~38) Load user + data
   useEffect(() => {
     let cancelled = false;
 
@@ -42,168 +34,155 @@ export default function SleepPage() {
         setLoading(true);
         setError(null);
 
-        // (Line ~49) Get current user (works without any custom provider)
-        const { data, error: userErr } = await supabase.auth.getUser();
-        if (userErr) throw userErr;
-
-        const uid = data.user?.id ?? null;
-
-        if (cancelled) return;
-        setUserId(uid);
-
-        // (Line ~59) If not logged in, no query
-        if (!uid) {
-          setRow(null);
+        if (!userId) {
+          setRows([]);
           setLoading(false);
           return;
         }
 
-        // (Line ~67) Fetch latest row from your view
-        const { data: rrsm, error: rrsmErr } = await supabase
+        const { data, error } = await supabase
           .from("v_latest_night_rrsm")
           .select("*")
-          .eq("user_id", uid)
+          .eq("user_id", userId)
           .order("computed_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(7);
 
-        if (rrsmErr) throw rrsmErr;
+        if (error) throw error;
 
-        if (cancelled) return;
-        setRow((rrsm as LatestNightRRSM) ?? null);
+        if (!cancelled) {
+          setRows(data || []);
+        }
       } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? "Failed to load sleep data");
-        setRow(null);
+        if (!cancelled) {
+          setError(e?.message ?? "Failed to load sleep data");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
     load();
-
     return () => {
       cancelled = true;
     };
-  }, [supabase]);
+  }, [userId, supabase]);
 
-  // (Line ~98) Derived display helpers
-  const riskLabel = useMemo(() => {
-    if (!row?.risk_band) return "—";
-    return String(row.risk_band).toUpperCase();
-  }, [row?.risk_band]);
+  const latest = rows[0];
 
-  const riskScore = useMemo(() => {
-    if (row?.risk_score === null || row?.risk_score === undefined) return "—";
-    return String(row.risk_score);
-  }, [row?.risk_score]);
+  const trend = useMemo(() => {
+    if (!rows.length) return null;
 
-  // (Line ~110) UI states
+    const valid = rows.filter(r => r.risk_score !== null);
+    if (!valid.length) return null;
+
+    const latestRisk = valid[0].risk_score!;
+    const avg7 =
+      valid.reduce((sum, r) => sum + (r.risk_score ?? 0), 0) /
+      valid.length;
+
+    const delta = latestRisk - avg7;
+
+    let direction = "stable";
+    if (delta > 5) direction = "worsening";
+    if (delta < -5) direction = "improving";
+
+    return {
+      avg7: Math.round(avg7),
+      delta: Math.round(delta),
+      direction,
+    };
+  }, [rows]);
+
   if (loading) {
-    return (
-      <div style={{ padding: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
-        <div>Loading…</div>
-      </div>
-    );
+    return <div className="p-6">Loading sleep insights...</div>;
   }
 
   if (error) {
-    return (
-      <div style={{ padding: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
-        <div style={{ color: "crimson", marginBottom: 12 }}>
-          Error: {error}
-        </div>
-        <div style={{ opacity: 0.8 }}>
-          Tip: Make sure your Vercel env vars are set and you’re logged in.
-        </div>
-      </div>
-    );
+    return <div className="p-6 text-red-400">{error}</div>;
   }
 
-  if (!userId) {
-    return (
-      <div style={{ padding: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
-        <div style={{ marginBottom: 8 }}>You’re not signed in.</div>
-        <div style={{ opacity: 0.8 }}>
-          Please sign in to view your sleep risk score.
-        </div>
-      </div>
-    );
+  if (!latest) {
+    return <div className="p-6">No sleep data yet.</div>;
   }
 
-  if (!row) {
-    return (
-      <div style={{ padding: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
-        <div style={{ marginBottom: 8 }}>No sleep record found yet.</div>
-        <div style={{ opacity: 0.8 }}>
-          Once you submit a night, your latest RRSM result will appear here.
-        </div>
-      </div>
-    );
-  }
-
-  // (Line ~170) Main UI
   return (
-    <div style={{ padding: 24, maxWidth: 820 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Sleep</h1>
+    <div className="p-6 space-y-6">
 
-      <div
-        style={{
-          border: "1px solid #2a2a2a",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12 }}>Risk band</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{riskLabel}</div>
+      {/* Risk Summary */}
+      <div className="border rounded-lg p-4">
+        <div className="text-sm opacity-70">Risk band</div>
+        <div className="text-xl font-bold">{latest.risk_band ?? "-"}</div>
+
+        <div className="mt-2 text-sm opacity-70">Risk score</div>
+        <div className="text-lg">{latest.risk_score ?? "-"}</div>
+
+        <div className="mt-2 text-sm opacity-70">Computed at</div>
+        <div>{latest.computed_at}</div>
+      </div>
+
+      {/* Trend Intelligence */}
+      {trend && (
+        <div className="border rounded-lg p-4">
+          <div className="text-sm opacity-70">7-Day Average</div>
+          <div className="text-lg">{trend.avg7}</div>
+
+          <div className="mt-2 text-sm opacity-70">Trend</div>
+          <div className="text-lg font-semibold">
+            {trend.direction === "improving" && "↓ Improving"}
+            {trend.direction === "worsening" && "↑ Worsening"}
+            {trend.direction === "stable" && "→ Stable"}
           </div>
 
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12 }}>Risk score</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{riskScore}</div>
-          </div>
-
-          <div>
-            <div style={{ opacity: 0.7, fontSize: 12 }}>Computed at</div>
-            <div style={{ fontSize: 14 }}>
-              {row.computed_at ? String(row.computed_at) : "—"}
-            </div>
+          <div className="mt-2 text-sm opacity-70">
+            Compared to 7-day average ({trend.delta >= 0 ? "+" : ""}
+            {trend.delta})
           </div>
         </div>
-      </div>
+      )}
 
-      <Section title="Why this matters" text={row.why_this_matters} />
-      <Section title="Avoid tonight" text={row.avoid_tonight} />
-      <Section title="Encouragement" text={row.encouragement} />
-      <Section title="What protocol?" text={row.what_protocol} />
-      <Section title="Tonight action" text={row.tonight_action} />
-      <Section title="Tonight action plan" text={row.tonight_action_plan} />
-    </div>
-  );
-}
+      {/* Advice Blocks */}
+      {latest.why_this_matters && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-semibold">Why this matters</h3>
+          <p>{latest.why_this_matters}</p>
+        </div>
+      )}
 
-// (Line ~235) Helper component (keeps page tidy)
-function Section({ title, text }: { title: string; text?: string | null }) {
-  return (
-    <div
-      style={{
-        border: "1px solid #2a2a2a",
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-      }}
-    >
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
-      <div style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>
-        {text && text.trim().length > 0 ? text : "—"}
-      </div>
+      {latest.avoid_tonight && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-semibold">Avoid tonight</h3>
+          <p>{latest.avoid_tonight}</p>
+        </div>
+      )}
+
+      {latest.encouragement && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-semibold">Encouragement</h3>
+          <p>{latest.encouragement}</p>
+        </div>
+      )}
+
+      {latest.what_protocol && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-semibold">What protocol?</h3>
+          <p>{latest.what_protocol}</p>
+        </div>
+      )}
+
+      {latest.tonight_action && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-semibold">Tonight action</h3>
+          <p>{latest.tonight_action}</p>
+        </div>
+      )}
+
+      {latest.tonight_action_plan && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-semibold">Tonight action plan</h3>
+          <p>{latest.tonight_action_plan}</p>
+        </div>
+      )}
+
     </div>
   );
 }
