@@ -1,15 +1,19 @@
 "use client";
 
+// (Line ~1) Full working file. No AuthProvider. No useUser.
+// Uses Supabase auth directly, so build won't fail due to missing providers.
+
 import React, { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
+// (Line ~10) Match your view columns. Add/remove fields if your DB returns more/less.
 type LatestNightRRSM = {
   user_id: string;
-  night_id: string;
-  computed_at: string;
+  night_id?: string | null;
+  computed_at?: string | null;
 
-  risk_score: number | null;
-  risk_band: string | null;
+  risk_score?: number | null;
+  risk_band?: string | null;
 
   why_this_matters?: string | null;
   avoid_tonight?: string | null;
@@ -20,17 +24,16 @@ type LatestNightRRSM = {
 };
 
 export default function SleepPage() {
-  // ✅ Browser-side Supabase client
+  // (Line ~28) Create Supabase client once.
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
-  // ✅ TEMP: no auth wired yet (so no build errors)
-  // When you add auth later, replace this with the real user id.
-  const userId: string | null = null;
-
+  // (Line ~31) State
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [row, setRow] = useState<LatestNightRRSM | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // (Line ~38) Load user + data
   useEffect(() => {
     let cancelled = false;
 
@@ -39,31 +42,39 @@ export default function SleepPage() {
         setLoading(true);
         setError(null);
 
-        // If no auth yet, do not query
-        if (!userId) {
+        // (Line ~49) Get current user (works without any custom provider)
+        const { data, error: userErr } = await supabase.auth.getUser();
+        if (userErr) throw userErr;
+
+        const uid = data.user?.id ?? null;
+
+        if (cancelled) return;
+        setUserId(uid);
+
+        // (Line ~59) If not logged in, no query
+        if (!uid) {
           setRow(null);
+          setLoading(false);
           return;
         }
 
-        const { data, error: qErr } = await supabase
+        // (Line ~67) Fetch latest row from your view
+        const { data: rrsm, error: rrsmErr } = await supabase
           .from("v_latest_night_rrsm")
           .select("*")
-          .eq("user_id", userId)
+          .eq("user_id", uid)
           .order("computed_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
+        if (rrsmErr) throw rrsmErr;
+
         if (cancelled) return;
-
-        if (qErr) {
-          throw qErr;
-        }
-
-        setRow((data as LatestNightRRSM) ?? null);
+        setRow((rrsm as LatestNightRRSM) ?? null);
       } catch (e: any) {
         if (cancelled) return;
-        setRow(null);
         setError(e?.message ?? "Failed to load sleep data");
+        setRow(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -74,46 +85,50 @@ export default function SleepPage() {
     return () => {
       cancelled = true;
     };
-  }, [supabase, userId]);
+  }, [supabase]);
 
+  // (Line ~98) Derived display helpers
   const riskLabel = useMemo(() => {
     if (!row?.risk_band) return "—";
     return String(row.risk_band).toUpperCase();
   }, [row?.risk_band]);
 
+  const riskScore = useMemo(() => {
+    if (row?.risk_score === null || row?.risk_score === undefined) return "—";
+    return String(row.risk_score);
+  }, [row?.risk_score]);
+
+  // (Line ~110) UI states
   if (loading) {
     return (
-      <div className="p-6">
-        <h1 className="text-xl font-semibold">Sleep</h1>
-        <p className="mt-2 text-sm opacity-80">Loading…</p>
-      </div>
-    );
-  }
-
-  // No auth wired yet → show a helpful message, but still compiles + deploys
-  if (!userId) {
-    return (
-      <div className="p-6 space-y-3">
-        <h1 className="text-xl font-semibold">Sleep</h1>
-        <div className="rounded-lg border p-4">
-          <p className="text-sm">
-            Auth is not wired yet, so this page can’t load user-specific sleep data.
-          </p>
-          <p className="mt-2 text-sm opacity-80">
-            Next step: connect auth and set <code>userId</code> from the logged-in user.
-          </p>
-        </div>
+      <div style={{ padding: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
+        <div>Loading…</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6 space-y-3">
-        <h1 className="text-xl font-semibold">Sleep</h1>
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4">
-          <p className="text-sm font-medium text-red-800">Error</p>
-          <p className="mt-1 text-sm text-red-800">{error}</p>
+      <div style={{ padding: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
+        <div style={{ color: "crimson", marginBottom: 12 }}>
+          Error: {error}
+        </div>
+        <div style={{ opacity: 0.8 }}>
+          Tip: Make sure your Vercel env vars are set and you’re logged in.
+        </div>
+      </div>
+    );
+  }
+
+  if (!userId) {
+    return (
+      <div style={{ padding: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
+        <div style={{ marginBottom: 8 }}>You’re not signed in.</div>
+        <div style={{ opacity: 0.8 }}>
+          Please sign in to view your sleep risk score.
         </div>
       </div>
     );
@@ -121,83 +136,73 @@ export default function SleepPage() {
 
   if (!row) {
     return (
-      <div className="p-6 space-y-3">
-        <h1 className="text-xl font-semibold">Sleep</h1>
-        <div className="rounded-lg border p-4">
-          <p className="text-sm">No sleep record found yet.</p>
+      <div style={{ padding: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Sleep</h1>
+        <div style={{ marginBottom: 8 }}>No sleep record found yet.</div>
+        <div style={{ opacity: 0.8 }}>
+          Once you submit a night, your latest RRSM result will appear here.
         </div>
       </div>
     );
   }
 
+  // (Line ~170) Main UI
   return (
-    <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Sleep</h1>
-        <p className="text-sm opacity-70">
-          Latest computed:{" "}
-          <span className="font-mono">
-            {row.computed_at ? new Date(row.computed_at).toLocaleString() : "—"}
-          </span>
-        </p>
+    <div style={{ padding: 24, maxWidth: 820 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Sleep</h1>
+
+      <div
+        style={{
+          border: "1px solid #2a2a2a",
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ opacity: 0.7, fontSize: 12 }}>Risk band</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{riskLabel}</div>
+          </div>
+
+          <div>
+            <div style={{ opacity: 0.7, fontSize: 12 }}>Risk score</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{riskScore}</div>
+          </div>
+
+          <div>
+            <div style={{ opacity: 0.7, fontSize: 12 }}>Computed at</div>
+            <div style={{ fontSize: 14 }}>
+              {row.computed_at ? String(row.computed_at) : "—"}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="rounded-lg border p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">Risk band</p>
-          <p className="text-sm font-semibold">{riskLabel}</p>
-        </div>
+      <Section title="Why this matters" text={row.why_this_matters} />
+      <Section title="Avoid tonight" text={row.avoid_tonight} />
+      <Section title="Encouragement" text={row.encouragement} />
+      <Section title="What protocol?" text={row.what_protocol} />
+      <Section title="Tonight action" text={row.tonight_action} />
+      <Section title="Tonight action plan" text={row.tonight_action_plan} />
+    </div>
+  );
+}
 
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">Risk score</p>
-          <p className="text-sm font-semibold">
-            {row.risk_score === null || row.risk_score === undefined ? "—" : row.risk_score}
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-lg border p-4 space-y-3">
-        {row.why_this_matters ? (
-          <div>
-            <p className="text-sm font-medium">Why this matters</p>
-            <p className="mt-1 text-sm opacity-90">{row.why_this_matters}</p>
-          </div>
-        ) : null}
-
-        {row.avoid_tonight ? (
-          <div>
-            <p className="text-sm font-medium">Avoid tonight</p>
-            <p className="mt-1 text-sm opacity-90">{row.avoid_tonight}</p>
-          </div>
-        ) : null}
-
-        {row.encouragement ? (
-          <div>
-            <p className="text-sm font-medium">Encouragement</p>
-            <p className="mt-1 text-sm opacity-90">{row.encouragement}</p>
-          </div>
-        ) : null}
-
-        {row.what_protocol ? (
-          <div>
-            <p className="text-sm font-medium">What protocol</p>
-            <p className="mt-1 text-sm opacity-90">{row.what_protocol}</p>
-          </div>
-        ) : null}
-
-        {row.tonight_action ? (
-          <div>
-            <p className="text-sm font-medium">Tonight action</p>
-            <p className="mt-1 text-sm opacity-90">{row.tonight_action}</p>
-          </div>
-        ) : null}
-
-        {row.tonight_action_plan ? (
-          <div>
-            <p className="text-sm font-medium">Tonight action plan</p>
-            <p className="mt-1 text-sm opacity-90">{row.tonight_action_plan}</p>
-          </div>
-        ) : null}
+// (Line ~235) Helper component (keeps page tidy)
+function Section({ title, text }: { title: string; text?: string | null }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #2a2a2a",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      <div style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>
+        {text && text.trim().length > 0 ? text : "—"}
       </div>
     </div>
   );
