@@ -87,7 +87,7 @@ export default function SleepPage() {
 
   const [savingDrivers, setSavingDrivers] = useState(false);
   const [savedDriversMsg, setSavedDriversMsg] = useState<string>("");
-async function saveDriverConfirmation() {
+async function saveDrivers() {
   if (!latest?.night_id || !userId) {
     setSavedDriversMsg("Missing night or user.");
     return;
