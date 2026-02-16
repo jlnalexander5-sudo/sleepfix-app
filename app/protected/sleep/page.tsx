@@ -87,7 +87,38 @@ export default function SleepPage() {
 
   const [savingDrivers, setSavingDrivers] = useState(false);
   const [savedDriversMsg, setSavedDriversMsg] = useState<string>("");
+async function saveDriverConfirmation() {
+  if (!latest?.night_id || !userId) {
+    setSavedDriversMsg("Missing night or user.");
+    return;
+  }
 
+  try {
+    setSavingDrivers(true);
+    setSavedDriversMsg("");
+
+    const { error } = await supabase
+      .from("rrsm_driver_confirmations")
+      .insert({
+        night_id: latest.night_id,
+        user_id: userId,
+        proposed_driver_1: primaryDriver,
+        proposed_driver_2: secondaryDriver || null,
+        selected_driver: primaryDriver,
+      });
+
+    if (error) {
+      setSavedDriversMsg("Error saving drivers.");
+      return;
+    }
+
+    setSavedDriversMsg("Drivers saved successfully.");
+  } catch (err) {
+    setSavedDriversMsg("Unexpected error.");
+  } finally {
+    setSavingDrivers(false);
+  }
+}
   useEffect(() => {
     let cancelled = false;
 
