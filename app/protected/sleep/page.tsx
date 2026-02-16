@@ -1,365 +1,469 @@
-
-
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { useEffect, useMemo, useState } from "react";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
-type SleepLogRow = {
-  id: string;
+type LatestNightRRSM = {
+  night_id: string;
   user_id: string;
-  created_at: string;
-  sleep_start: string;
-  sleep_end: string;
-  quality: number | null;
-  notes: string | null;
-  sleep_day: string | null;
+  sleep_start: string | null;
+  sleep_end: string | null;
+
+  duration_hours: number | null;
+  quality_num: number | null;
+  latency_mins: number | null;
+  wakeups_count: number | null;
+
+  sleep_success_score: number | null;
+  sleep_status: string | null;
+  sleep_success_band: string | null;
+
+  risk_score: number | null;
+  risk_band: string | null;
+  primary_risk: string | null;
+
+  what_happened: string | null;
+  why_this_matters: string | null;
+  tonight_action_plan: string | null;
+  avoid_tonight: string | null;
+  encouragement: string | null;
+
+  recommendation: string | null;
+  risk_trend: string | null;
 };
 
-function minutesBetween(startIso: string, endIso: string) {
-  const start = new Date(startIso).getTime();
-  const end = new Date(endIso).getTime();
-  const diffMs = end - start;
-  return Math.round(diffMs / 60000);
+type UserDriverRow = {
+  night_id: string;
+  user_id: string;
+  primary_driver: string;
+  secondary_driver: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
 }
 
-function formatMinutes(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${h}h ${m}m`;
+function fmt(dtIso: string | null) {
+  if (!dtIso) return "—";
+  const d = new Date(dtIso);
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} ${pad2(
+    d.getHours()
+  )}:${pad2(d.getMinutes())}`;
 }
+
+function toNumberOrNull(v: any): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// RRSM structured driver options (no free text yet)
+const DRIVER_OPTIONS = [
+  "Pain / DOMS",
+  "Heat / Temperature",
+  "Substance ingested",
+  "Cognitive load",
+  "Schedule / shift disruption",
+  "Environment (noise/light)",
+  "Unknown",
+] as const;
 
 export default function SleepPage() {
-  const supabase = createBrowserSupabaseClient();
-
-  const [userId, setUserId] = useState<string | null>(null);
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<SleepLogRow[]>([]);
+  const [status, setStatus] = useState("Loading...");
   const [error, setError] = useState<string | null>(null);
 
-  // Form state (for inserting a sleep log)
-  const [sleepStartLocal, setSleepStartLocal] = useState<string>("");
-  const [sleepEndLocal, setSleepEndLocal] = useState<string>("");
-  const [quality, setQuality] = useState<string>("3");
-  const [notes, setNotes] = useState<string>("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [latest, setLatest] = useState<LatestNightRRSM | null>(null);
 
-  // 1) Get the logged-in user (VERY IMPORTANT for RLS)
+  // User-confirmed drivers for the latest night
+  const [primaryDriver, setPrimaryDriver] = useState<string>(DRIVER_OPTIONS[0]);
+  const [secondaryDriver, setSecondaryDriver] = useState<string>("");
+
+  const [savingDrivers, setSavingDrivers] = useState(false);
+  const [savedDriversMsg, setSavedDriversMsg] = useState<string>("");
+
   useEffect(() => {
     let cancelled = false;
 
-    async function getUser() {
-      const { data, error } = await supabase.auth.getSession();
-      if (!cancelled) {
-        if (error) setError(error.message);
-        setUserId(data.session?.user?.id ?? null);
+    async function load() {
+      setLoading(true);
+      setError(null);
+      setStatus("Checking session...");
+
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) {
+        if (!cancelled) {
+          setError(userErr.message);
+          setStatus("Failed to get user.");
+          setLoading(false);
+        }
+        return;
       }
+
+      const user = userData.user;
+      if (!user) {
+        if (!cancelled) {
+          setStatus("Not logged in.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (cancelled) return;
+      setUserId(user.id);
+      setEmail(user.email ?? null);
+
+      setStatus("Loading latest RRSM night...");
+      // IMPORTANT: this view must exist in Supabase
+      const { data: rrsmRow, error: rrsmErr } = await supabase
+        .from("v_latest_night_rrsm")
+        .select("*")
+        .maybeSingle<LatestNightRRSM>();
+
+      if (rrsmErr) {
+        if (!cancelled) {
+          setError(rrsmErr.message);
+          setStatus("Failed to load v_latest_night_rrsm.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!rrsmRow) {
+        if (!cancelled) {
+          setLatest(null);
+          setStatus("No nights found yet. Log a sleep night first.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (cancelled) return;
+
+      // Normalize numeric fields (helps if view returns strings)
+      const normalized: LatestNightRRSM = {
+        ...rrsmRow,
+        duration_hours: toNumberOrNull((rrsmRow as any).duration_hours),
+        quality_num: toNumberOrNull((rrsmRow as any).quality_num),
+        latency_mins: toNumberOrNull((rrsmRow as any).latency_mins),
+        wakeups_count: toNumberOrNull((rrsmRow as any).wakeups_count),
+        sleep_success_score: toNumberOrNull((rrsmRow as any).sleep_success_score),
+        risk_score: toNumberOrNull((rrsmRow as any).risk_score),
+      };
+
+      setLatest(normalized);
+
+      setStatus("Loading your driver selections...");
+      // Pull existing user confirmation for this night (if any)
+      const { data: driverRow, error: driverErr } = await supabase
+        .from("night_user_drivers")
+        .select("night_id, user_id, primary_driver, secondary_driver")
+        .eq("night_id", normalized.night_id)
+        .maybeSingle<UserDriverRow>();
+
+      if (driverErr) {
+        // Non-fatal: still show RRSM output, but show error
+        setError(driverErr.message);
+        setStatus("Loaded RRSM, but failed to load driver selections.");
+        setLoading(false);
+        return;
+      }
+
+      if (driverRow) {
+        setPrimaryDriver(driverRow.primary_driver || DRIVER_OPTIONS[0]);
+        setSecondaryDriver(driverRow.secondary_driver || "");
+        setSavedDriversMsg("Loaded your previous selection ✅");
+      } else {
+        // Defaults
+        setPrimaryDriver(DRIVER_OPTIONS[0]);
+        setSecondaryDriver("");
+        setSavedDriversMsg("");
+      }
+
+      setStatus("Ready.");
+      setLoading(false);
     }
 
-    getUser();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
-    });
+    load();
 
     return () => {
       cancelled = true;
-      sub.subscription.unsubscribe();
     };
   }, [supabase]);
 
-  // 2) Load latest logs for this user
-  async function loadLogs(currentUserId: string) {
-    setLoading(true);
+  async function saveDrivers() {
+    if (!userId || !latest?.night_id) return;
+
+    setSavingDrivers(true);
     setError(null);
+    setSavedDriversMsg("");
+    setStatus("Saving driver selection...");
 
-    const { data, error } = await supabase
-      .from("sleep_logs")
-      .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes,sleep_day")
-      .eq("user_id", currentUserId)
-      .order("sleep_start", { ascending: false })
-      .limit(7);
+    const payload: UserDriverRow = {
+      night_id: latest.night_id,
+      user_id: userId,
+      primary_driver: primaryDriver,
+      secondary_driver: secondaryDriver ? secondaryDriver : null,
+    };
 
-    if (error) {
-      setError(error.message);
-      setRows([]);
-      setLoading(false);
+    const { error: upErr } = await supabase
+      .from("night_user_drivers")
+      .upsert(payload, { onConflict: "night_id" });
+
+    if (upErr) {
+      setError(upErr.message);
+      setStatus("Save failed.");
+      setSavingDrivers(false);
       return;
     }
 
-    setRows((data ?? []) as SleepLogRow[]);
-    setLoading(false);
+    setSavingDrivers(false);
+    setStatus("Ready.");
+    setSavedDriversMsg("Saved ✅ (this will refine RRSM over time)");
   }
-
-  useEffect(() => {
-    if (!userId) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    loadLogs(userId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
-
-  const latest = rows[0] ?? null;
-
-  const stats = useMemo(() => {
-    if (!rows.length) return null;
-
-    const durations = rows
-      .map((r) => {
-        try {
-          const mins = minutesBetween(r.sleep_start, r.sleep_end);
-          if (Number.isFinite(mins) && mins > 0) return mins;
-          return null;
-        } catch {
-          return null;
-        }
-      })
-      .filter((x): x is number => x !== null);
-
-    const qualityVals = rows
-      .map((r) => (typeof r.quality === "number" ? r.quality : null))
-      .filter((x): x is number => x !== null);
-
-    const avgDuration =
-      durations.length > 0
-        ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-        : null;
-
-    const avgQuality =
-      qualityVals.length > 0
-        ? Math.round((qualityVals.reduce((a, b) => a + b, 0) / qualityVals.length) * 10) / 10
-        : null;
-
-    return { avgDuration, avgQuality, count: rows.length };
-  }, [rows]);
-
-  // 3) Insert a new sleep log
-  async function insertLog() {
-    setSaveMsg(null);
-    setError(null);
-
-    if (!userId) {
-      setError("You must be logged in to save sleep logs.");
-      return;
-    }
-    if (!sleepStartLocal || !sleepEndLocal) {
-      setError("Please enter both Sleep start and Sleep end.");
-      return;
-    }
-
-    // datetime-local -> Date assumes LOCAL time, then we store ISO (UTC) into timestamptz
-    const startIso = new Date(sleepStartLocal).toISOString();
-    const endIso = new Date(sleepEndLocal).toISOString();
-
-    // Basic sanity checks (your DB constraint also helps)
-    const mins = minutesBetween(startIso, endIso);
-    if (mins <= 0) {
-      setError("Sleep end must be after sleep start.");
-      return;
-    }
-
-    const qNum = Number(quality);
-    const safeQuality = Number.isFinite(qNum) ? qNum : null;
-
-    setSaving(true);
-    try {
-      const { error: insErr } = await supabase.from("sleep_logs").insert({
-        user_id: userId,
-        sleep_start: startIso,
-        sleep_end: endIso,
-        quality: safeQuality,
-        notes: notes.trim() ? notes.trim() : null,
-        // sleep_day is optional; leave it null unless you want it
-      });
-
-      if (insErr) throw insErr;
-
-      setSaveMsg("Saved ✅");
-      setSleepStartLocal("");
-      setSleepEndLocal("");
-      setQuality("3");
-      setNotes("");
-
-      await loadLogs(userId);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to save sleep log.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // UI
-  if (loading) return <div className="p-6">Loading…</div>;
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Sleep</h1>
+    <main style={{ maxWidth: 900, margin: "40px auto", padding: "0 16px" }}>
+      <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Sleep</h1>
+      <p style={{ opacity: 0.85, marginBottom: 18 }}>
+        {email ? `Signed in as ${email}` : "Signed in"}
+      </p>
 
-      {!userId && (
-        <div className="border rounded-lg p-4">
-          <div className="font-semibold">Not signed in</div>
-          <div className="opacity-80 text-sm mt-1">
-            You must be signed in for the app to read/write your sleep logs (because Row Level Security is on).
-          </div>
+      <div
+        style={{
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 14,
+          padding: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ fontSize: 14, opacity: 0.85, marginBottom: 8 }}>
+          Status: {status}
         </div>
-      )}
-
-      {error && (
-        <div className="border border-red-500/40 rounded-lg p-4 text-red-300">
-          {error}
-        </div>
-      )}
-
-      {/* Insert form */}
-      <div className="border rounded-lg p-4 space-y-3">
-        <div className="font-semibold">Add a sleep log</div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="space-y-1">
-            <div className="text-sm opacity-70">Sleep start (local time)</div>
-            <input
-              type="datetime-local"
-              className="w-full rounded border bg-transparent p-2"
-              value={sleepStartLocal}
-              onChange={(e) => setSleepStartLocal(e.target.value)}
-            />
-          </label>
-
-          <label className="space-y-1">
-            <div className="text-sm opacity-70">Sleep end (local time)</div>
-            <input
-              type="datetime-local"
-              className="w-full rounded border bg-transparent p-2"
-              value={sleepEndLocal}
-              onChange={(e) => setSleepEndLocal(e.target.value)}
-            />
-          </label>
-
-          <label className="space-y-1">
-            <div className="text-sm opacity-70">Quality (1–5)</div>
-            <select
-              className="w-full rounded border bg-transparent p-2"
-              value={quality}
-              onChange={(e) => setQuality(e.target.value)}
-            >
-              <option value="1">1 (very bad)</option>
-              <option value="2">2</option>
-              <option value="3">3 (ok)</option>
-              <option value="4">4</option>
-              <option value="5">5 (great)</option>
-            </select>
-          </label>
-
-          <label className="space-y-1">
-            <div className="text-sm opacity-70">Notes</div>
-            <input
-              type="text"
-              className="w-full rounded border bg-transparent p-2"
-              placeholder='e.g., "terrible sleep", "caffeine late", etc.'
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={insertLog}
-            disabled={saving || !userId}
-            className="rounded bg-white/10 px-4 py-2 hover:bg-white/20 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          {saveMsg && <div className="text-green-300 text-sm">{saveMsg}</div>}
-        </div>
-
-        <div className="text-xs opacity-70">
-          Note: Because of your RLS policy, inserts will only work when{" "}
-          <code className="px-1 py-0.5 bg-white/10 rounded">user_id</code> equals your logged-in{" "}
-          <code className="px-1 py-0.5 bg-white/10 rounded">auth.uid()</code>.
-        </div>
-      </div>
-
-      {/* Latest + stats */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="border rounded-lg p-4 space-y-2">
-          <div className="font-semibold">Latest entry</div>
-          {!latest ? (
-            <div className="opacity-70">No sleep logs yet.</div>
-          ) : (
-            <>
-              <div className="text-sm opacity-70">Start</div>
-              <div>{new Date(latest.sleep_start).toLocaleString()}</div>
-
-              <div className="text-sm opacity-70 mt-2">End</div>
-              <div>{new Date(latest.sleep_end).toLocaleString()}</div>
-
-              <div className="text-sm opacity-70 mt-2">Duration</div>
-              <div className="font-semibold">
-                {formatMinutes(minutesBetween(latest.sleep_start, latest.sleep_end))}
-              </div>
-
-              <div className="text-sm opacity-70 mt-2">Quality</div>
-              <div>{latest.quality ?? "-"}</div>
-
-              {latest.notes && (
-                <>
-                  <div className="text-sm opacity-70 mt-2">Notes</div>
-                  <div>{latest.notes}</div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="border rounded-lg p-4 space-y-2">
-          <div className="font-semibold">Last 7 entries</div>
-          {!stats ? (
-            <div className="opacity-70">No stats yet.</div>
-          ) : (
-            <>
-              <div className="text-sm opacity-70">Count</div>
-              <div>{stats.count}</div>
-
-              <div className="text-sm opacity-70 mt-2">Avg duration</div>
-              <div className="font-semibold">
-                {stats.avgDuration ? formatMinutes(stats.avgDuration) : "-"}
-              </div>
-
-              <div className="text-sm opacity-70 mt-2">Avg quality</div>
-              <div className="font-semibold">{stats.avgQuality ?? "-"}</div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="border rounded-lg p-4">
-        <div className="font-semibold mb-3">Recent logs</div>
-        {!rows.length ? (
-          <div className="opacity-70">No rows.</div>
-        ) : (
-          <div className="space-y-2">
-            {rows.map((r) => {
-              const mins = minutesBetween(r.sleep_start, r.sleep_end);
-              return (
-                <div key={r.id} className="rounded border border-white/10 p-3">
-                  <div className="text-sm opacity-70">
-                    {new Date(r.sleep_start).toLocaleDateString()} •{" "}
-                    {formatMinutes(mins)} • quality {r.quality ?? "-"}
-                  </div>
-                  {r.notes && <div className="mt-1">{r.notes}</div>}
-                </div>
-              );
-            })}
+        {loading && <div>Loading...</div>}
+        {error && (
+          <div style={{ marginTop: 8, color: "salmon" }}>
+            Error: {error}
           </div>
         )}
       </div>
+
+      {!loading && !latest && (
+        <div
+          style={{
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 14,
+            padding: 16,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>
+            No RRSM nights yet
+          </div>
+          <div style={{ opacity: 0.85 }}>
+            Log a sleep night first so RRSM can generate “Why / What / Tonight”.
+          </div>
+        </div>
+      )}
+
+      {!loading && latest && (
+        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 14 }}>
+          {/* LEFT: RRSM Explanation */}
+          <section
+            style={{
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 14,
+              padding: 16,
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 10 }}>
+              Latest night (RRSM)
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Sleep start</div>
+                <div style={{ fontWeight: 700 }}>{fmt(latest.sleep_start)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Sleep end</div>
+                <div style={{ fontWeight: 700 }}>{fmt(latest.sleep_end)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Duration</div>
+                <div style={{ fontWeight: 700 }}>
+                  {latest.duration_hours == null ? "—" : `${latest.duration_hours.toFixed(2)}h`}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Quality</div>
+                <div style={{ fontWeight: 700 }}>
+                  {latest.quality_num == null ? "—" : `${latest.quality_num}/5`}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Latency</div>
+                <div style={{ fontWeight: 700 }}>
+                  {latest.latency_mins == null ? "—" : `${latest.latency_mins}m`}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Wake-ups</div>
+                <div style={{ fontWeight: 700 }}>
+                  {latest.wakeups_count == null ? "—" : `${latest.wakeups_count}`}
+                </div>
+              </div>
+            </div>
+
+            <hr style={{ margin: "14px 0", opacity: 0.2 }} />
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <Block title="What happened?" text={latest.what_happened} />
+              <Block title="Why this matters" text={latest.why_this_matters} />
+              <Block title="Tonight action plan" text={latest.tonight_action_plan} />
+              <Block title="Avoid tonight" text={latest.avoid_tonight} />
+              <Block title="Encouragement" text={latest.encouragement} />
+            </div>
+          </section>
+
+          {/* RIGHT: Risk + User confirmation */}
+          <section
+            style={{
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 14,
+              padding: 16,
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 10 }}>RRSM signal</div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <MiniStat label="Sleep success score" value={latest.sleep_success_score} suffix="" />
+              <MiniText label="Sleep status" value={latest.sleep_status} />
+              <MiniText label="Sleep band" value={latest.sleep_success_band} />
+              <MiniStat label="Risk score" value={latest.risk_score} suffix="" />
+              <MiniText label="Risk band" value={latest.risk_band} />
+              <MiniText label="Primary risk" value={latest.primary_risk} />
+              <MiniText label="Risk trend" value={latest.risk_trend} />
+              <MiniText label="Recommendation" value={latest.recommendation} />
+            </div>
+
+            <hr style={{ margin: "14px 0", opacity: 0.2 }} />
+
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>
+              Your confirmation (structured)
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 10 }}>
+              RRSM suggests drivers — you confirm the right ones. This is how it becomes precise for you over time.
+            </div>
+
+            <label style={{ display: "block", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+                Primary driver
+              </div>
+              <select
+                value={primaryDriver}
+                onChange={(e) => setPrimaryDriver(e.target.value)}
+                style={{ width: "100%", padding: 10, borderRadius: 10 }}
+              >
+                {DRIVER_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "block", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+                Secondary driver (optional)
+              </div>
+              <select
+                value={secondaryDriver}
+                onChange={(e) => setSecondaryDriver(e.target.value)}
+                style={{ width: "100%", padding: 10, borderRadius: 10 }}
+              >
+                <option value="">— None</option>
+                {DRIVER_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              onClick={saveDrivers}
+              disabled={savingDrivers}
+              style={{
+                width: "100%",
+                marginTop: 6,
+                padding: "10px 14px",
+                borderRadius: 12,
+                fontWeight: 800,
+                cursor: savingDrivers ? "not-allowed" : "pointer",
+              }}
+            >
+              {savingDrivers ? "Saving..." : "Save confirmation"}
+            </button>
+
+            {savedDriversMsg && (
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+                {savedDriversMsg}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function Block({ title, text }: { title: string; text: string | null }) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,0.10)",
+        borderRadius: 12,
+        padding: 12,
+      }}
+    >
+      <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>{title}</div>
+      <div style={{ fontWeight: 650, lineHeight: 1.35 }}>
+        {text && text.trim().length > 0 ? text : "—"}
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: number | null;
+  suffix: string;
+}) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, opacity: 0.75 }}>{label}</div>
+      <div style={{ fontWeight: 800, fontSize: 18 }}>
+        {value == null ? "—" : `${Math.round(value)}${suffix}`}
+      </div>
+    </div>
+  );
+}
+
+function MiniText({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, opacity: 0.75 }}>{label}</div>
+      <div style={{ fontWeight: 750 }}>{value && value.length ? value : "—"}</div>
     </div>
   );
 }
