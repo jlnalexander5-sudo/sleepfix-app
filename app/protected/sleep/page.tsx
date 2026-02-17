@@ -141,14 +141,14 @@ export default function SleepPage() {
         setUserId(u.id);
         setEmail(u.email ?? null);
 
-        // 1) Latest night (from view)
-        setStatus("Loading latest night...");
-        const { data: latestRows, error: latestErr } = await supabase
-          .from("v_sleep_night_metrics")
-          .select("night_id,user_id,sleep_start,sleep_end,duration_hours,latency_mins,wakeups_count,quality_num")
-          .eq("user_id", u.id)
-          .order("sleep_start", { ascending: false })
-          .limit(1);
+       // 1) Latest night (from night_scores)
+setStatus("Loading latest night...");
+const { data: latestRows, error: latestErr } = await supabase
+  .from("night_scores")
+  .select("night_id,user_id,computed_at,duration_hours,latency_mins,wakeups_count,quality_num")
+  .eq("user_id", u.id)
+  .order("computed_at", { ascending: false })
+  .limit(1);
 
         if (latestErr) throw latestErr;
 
