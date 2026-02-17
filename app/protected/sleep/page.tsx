@@ -242,6 +242,11 @@ const { data: latestRows, error: latestErr } = await supabase
 
   setSavedMsg("DEBUG: userId=" + userId + " nightId=" + latestNight?.night_id);
   setError(null);
+    alert(
+  "DEBUG click:\n" +
+  "userId=" + userId + "\n" +
+  "latestNightId=" + (latestNight?.night_id ?? "NULL")
+);
 
     if (!userId) {
       setSavedMsg("Not signed in.");
@@ -277,9 +282,11 @@ const { data: latestRows, error: latestErr } = await supabase
       }
 
       setSavedMsg("Saved ✅");
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to save.");
-      setSavedMsg("Save failed ❌");
+ } catch (e: any) {
+  alert("SAVE ERROR:\n" + (e?.message ?? JSON.stringify(e)));
+  setError(e?.message ?? "Failed to save.");
+  setSavedMsg("Save failed ❌");
+}
     } finally {
       setSaving(false);
     }
