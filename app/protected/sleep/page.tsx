@@ -235,18 +235,52 @@ const { data: latestRows, error: latestErr } = await supabase
   }, [supabase]);
 
   // ✅ IMPORTANT: only ONE save function in this file (prevents “Duplicate function implementation”)
-  async function saveDriverConfirmation() {
-
+async function saveDriverConfirmation() {
   console.log("USER ID:", userId);
   console.log("LATEST NIGHT:", latestNight?.night_id);
 
   setSavedMsg("DEBUG: userId=" + userId + " nightId=" + latestNight?.night_id);
   setError(null);
-    alert(
-  "DEBUG click:\n" +
-  "userId=" + userId + "\n" +
-  "latestNightId=" + (latestNight?.night_id ?? "NULL")
-);
+
+  if (!userId) {
+    setSavedMsg("Not signed in.");
+    return;
+  }
+  if (!latestNight?.night_id) {
+    setSavedMsg("No latest night found yet.");
+    return;
+  }
+
+  setSaving(true);
+  try {
+    const payload: DriverConfirmationRow = {
+      night_id: latestNight.night_id,
+      user_id: userId,
+      proposed_driver_1: primaryDriver,
+      proposed_driver_2: secondaryDriver || null,
+      selected_driver: primaryDriver,
+    };
+
+    const upsertRes = await supabase
+      .from("rrsm_driver_confirmations")
+      .upsert(payload, { onConflict: "night_id,user_id" })
+      .select("id, night_id, user_id, created_at")
+      .single();
+
+    if (upsertRes.error) {
+      const ins = await supabase.from("rrsm_driver_confirmations").insert(payload);
+      if (ins.error) throw ins.error;
+    }
+
+    setSavedMsg("Saved ✅");
+  } catch (e: any) {
+    console.log("SAVE ERROR:", e);
+    setError(e?.message ?? "Failed to save.");
+    setSavedMsg("Save failed ❌");
+  } finally {
+    setSaving(false);
+  }
+}
 
     if (!userId) {
       setSavedMsg("Not signed in.");
