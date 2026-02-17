@@ -7,7 +7,7 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ minHeight: "100vh" }}>
+   <div style={{ minHeight: "100vh", fontSize: "18px", lineHeight: 1.6 }}>
       {/* Top Nav */}
       <header
         style={{
