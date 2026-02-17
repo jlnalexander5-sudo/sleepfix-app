@@ -236,8 +236,12 @@ const { data: latestRows, error: latestErr } = await supabase
 
   // ✅ IMPORTANT: only ONE save function in this file (prevents “Duplicate function implementation”)
   async function saveDriverConfirmation() {
-    setSavedMsg("");
-    setError(null);
+
+  console.log("USER ID:", userId);
+  console.log("LATEST NIGHT:", latestNight?.night_id);
+
+  setSavedMsg("");
+  setError(null);
 
     if (!userId) {
       setSavedMsg("Not signed in.");
