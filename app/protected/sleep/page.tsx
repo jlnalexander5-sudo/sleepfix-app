@@ -240,7 +240,7 @@ const { data: latestRows, error: latestErr } = await supabase
   console.log("USER ID:", userId);
   console.log("LATEST NIGHT:", latestNight?.night_id);
 
-  setSavedMsg("");
+  setSavedMsg("DEBUG: userId=" + userId + " nightId=" + latestNight?.night_id);
   setError(null);
 
     if (!userId) {
