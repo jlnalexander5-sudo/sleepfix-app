@@ -3,18 +3,29 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
-type LatestNightRRSM = {
+// --------------------
+// Driver options (structured only)
+// --------------------
+const DRIVER_OPTIONS = [
+  "Substance ingested",
+  "Heat / temperature",
+  "Noise / light",
+  "Hydration / thirst",
+  "Stress / arousal",
+  "Late meal / digestion",
+  "Unknown",
+] as const;
+
+type DriverOption = (typeof DRIVER_OPTIONS)[number];
+
+// --------------------
+// DB shapes (lightweight, runtime-safe)
+// --------------------
+type LatestNight = {
+  id: string;
   user_id: string;
-  night_id: string;
-  computed_at: string;
-  risk_score: number | null;
-  risk_band: string | null;
-  why_this_matters: string | null;
-  avoid_tonight: string | null;
-  encouragement: string | null;
-  what_protocol: string | null;
-  tonight_action: string | null;
-  tonight_action_plan: string | null;
+  date: string | null;
+  created_at?: string;
 };
 
 type DriverConfirmationRow = {
@@ -27,253 +38,310 @@ type DriverConfirmationRow = {
   created_at: string;
 };
 
-// Structured-only options (your “6”, with Substance generalized)
-const DRIVER_OPTIONS = [
-  "Substance ingested",
-  "Temperature / body heat",
-  "Cognitive overload",
-  "Environment (noise/light)",
-  "Schedule / timing",
-  "Unknown",
-] as const;
-
-function fmtDateTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-}
+// Optional RRSM-ish fields (only if you have them somewhere later)
+type RRSMPreview = {
+  risk_score?: number | null;
+  risk_band?: string | null;
+  why_this_matters?: string | null;
+  avoid_tonight?: string | null;
+  encouragement?: string | null;
+  what_protocol?: string | null;
+  tonight_action?: string | null;
+  tonight_action_plan?: string | null;
+};
 
 export default function SleepPage() {
+  // Important: memoize so it doesn’t recreate on every render
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("Loading...");
+  const [status, setStatus] = useState<string>("Loading...");
   const [error, setError] = useState<string | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
-  const [latest, setLatest] = useState<LatestNightRRSM | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
-  // Driver confirmation UI state
-  const [primaryDriver, setPrimaryDriver] = useState<string>(DRIVER_OPTIONS[0]);
-  const [secondaryDriver, setSecondaryDriver] = useState<string>("");
+  const [latestNight, setLatestNight] = useState<LatestNight | null>(null);
 
+  // Driver confirmations
+  const [primaryDriver, setPrimaryDriver] = useState<DriverOption>(DRIVER_OPTIONS[0]);
+  const [secondaryDriver, setSecondaryDriver] = useState<string>(""); // optional
   const [savingDrivers, setSavingDrivers] = useState(false);
   const [savedDriversMsg, setSavedDriversMsg] = useState<string>("");
 
-  // Load user + latest RRSM + previously saved drivers for that night
+  // If you later connect RRSM output, you can populate this:
+  const [rrsm, setRrsm] = useState<RRSMPreview | null>(null);
+
+  // --------------------
+  // 1) Get signed-in user
+  // --------------------
   useEffect(() => {
-    let cancelled = false;
+    let alive = true;
 
-    async function load() {
-      setLoading(true);
+    async function initAuth() {
       setError(null);
-      setSavedDriversMsg("");
-      setStatus("Loading...");
+      setStatus("Checking session...");
 
-      try {
-        // 1) Get logged-in user
-        const { data: sessionData, error: sessionErr } =
-          await supabase.auth.getSession();
-        if (sessionErr) throw sessionErr;
-
-        const uid = sessionData.session?.user?.id ?? null;
-        if (!uid) {
-          if (!cancelled) {
-            setUserId(null);
-            setLatest(null);
-            setStatus("Not signed in.");
-            setLoading(false);
-          }
-          return;
-        }
-
-        if (cancelled) return;
-        setUserId(uid);
-
-        // 2) Get latest RRSM record for this user
-        const { data: rrsmRows, error: rrsmErr } = await supabase
-          .from("v_sleep_night_metrics")
-          .select(
-            "user_id,night_id,computed_at,risk_score,risk_band,why_this_matters,avoid_tonight,encouragement,what_protocol,tonight_action,tonight_action_plan"
-          )
-          .eq("user_id", uid)
-          .order("computed_at", { ascending: false })
-          .limit(1);
-
-        if (rrsmErr) throw rrsmErr;
-
-        const rrsmLatest = (rrsmRows ?? [])[0] ?? null;
-        if (!cancelled) setLatest(rrsmLatest);
-
-        // 3) If we have a latest night, load the most recent saved driver confirmation for it
-        if (rrsmLatest?.night_id) {
-          const { data: confRows, error: confErr } = await supabase
-            .from("rrsm_driver_confirmations")
-            .select(
-              "id,night_id,user_id,proposed_driver_1,proposed_driver_2,selected_driver,created_at"
-            )
-            .eq("user_id", uid)
-            .eq("night_id", rrsmLatest.night_id)
-            .order("created_at", { ascending: false })
-            .limit(1);
-
-          if (confErr) throw confErr;
-
-          const conf = (confRows ?? [])[0] ?? null;
-          if (conf?.selected_driver) {
-            if (!cancelled) {
-              setPrimaryDriver(conf.selected_driver);
-              // Secondary is optional; we keep it empty unless you later add a column for it
-              setSecondaryDriver("");
-              setSavedDriversMsg(
-                `Previously saved: ${conf.selected_driver} (${fmtDateTime(
-                  conf.created_at
-                )})`
-              );
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setStatus(rrsmLatest ? "Loaded." : "No RRSM data yet.");
-          setLoading(false);
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setError(e?.message ?? "Unknown error");
-          setStatus("Failed to load.");
-          setLoading(false);
-        }
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        if (alive) setError(error.message);
+        return;
       }
+
+      const session = data.session;
+      if (!session?.user) {
+        if (alive) {
+          setUserId(null);
+          setEmail(null);
+          setStatus("Not signed in.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (alive) {
+        setUserId(session.user.id);
+        setEmail(session.user.email ?? null);
+      }
+
+      // Keep it updated if auth changes
+      supabase.auth.onAuthStateChange((_event, newSession) => {
+        if (!alive) return;
+        setUserId(newSession?.user?.id ?? null);
+        setEmail(newSession?.user?.email ?? null);
+      });
     }
 
-    load();
+    initAuth();
+
     return () => {
-      cancelled = true;
+      alive = false;
     };
   }, [supabase]);
 
-  // Save driver confirmation for latest night
-  async function saveDrivers() {
-    setSavedDriversMsg("");
-    setError(null);
+  // --------------------
+  // 2) Load latest night (from sleep_nights)
+  // --------------------
+  useEffect(() => {
+    if (!userId) return;
 
-    if (!userId) {
-      setSavedDriversMsg("Not signed in.");
-      return;
+    let alive = true;
+
+    async function loadLatestNight() {
+      try {
+        setLoading(true);
+        setError(null);
+        setSavedDriversMsg("");
+        setStatus("Loading latest night...");
+
+        // Latest night for this user
+        const { data: nightRows, error: nightErr } = await supabase
+          .from("sleep_nights")
+          .select("id,user_id,date,created_at")
+          .eq("user_id", userId)
+          .order("date", { ascending: false })
+          .limit(1);
+
+        if (nightErr) throw nightErr;
+
+        const night = (nightRows?.[0] as LatestNight | undefined) ?? null;
+
+        if (!alive) return;
+
+        setLatestNight(night);
+
+        if (!night) {
+          setStatus("No nights yet.");
+          setLoading(false);
+          return;
+        }
+
+        setStatus("Loading your last saved confirmation...");
+
+        // If a confirmation already exists for that night, preload it
+        const { data: confRows, error: confErr } = await supabase
+          .from("rrsm_driver_confirmations")
+          .select("id,night_id,user_id,proposed_driver_1,proposed_driver_2,selected_driver,created_at")
+          .eq("user_id", userId)
+          .eq("night_id", night.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (confErr) throw confErr;
+
+        const conf = (confRows?.[0] as DriverConfirmationRow | undefined) ?? null;
+
+        if (conf) {
+          // Load what was saved before
+          const savedPrimary = (conf.selected_driver ?? conf.proposed_driver_1 ?? DRIVER_OPTIONS[0]) as DriverOption;
+          const safePrimary = DRIVER_OPTIONS.includes(savedPrimary) ? savedPrimary : DRIVER_OPTIONS[0];
+
+          setPrimaryDriver(safePrimary);
+          setSecondaryDriver(conf.proposed_driver_2 ?? "");
+          setSavedDriversMsg("Loaded your last confirmation for this night.");
+        } else {
+          setSavedDriversMsg("");
+        }
+
+        // OPTIONAL: If you later want RRSM preview, this is where you’d load it.
+        // For now we keep rrsm null, so this file cannot break if your RRSM tables differ.
+        setRrsm(null);
+
+        setStatus("Ready.");
+      } catch (e: any) {
+        if (!alive) return;
+        setError(e?.message ?? "Failed to load data");
+      } finally {
+        if (alive) setLoading(false);
+      }
     }
-    if (!latest?.night_id) {
-      setSavedDriversMsg("No latest night found yet.");
-      return;
-    }
 
-    setSavingDrivers(true);
+    loadLatestNight();
 
+    return () => {
+      alive = false;
+    };
+  }, [supabase, userId]);
+
+  // --------------------
+  // 3) Save confirmation (NO duplicates!)
+  // --------------------
+  async function saveDriverConfirmation() {
     try {
-      const proposed1 = primaryDriver;
-      const proposed2 = secondaryDriver || null;
+      setSavedDriversMsg("");
+      setError(null);
 
-      const { error: insertErr } = await supabase
+      if (!userId) {
+        setSavedDriversMsg("Not signed in.");
+        return;
+      }
+      if (!latestNight?.id) {
+        setSavedDriversMsg("No latest night found yet.");
+        return;
+      }
+
+      setSavingDrivers(true);
+
+      const proposed1 = primaryDriver;
+      const proposed2 = secondaryDriver?.trim() ? secondaryDriver.trim() : null;
+
+      // We do NOT rely on upsert needing a unique constraint.
+      // Instead: check if row exists -> update, else insert.
+      const { data: existingRows, error: existingErr } = await supabase
         .from("rrsm_driver_confirmations")
-        .insert([
-          {
-            night_id: latest.night_id,
-            user_id: userId,
+        .select("id")
+        .eq("user_id", userId)
+        .eq("night_id", latestNight.id)
+        .limit(1);
+
+      if (existingErr) throw existingErr;
+
+      const existingId = existingRows?.[0]?.id as string | undefined;
+
+      if (existingId) {
+        const { error: updateErr } = await supabase
+          .from("rrsm_driver_confirmations")
+          .update({
             proposed_driver_1: proposed1,
             proposed_driver_2: proposed2,
-            selected_driver: primaryDriver, // single-column selection
-          },
-        ]);
+            selected_driver: proposed1,
+          })
+          .eq("id", existingId);
 
-      if (insertErr) throw insertErr;
+        if (updateErr) throw updateErr;
 
-      setSavedDriversMsg("Saved confirmation ✅");
+        setSavedDriversMsg("Updated your confirmation ✅");
+      } else {
+        const { error: insertErr } = await supabase.from("rrsm_driver_confirmations").insert({
+          night_id: latestNight.id,
+          user_id: userId,
+          proposed_driver_1: proposed1,
+          proposed_driver_2: proposed2,
+          selected_driver: proposed1,
+        });
+
+        if (insertErr) throw insertErr;
+
+        setSavedDriversMsg("Saved your confirmation ✅");
+      }
     } catch (e: any) {
-      setError(e?.message ?? "Failed to save.");
+      setError(e?.message ?? "Failed to save confirmation");
     } finally {
       setSavingDrivers(false);
     }
   }
 
+  // --------------------
+  // UI
+  // --------------------
+  if (loading) {
+    return <div className="p-6">Loading…</div>;
+  }
+
+  if (!userId) {
+    return (
+      <div className="p-6 space-y-2">
+        <div className="text-lg font-semibold">Sleep</div>
+        <div className="opacity-80">You’re not signed in.</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Sleep</h1>
-
-      {loading && (
-        <div className="border rounded-lg p-4">
-          <p className="font-semibold">{status}</p>
-        </div>
-      )}
-
-      {!loading && !userId && (
-        <div className="border rounded-lg p-4">
-          <p className="font-semibold">You’re not signed in.</p>
-          <p className="text-sm opacity-80">
-            Sign in first, then come back to this page.
-          </p>
-        </div>
-      )}
+    <div className="p-6 space-y-6">
+      <div className="border rounded-lg p-4 space-y-1">
+        <div className="text-lg font-semibold">Sleep</div>
+        <div className="text-sm opacity-70">{status}</div>
+        <div className="text-sm opacity-70">{email ? `Signed in as ${email}` : `User ${userId}`}</div>
+      </div>
 
       {error && (
-        <div className="border rounded-lg p-4">
-          <p className="font-semibold text-red-600">Error</p>
-          <p className="text-sm">{error}</p>
+        <div className="border border-red-500/40 rounded-lg p-4 text-red-300">
+          {error}
         </div>
       )}
 
-      {!loading && userId && (
+      {!latestNight ? (
+        <div className="border rounded-lg p-4">
+          No sleep nights recorded yet.
+        </div>
+      ) : (
+        <div className="border rounded-lg p-4 space-y-3">
+          <div className="font-semibold">Latest night</div>
+          <div className="text-sm opacity-80">
+            Night ID: <span className="opacity-100">{latestNight.id}</span>
+          </div>
+          <div className="text-sm opacity-80">
+            Date: <span className="opacity-100">{latestNight.date ?? "-"}</span>
+          </div>
+        </div>
+      )}
+
+      {/* RRSM Preview (optional placeholder, safe even if rrsm is null) */}
+      {rrsm && (
         <div className="border rounded-lg p-4 space-y-2">
-          <p className="text-sm opacity-80">User ID</p>
-          <p className="font-mono text-xs break-all">{userId}</p>
+          <div className="font-semibold">RRSM Preview</div>
+          <div className="text-sm opacity-80">Risk band: {rrsm.risk_band ?? "-"}</div>
+          <div className="text-sm opacity-80">Risk score: {rrsm.risk_score ?? "-"}</div>
+          {rrsm.why_this_matters && <div className="text-sm">{rrsm.why_this_matters}</div>}
         </div>
       )}
 
-      {!loading && userId && !latest && (
-        <div className="border rounded-lg p-4">
-          <p className="font-semibold">No RRSM data found yet.</p>
-          <p className="text-sm opacity-80">
-            Once RRSM generates a record for a night, it will show here.
-          </p>
-        </div>
-      )}
-
-      {!loading && userId && latest && (
-        <>
-          <div className="border rounded-lg p-4 space-y-2">
-            <h2 className="font-semibold">Latest RRSM</h2>
-            <div className="text-sm opacity-80">
-              Computed: {fmtDateTime(latest.computed_at)}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-              <div className="border rounded-lg p-3">
-                <div className="text-sm opacity-80">Risk score</div>
-                <div className="text-lg font-bold">
-                  {latest.risk_score ?? "—"}
-                </div>
-              </div>
-              <div className="border rounded-lg p-3">
-                <div className="text-sm opacity-80">Risk band</div>
-                <div className="text-lg font-bold">{latest.risk_band ?? "—"}</div>
-              </div>
-            </div>
+      {/* Driver confirmation section */}
+      {latestNight && (
+        <div className="border rounded-lg p-4 space-y-4">
+          <div className="font-semibold">Confirm the driver(s)</div>
+          <div className="text-sm opacity-80">
+            Pick what best explains last night. This is **not guessing** — it’s your confirmation layer.
           </div>
 
-          {/* Structured confirmation UI */}
-          <div className="border rounded-lg p-4 space-y-3">
-            <h2 className="font-semibold">Confirm tonight’s drivers</h2>
-            <p className="text-sm opacity-80">
-              Pick the best match. This is how the system learns *you* over time.
-            </p>
-
-            <label className="block">
-              <div className="text-sm font-semibold mb-1">Primary driver</div>
+          <div className="space-y-3">
+            <label className="block space-y-1">
+              <div className="text-sm font-medium">Primary driver</div>
               <select
                 value={primaryDriver}
-                onChange={(e) => setPrimaryDriver(e.target.value)}
-                className="w-full border rounded-lg p-2"
+                onChange={(e) => setPrimaryDriver(e.target.value as DriverOption)}
+                className="w-full border rounded-md p-2 bg-transparent"
               >
                 {DRIVER_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -283,90 +351,45 @@ export default function SleepPage() {
               </select>
             </label>
 
-            <label className="block">
-              <div className="text-sm font-semibold mb-1">
-                Secondary driver (optional)
-              </div>
+            <label className="block space-y-1">
+              <div className="text-sm font-medium">Secondary driver (optional)</div>
               <select
                 value={secondaryDriver}
                 onChange={(e) => setSecondaryDriver(e.target.value)}
-                className="w-full border rounded-lg p-2"
+                className="w-full border rounded-md p-2 bg-transparent"
               >
                 <option value="">(none)</option>
-                {DRIVER_OPTIONS.map((opt) => (
+                {DRIVER_OPTIONS.filter((o) => o !== primaryDriver).map((opt) => (
                   <option key={opt} value={opt}>
                     {opt}
                   </option>
                 ))}
               </select>
             </label>
-
-            <button
-              onClick={saveDrivers}
-              disabled={savingDrivers}
-              style={{
-                width: "100%",
-                marginTop: 6,
-                padding: "10px 14px",
-                borderRadius: 12,
-                fontWeight: 800,
-                cursor: savingDrivers ? "not-allowed" : "pointer",
-              }}
-              className="border"
-            >
-              {savingDrivers ? "Saving..." : "Save confirmation"}
-            </button>
-
-            {savedDriversMsg && (
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-                {savedDriversMsg}
-              </div>
-            )}
           </div>
 
-          {/* RRSM explanation blocks */}
-          {latest.why_this_matters && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold">Why this matters</h3>
-              <p>{latest.why_this_matters}</p>
-            </div>
-          )}
+          <button
+            onClick={saveDriverConfirmation}
+            disabled={savingDrivers}
+            style={{
+              width: "100%",
+              marginTop: 6,
+              padding: "10px 14px",
+              borderRadius: 12,
+              fontWeight: 800,
+              cursor: savingDrivers ? "not-allowed" : "pointer",
+            }}
+            className="border"
+          >
+            {savingDrivers ? "Saving..." : "Save confirmation"}
+          </button>
 
-          {latest.avoid_tonight && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold">Avoid tonight</h3>
-              <p>{latest.avoid_tonight}</p>
+          {savedDriversMsg && (
+            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+              {savedDriversMsg}
             </div>
           )}
-
-          {latest.encouragement && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold">Encouragement</h3>
-              <p>{latest.encouragement}</p>
-            </div>
-          )}
-
-          {latest.what_protocol && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold">What protocol?</h3>
-              <p>{latest.what_protocol}</p>
-            </div>
-          )}
-
-          {latest.tonight_action && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold">Tonight action</h3>
-              <p>{latest.tonight_action}</p>
-            </div>
-          )}
-
-          {latest.tonight_action_plan && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold">Tonight action plan</h3>
-              <p>{latest.tonight_action_plan}</p>
-            </div>
-          )}
-        </>
+        </div>
       )}
     </div>
   );
