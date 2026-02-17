@@ -263,8 +263,8 @@ const { data: latestRows, error: latestErr } = await supabase
       const upsertRes = await supabase
         .from("rrsm_driver_confirmations")
         .upsert(payload, { onConflict: "night_id,user_id" })
-        .select("id")
-        .limit(1);
+        .select("id, night_id, user_id, created_at")
+        .single();
 
       if (upsertRes.error) {
         // fallback insert (works even without unique constraint, but can create duplicates)
