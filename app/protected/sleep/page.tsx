@@ -276,15 +276,6 @@ async function saveDriverConfirmation() {
 }
 }
 
-    if (!userId) {
-      setSavedMsg("Not signed in.");
-      return;
-    }
-    if (!latestNight?.night_id) {
-      setSavedMsg("No latest night found yet.");
-      return;
-    }
-
     setSaving(true);
     try {
       const payload: DriverConfirmationRow = {
