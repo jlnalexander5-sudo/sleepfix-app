@@ -116,7 +116,9 @@ const [sleepEnd, setSleepEnd] = useState<string>("");
     setMetrics((rows as NightMetricsRow[]) ?? []);
     setLatestNightId((rows as NightMetricsRow[])?.[0]?.night_id ?? null);
   }
-// set default datetime-local values on the client (avoids Next prerender error)
+
+  useEffect(() => {
+    // set default datetime-local values on the client
 const start = new Date();
 start.setHours(22, 30, 0, 0);
 
@@ -126,7 +128,6 @@ end.setHours(7, 30, 0, 0);
 
 setSleepStart(start.toISOString().slice(0, 16));
 setSleepEnd(end.toISOString().slice(0, 16));
-  useEffect(() => {
     loadUserAndMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
