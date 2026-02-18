@@ -69,17 +69,8 @@ export default function SleepPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   // night form
-  const [sleepStart, setSleepStart] = useState<string>(() => {
-    const d = new Date();
-    d.setHours(22, 30, 0, 0);
-    return d.toISOString().slice(0, 16); // for datetime-local
-  });
-  const [sleepEnd, setSleepEnd] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    d.setHours(7, 30, 0, 0);
-    return d.toISOString().slice(0, 16); // for datetime-local
-  });
+  const [sleepStart, setSleepStart] = useState<string>("");
+const [sleepEnd, setSleepEnd] = useState<string>("");
 
   // latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
@@ -125,7 +116,16 @@ export default function SleepPage() {
     setMetrics((rows as NightMetricsRow[]) ?? []);
     setLatestNightId((rows as NightMetricsRow[])?.[0]?.night_id ?? null);
   }
+// set default datetime-local values on the client (avoids Next prerender error)
+const start = new Date();
+start.setHours(22, 30, 0, 0);
 
+const end = new Date(start);
+end.setDate(end.getDate() + 1);
+end.setHours(7, 30, 0, 0);
+
+setSleepStart(start.toISOString().slice(0, 16));
+setSleepEnd(end.toISOString().slice(0, 16));
   useEffect(() => {
     loadUserAndMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
