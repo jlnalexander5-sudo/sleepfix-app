@@ -274,36 +274,6 @@ async function saveDriverConfirmation() {
     setSaving(false);
   }
 }
-
-  setSaving(true);
-  try {
-    const payload: DriverConfirmationRow = {
-      night_id: latestNight.night_id,
-      user_id: userId,
-      proposed_driver_1: primaryDriver,
-      proposed_driver_2: secondaryDriver || null,
-      selected_driver: primaryDriver,
-    };
-
-    const upsertRes = await supabase
-      .from("rrsm_driver_confirmations")
-      .upsert(payload, { onConflict: "night_id,user_id" })
-      .select("id, night_id, user_id, created_at")
-      .single();
-
-    if (upsertRes.error) {
-      const ins = await supabase.from("rrsm_driver_confirmations").insert(payload);
-      if (ins.error) throw ins.error;
-    }
-
-    setSavedMsg("Saved ✅");
-  } catch (e: any) {
-    console.log("SAVE ERROR:", e);
-    setError(e?.message ?? "Failed to save.");
-    setSavedMsg("Save failed ❌");
-  } finally {
-    setSaving(false);
-  }
 }
 
     if (!userId) {
