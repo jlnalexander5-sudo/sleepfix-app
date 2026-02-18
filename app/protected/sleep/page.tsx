@@ -1,138 +1,206 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+
+type NightMetricsRow = {
+  night_id: string;
+  user_id: string;
+  duration_hours?: number | null;
+  latency_mins?: number | null;
+  wakeups_count?: number | null;
+  quality_num?: number | null;
+};
+
+type NightScoresRow = {
+  sleep_success_score?: number | null;
+  sleep_success_band?: string | null;
+};
+
+type NightInsightsRow = {
+  risk_score?: number | null;
+  risk_band?: string | null;
+  tonight_action?: string | null;
+  avoid_tonight?: string | null;
+  why_this_matters?: string | null;
+};
+
+type DriverConfirmationRow = {
+  night_id: string;
+  user_id: string;
+  proposed_driver_1?: string | null;
+  proposed_driver_2?: string | null;
+  selected_driver?: string | null;
+};
+
+const DRIVER_OPTIONS = [
+  "Latency / Mind racing",
+  "Wakeups / Environment",
+  "Wakeups / Temperature",
+  "Substance ingested",
+  "Schedule / Late bedtime",
+  "Stress / Emotional load",
+  "Exercise timing (late)",
+  "Food timing (late/heavy)",
+  "Pain / Physical discomfort",
+  "Unknown",
+];
+
+function fmt(n?: number | null, suffix = "") {
+  if (n === null || n === undefined) return "—";
+  return `${n}${suffix}`;
+}
 
 export default function SleepPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   const [userId, setUserId] = useState<string | null>(null);
-  const [sleepStart, setSleepStart] = useState("");
-  const [sleepEnd, setSleepEnd] = useState("");
-  const [confirmation, setConfirmation] = useState("");
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
-  // Load logged-in user
+  const [night, setNight] = useState<NightMetricsRow | null>(null);
+  const [scores, setScores] = useState<NightScoresRow | null>(null);
+  const [insights, setInsights] = useState<NightInsightsRow | null>(null);
+
+  const [primaryDriver, setPrimaryDriver] = useState(DRIVER_OPTIONS[0]);
+  const [secondaryDriver, setSecondaryDriver] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
+
   useEffect(() => {
-    const loadUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        setUserId(data.user.id);
-      }
-    };
-    loadUser();
+    async function load() {
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user) return;
+
+      setUserId(user.id);
+      setEmail(user.email ?? null);
+
+      const { data: latest } = await supabase
+        .from("night_scores")
+        .select("night_id,user_id,duration_hours,latency_mins,wakeups_count,quality_num")
+        .eq("user_id", user.id)
+        .order("computed_at", { ascending: false })
+        .limit(1);
+
+      if (!latest || latest.length === 0) return;
+
+      const latestNight = latest[0];
+      setNight(latestNight);
+
+      const { data: scoreRow } = await supabase
+        .from("night_scores")
+        .select("sleep_success_score,sleep_success_band")
+        .eq("night_id", latestNight.night_id)
+        .limit(1);
+
+      setScores(scoreRow?.[0] ?? null);
+
+      const { data: insightRow } = await supabase
+        .from("night_insights")
+        .select("risk_score,risk_band,tonight_action,avoid_tonight,why_this_matters")
+        .eq("night_id", latestNight.night_id)
+        .limit(1);
+
+      setInsights(insightRow?.[0] ?? null);
+    }
+
+    load();
   }, [supabase]);
 
-  // Save sleep night
-  const saveSleepNight = async () => {
-    if (!userId) return;
+  async function saveDriverConfirmation() {
+    if (!userId || !night) return;
 
-    setError(null);
-    setStatus("Saving night...");
+    setSaving(true);
+    setSavedMsg("");
 
-    const { error } = await supabase.from("sleep_nights").insert({
+    const payload: DriverConfirmationRow = {
+      night_id: night.night_id,
       user_id: userId,
-      sleep_start: sleepStart,
-      sleep_end: sleepEnd,
-    });
+      proposed_driver_1: primaryDriver,
+      proposed_driver_2: secondaryDriver || null,
+      selected_driver: primaryDriver,
+    };
 
-    if (error) {
-      setError(error.message);
-      setStatus("");
-      return;
+    const { error } = await supabase
+      .from("rrsm_driver_confirmations")
+      .upsert(payload, { onConflict: "night_id,user_id" });
+
+    if (!error) {
+      setSavedMsg("Saved ✅");
+    } else {
+      setSavedMsg("Save failed ❌");
+      console.log(error);
     }
 
-    setStatus("Night saved ✅");
-  };
-
-  // Save user confirmation (intuition input)
-  const saveDriverConfirmation = async () => {
-    if (!userId) return;
-
-    setError(null);
-    setStatus("Saving confirmation...");
-
-    const { error } = await supabase.from("night_user_drivers").insert({
-      user_id: userId,
-      driver_type: "confirmation",
-      value_text: confirmation,
-    });
-
-    if (error) {
-      setError(error.message);
-      setStatus("");
-      return;
-    }
-
-    setStatus("Confirmation saved ✅");
-    setConfirmation("");
-  };
+    setSaving(false);
+  }
 
   return (
-    <main style={{ maxWidth: 600, margin: "40px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20 }}>
-        Log Sleep Night
-      </h1>
-
-      <div style={{ marginBottom: 20 }}>
-        <label>
-          <div>Sleep Start</div>
-          <input
-            type="datetime-local"
-            value={sleepStart}
-            onChange={(e) => setSleepStart(e.target.value)}
-            style={{ width: "100%", padding: 8 }}
-          />
-        </label>
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 900 }}>Sleep</h1>
+      <div style={{ opacity: 0.7, marginBottom: 20 }}>
+        {email ? `Signed in as ${email}` : ""}
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <label>
-          <div>Sleep End</div>
-          <input
-            type="datetime-local"
-            value={sleepEnd}
-            onChange={(e) => setSleepEnd(e.target.value)}
-            style={{ width: "100%", padding: 8 }}
-          />
-        </label>
-      </div>
+      {night && (
+        <>
+          <div style={{ marginBottom: 20 }}>
+            <strong>Duration:</strong> {fmt(night.duration_hours, " h")} <br />
+            <strong>Latency:</strong> {fmt(night.latency_mins, " min")} <br />
+            <strong>Wakeups:</strong> {fmt(night.wakeups_count)} <br />
+            <strong>Quality:</strong> {fmt(night.quality_num)}
+          </div>
 
-      <button
-        onClick={saveSleepNight}
-        style={{ padding: "10px 16px", marginBottom: 30 }}
-      >
-        Save Night
-      </button>
+          <div style={{ marginBottom: 20 }}>
+            <strong>Sleep Success:</strong> {scores?.sleep_success_score ?? "—"} ({scores?.sleep_success_band ?? "—"})
+            <br />
+            <strong>Risk:</strong> {insights?.risk_score ?? "—"} ({insights?.risk_band ?? "—"})
+            <br />
+            <strong>Tonight:</strong> {insights?.tonight_action ?? "—"}
+            <br />
+            <strong>Avoid:</strong> {insights?.avoid_tonight ?? "—"}
+          </div>
 
-      <hr style={{ margin: "30px 0" }} />
+          <div style={{ border: "1px solid #333", padding: 14, borderRadius: 12 }}>
+            <div style={{ fontWeight: 800, marginBottom: 10 }}>
+              Confirm primary driver
+            </div>
 
-      <h2 style={{ fontSize: 22, marginBottom: 10 }}>
-        What do YOU think affected tonight?
-      </h2>
+            <select
+              value={primaryDriver}
+              onChange={(e) => setPrimaryDriver(e.target.value)}
+              style={{ width: "100%", padding: 8, marginBottom: 10 }}
+            >
+              {DRIVER_OPTIONS.map((d) => (
+                <option key={d}>{d}</option>
+              ))}
+            </select>
 
-      <textarea
-        value={confirmation}
-        onChange={(e) => setConfirmation(e.target.value)}
-        placeholder="Example: Mental overdrive, stress, substance, heat..."
-        style={{ width: "100%", padding: 10, minHeight: 80 }}
-      />
+            <select
+              value={secondaryDriver}
+              onChange={(e) => setSecondaryDriver(e.target.value)}
+              style={{ width: "100%", padding: 8, marginBottom: 10 }}
+            >
+              <option value="">None</option>
+              {DRIVER_OPTIONS.map((d) => (
+                <option key={d}>{d}</option>
+              ))}
+            </select>
 
-      <button
-        onClick={saveDriverConfirmation}
-        style={{ padding: "10px 16px", marginTop: 12 }}
-      >
-        Save Confirmation
-      </button>
+            <button
+              onClick={saveDriverConfirmation}
+              disabled={saving}
+              style={{ width: "100%", padding: 10, fontWeight: 800 }}
+            >
+              {saving ? "Saving..." : "Save confirmation"}
+            </button>
 
-      {status && (
-        <div style={{ marginTop: 20, color: "green" }}>{status}</div>
+            {savedMsg && (
+              <div style={{ marginTop: 10 }}>{savedMsg}</div>
+            )}
+          </div>
+        </>
       )}
-
-      {error && (
-        <div style={{ marginTop: 20, color: "red" }}>{error}</div>
-      )}
-    </main>
+    </div>
   );
 }
