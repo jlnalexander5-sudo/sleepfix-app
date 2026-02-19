@@ -273,14 +273,6 @@ setSleepEnd(end.toISOString().slice(0, 16));
         />
       </div>
 
-      <button
-        onClick={saveNight}
-        disabled={savingNight}
-        style={{ width: "100%", padding: 12, fontWeight: 800, marginTop: 18 }}
-      >
-        {savingNight ? "Saving..." : "Save Night"}
-      </button>
-
       <hr style={{ margin: "28px 0" }} />
 
       <h2 style={{ fontSize: 18, fontWeight: 800 }}>What do YOU think affected tonight?</h2>
