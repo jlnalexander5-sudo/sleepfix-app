@@ -322,13 +322,13 @@ setSleepEnd(end.toISOString().slice(0, 16));
         />
       </div>
 
-      <button
-        onClick={saveConfirmation}
-        disabled={savingDrivers}
-        style={{ width: "100%", padding: 12, fontWeight: 800, marginTop: 16 }}
-      >
-        {savingDrivers ? "Saving..." : "Save Confirmation"}
-      </button>
+     <button
+  onClick={saveAll}
+  disabled={savingNight || savingDrivers}
+  style={{ width: "100%", padding: 14, fontWeight: 900, marginTop: 18 }}
+>
+  {(savingNight || savingDrivers) ? "Saving..." : "Save (Night + Notes + Confirmation)"}
+</button>
 
       {msg && <div style={{ marginTop: 12, fontWeight: 700 }}>{msg}</div>}
 
