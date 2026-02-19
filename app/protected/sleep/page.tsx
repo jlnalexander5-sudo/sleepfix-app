@@ -131,7 +131,11 @@ end.setDate(end.getDate() + 1);
 end.setHours(7, 30, 0, 0);
 
 setSleepStart(start.toISOString().slice(0, 16));
+setSleepStartDate(start.toISOString().slice(0, 10));
+setSleepStartTime(start.toISOString().slice(11, 16));
 setSleepEnd(end.toISOString().slice(0, 16));
+setSleepEndDate(end.toISOString().slice(0, 10));
+setSleepEndTime(end.toISOString().slice(11, 16));
     loadUserAndMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -198,8 +202,8 @@ setSleepEnd(end.toISOString().slice(0, 16));
 
   try {
     // --- 1) Save Night (includes notes) ---
-    const startLocal = new Date(sleepStart);
-    const endLocal = new Date(sleepEnd);
+   const startLocal = new Date(`${sleepStartDate}T${sleepStartTime}`);
+const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
 
     if (Number.isNaN(startLocal.getTime()) || Number.isNaN(endLocal.getTime())) {
       throw new Error("Invalid date/time.");
