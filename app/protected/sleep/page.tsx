@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import DatePicker from "react-datepicker";
+import dynamic from "next/dynamic";
+const DatePicker = dynamic(() => import("react-datepicker"), { ssr: false });
 import "react-datepicker/dist/react-datepicker.css";
 
 type NightMetricsRow = {
@@ -306,9 +307,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
   
 <DatePicker
   selected={sleepStartDate ? parseISODate(sleepStartDate) : null}
-onChange={(d: Date | null) =>
-  setSleepStartDate(d ? formatISODate(d) : "")
-}
+  onChange={(d: Date | null) => setSleepStartDate(d ? formatISODate(d) : "")}
   dateFormat="dd/MM/yyyy"
   className="sleepfix-date-input"
           wrapperClassName="sleepfix-date-wrap"
@@ -330,9 +329,7 @@ onChange={(d: Date | null) =>
   
 <DatePicker
   selected={sleepEndDate ? parseISODate(sleepEndDate) : null}
-onChange={(d: Date | null) =>
-  setSleepEndDate(d ? formatISODate(d) : "")
-}
+  onChange={(d: Date | null) => setSleepEndDate(d ? formatISODate(d) : "")}
   dateFormat="dd/MM/yyyy"
   className="sleepfix-date-input"
           wrapperClassName="sleepfix-date-wrap"
