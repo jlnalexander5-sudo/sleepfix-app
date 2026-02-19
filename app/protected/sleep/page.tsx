@@ -18,6 +18,7 @@ type SleepNightInsert = {
   sleep_start: string; // ISO
   sleep_end: string;   // ISO
   local_date: string;  // YYYY-MM-DD
+  notes?: string | null;
 };
 
 type NightUserDriversUpsert = {
