@@ -259,7 +259,8 @@ setSleepEnd(end.toISOString().slice(0, 16));
           type="datetime-local"
           value={sleepStart}
           onChange={(e) => setSleepStart(e.target.value)}
-          style={{ width: "100%", padding: 10 }}
+         style={{width: "100%",padding: 16,fontSize: 18,fontWeight: 600,borderRadius: 8,
+}}
         />
       </div>
 
