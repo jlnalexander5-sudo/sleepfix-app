@@ -308,7 +308,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
         <select
           value={primaryDriver}
           onChange={(e) => setPrimaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 10 }}
+          style={{ width: "100%", padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
         >
           {DRIVER_OPTIONS.map((d) => (
             <option key={d} value={d}>
@@ -323,7 +323,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
         <select
           value={secondaryDriver}
           onChange={(e) => setSecondaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 10 }}
+          style={{ width: "100%", padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
         >
           {DRIVER_OPTIONS.map((d) => (
             <option key={d} value={d}>
@@ -339,7 +339,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
           value={userNotes}
           onChange={(e) => setUserNotes(e.target.value)}
           placeholder="e.g., neighbor noise until midnight, but slept well after"
-          style={{ width: "100%", padding: 10, minHeight: 90 }}
+         style={{ width: "100%", padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8, minHeight: 110 }}
         />
       </div>
 
