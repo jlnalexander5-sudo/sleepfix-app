@@ -158,6 +158,7 @@ setSleepEnd(end.toISOString().slice(0, 16));
         sleep_end: toIsoWithOffset(endLocal),
         // IMPORTANT: your table requires local_date NOT NULL
         local_date: toLocalDateYYYYMMDD(endLocal),
+        notes: userNotes?.trim() || null,
       };
 
       const { data, error } = await supabase
