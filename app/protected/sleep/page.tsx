@@ -258,7 +258,7 @@ setSleepEnd(end.toISOString().slice(0, 16));
   Sleep Start
 </label>
         <input
-          type="datetime-local"
+          type="text"
           value={sleepStart}
           onChange={(e) => setSleepStart(e.target.value)}
          style={{width: "100%",padding: 16,fontSize: 18,fontWeight: 600,borderRadius: 8,
