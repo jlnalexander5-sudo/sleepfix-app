@@ -212,15 +212,19 @@ setSleepEnd(end.toISOString().slice(0, 16));
       local_date: toLocalDateYYYYMMDD(endLocal),
       notes: userNotes?.trim() || null,
     };
+    console.log("SAVEALL userNotes raw:", JSON.stringify(userNotes));
+    console.log("SAVEALL userNotes trimmed:", JSON.stringify(userNotes.trim()));
+    console.log("SAVEALL nightPayload.notes:", JSON.stringify((userNotes.trim() || null)));
 
+    const { data: night, error: nightErr } = await supabase
     const { data: night, error: nightErr } = await supabase
       .from("sleep_nights")
       .insert(nightPayload)
-      .select("id")
+      .select("id, notes")
       .single();
 
-    if (nightErr) throw nightErr;
-
+   if (nightErr) throw nightErr;
+    console.log("INSERT returned night row:", night); // <-- add this line
     const nightId = night.id;
     setLatestNightId(nightId);
 
