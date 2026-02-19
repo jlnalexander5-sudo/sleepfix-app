@@ -217,7 +217,6 @@ setSleepEnd(end.toISOString().slice(0, 16));
     console.log("SAVEALL nightPayload.notes:", JSON.stringify((userNotes.trim() || null)));
 
     const { data: night, error: nightErr } = await supabase
-    const { data: night, error: nightErr } = await supabase
       .from("sleep_nights")
       .insert(nightPayload)
       .select("id, notes")
