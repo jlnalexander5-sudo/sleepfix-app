@@ -257,25 +257,39 @@ setSleepEnd(end.toISOString().slice(0, 16));
       <label style={{ fontSize: 18, fontWeight: 700 }}>
   Sleep Start
 </label>
-        <input
-          type="text"
-          value={sleepStart}
-          onChange={(e) => setSleepStart(e.target.value)}
-         style={{width: "100%",padding: 16,fontSize: 18,fontWeight: 600,borderRadius: 8,
-}}
-        />
-      </div>
-
+       <div style={{ display: "flex", gap: 12 }}>
+  <input
+    type="date"
+    value={sleepStartDate}
+    onChange={(e) => setSleepStartDate(e.target.value)}
+    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
+  />
+  <input
+    type="time"
+    value={sleepStartTime}
+    onChange={(e) => setSleepStartTime(e.target.value)}
+    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
+  />
+</div>
+   </div>
       <div style={{ marginTop: 18 }}>
         <label style={{ fontSize: 18, fontWeight: 700 }}>
   Sleep End
 </label>
-        <input
-          type="datetime-local"
-          value={sleepEnd}
-          onChange={(e) => setSleepEnd(e.target.value)}
-          style={{ width: "100%", padding: 10 }}
-        />
+      <div style={{ display: "flex", gap: 12 }}>
+  <input
+    type="date"
+    value={sleepEndDate}
+    onChange={(e) => setSleepEndDate(e.target.value)}
+    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
+  />
+  <input
+    type="time"
+    value={sleepEndTime}
+    onChange={(e) => setSleepEndTime(e.target.value)}
+    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
+  />
+</div>
       </div>
 
       <hr style={{ margin: "28px 0" }} />
