@@ -183,46 +183,69 @@ setSleepEnd(end.toISOString().slice(0, 16));
     }
   }
 
-  async function saveConfirmation() {
-    setMsg("");
-    if (!userId) {
-      setMsg("Not signed in.");
-      return;
-    }
-    if (!latestNightId) {
-      setMsg("No latest night yet. Save a night first.");
-      return;
-    }
-
-    setSavingDrivers(true);
-    try {
-      // ✅ THIS IS THE FIX:
-      // write to night_user_drivers using the REAL columns:
-      // night_id, user_id, primary_driver, secondary_driver
-      const upsertPayload: NightUserDriversUpsert = {
-        night_id: latestNightId,
-        user_id: userId,
-        primary_driver: primaryDriver || null,
-        secondary_driver: secondaryDriver || null,
-      };
-
-      const { error } = await supabase
-        .from("night_user_drivers")
-        .upsert(upsertPayload, { onConflict: "night_id" });
-
-      if (error) throw error;
-
-      // optional: store notes somewhere else if you have a column/table for it.
-      // For now, we just keep it client-side.
-
-      setMsg("Confirmation saved ✅");
-    } catch (e: any) {
-      setMsg(`Save confirmation failed ❌ ${e?.message ?? String(e)}`);
-    } finally {
-      setSavingDrivers(false);
-    }
+  async function saveAll() {
+  setMsg("");
+  if (!userId) {
+    setMsg("Not signed in.");
+    return;
   }
 
+  setSavingNight(true);
+  setSavingDrivers(true);
+
+  try {
+    // --- 1) Save Night (includes notes) ---
+    const startLocal = new Date(sleepStart);
+    const endLocal = new Date(sleepEnd);
+
+    if (Number.isNaN(startLocal.getTime()) || Number.isNaN(endLocal.getTime())) {
+      throw new Error("Invalid date/time.");
+    }
+    if (endLocal <= startLocal) {
+      throw new Error("Sleep End must be after Sleep Start.");
+    }
+
+    const nightPayload = {
+      user_id: userId,
+      sleep_start: toIsoWithOffset(startLocal),
+      sleep_end: toIsoWithOffset(endLocal),
+      local_date: toLocalDateYYYYMMDD(endLocal),
+      notes: userNotes?.trim() || null,
+    };
+
+    const { data: night, error: nightErr } = await supabase
+      .from("sleep_nights")
+      .insert(nightPayload)
+      .select("id")
+      .single();
+
+    if (nightErr) throw nightErr;
+
+    const nightId = night.id;
+    setLatestNightId(nightId);
+
+    // --- 2) Save Drivers (upsert) ---
+    const driversPayload = {
+      night_id: nightId,
+      user_id: userId,
+      primary_driver: primaryDriver || null,
+      secondary_driver: secondaryDriver || null,
+    };
+
+    const { error: driversErr } = await supabase
+      .from("night_user_drivers")
+      .upsert(driversPayload, { onConflict: "night_id,user_id" });
+
+    if (driversErr) throw driversErr;
+
+    setMsg("Saved night + confirmation ✅");
+  } catch (e: any) {
+    setMsg(`Save failed: ${e?.message ?? "Unknown error"}`);
+  } finally {
+    setSavingNight(false);
+    setSavingDrivers(false);
+  }
+}
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
       <h1 style={{ fontSize: 28, fontWeight: 800 }}>Sleep</h1>
