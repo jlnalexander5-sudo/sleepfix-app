@@ -306,7 +306,9 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
   
 <DatePicker
   selected={sleepStartDate ? parseISODate(sleepStartDate) : null}
-  onChange={(d) => setSleepStartDate(d ? formatISODate(d) : "")}
+onChange={(d: Date | null) =>
+  setSleepStartDate(d ? formatISODate(d) : "")
+}
   dateFormat="dd/MM/yyyy"
   className="sleepfix-date-input"
           wrapperClassName="sleepfix-date-wrap"
