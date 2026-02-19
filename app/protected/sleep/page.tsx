@@ -152,7 +152,7 @@ setSleepEnd(end.toISOString().slice(0, 16));
         throw new Error("Sleep End must be after Sleep Start.");
       }
 
-      const payload: SleepNightInsert = {
+        const payload = {
         user_id: userId,
         sleep_start: toIsoWithOffset(startLocal),
         sleep_end: toIsoWithOffset(endLocal),
