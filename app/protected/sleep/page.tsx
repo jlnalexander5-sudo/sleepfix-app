@@ -254,7 +254,9 @@ setSleepEnd(end.toISOString().slice(0, 16));
       <h1 style={{ fontSize: 28, fontWeight: 800 }}>Sleep</h1>
 
       <div style={{ marginTop: 18 }}>
-        <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Sleep Start</label>
+      <label style={{ fontSize: 18, fontWeight: 700 }}>
+  Sleep Start
+</label>
         <input
           type="datetime-local"
           value={sleepStart}
@@ -265,7 +267,9 @@ setSleepEnd(end.toISOString().slice(0, 16));
       </div>
 
       <div style={{ marginTop: 18 }}>
-        <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Sleep End</label>
+        <label style={{ fontSize: 18, fontWeight: 700 }}>
+  Sleep End
+</label>
         <input
           type="datetime-local"
           value={sleepEnd}
