@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 type NightMetricsRow = {
   night_id: string;
@@ -53,7 +55,15 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function toLocalDateYYYYMMDD(d: Date) {
+function parseISODate(yyyyMmDd: string): Date {
+  // yyyy-mm-dd -> local Date
+  const [y, m, d] = yyyyMmDd.split("-").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function formatISODate(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}function toLocalDateYYYYMMDD(d: Date) {
   // local date (browser timezone)
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
@@ -260,17 +270,48 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
     <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
       <h1 style={{ fontSize: 28, fontWeight: 800 }}>Sleep</h1>
 
+      <style jsx global>{`
+        /* Make the date picker (calendar) BIGGER */
+        .react-datepicker { font-size: 16px; }
+        .react-datepicker__current-month,
+        .react-datepicker-time__header,
+        .react-datepicker-year-header { font-size: 18px; }
+        .react-datepicker__day-name,
+        .react-datepicker__day,
+        .react-datepicker__time-name { width: 2.2rem; line-height: 2.2rem; margin: 0.15rem; }
+        .react-datepicker__triangle { display: none; }
+        .react-datepicker-popper { z-index: 9999; }
+
+        /* Match your inputs */
+        .sleepfix-date-wrap { flex: 1; }
+        .sleepfix-date-input {
+          width: 100%;
+          padding: 16px;
+          font-size: 18px;
+          font-weight: 600;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.08);
+          color: #fff;
+          box-sizing: border-box;
+        }
+        .sleepfix-date-input::placeholder { color: rgba(255,255,255,0.55); }
+      `}</style>
+
       <div style={{ marginTop: 18 }}>
       <label style={{ fontSize: 18, fontWeight: 700 }}>
   Sleep Start
 </label>
        <div style={{ display: "flex", gap: 12 }}>
-  <input
-    type="date"
-    value={sleepStartDate}
-    onChange={(e) => setSleepStartDate(e.target.value)}
-    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
-  />
+  
+<DatePicker
+  selected={sleepStartDate ? parseISODate(sleepStartDate) : null}
+  onChange={(d) => setSleepStartDate(d ? formatISODate(d) : "")}
+  dateFormat="dd/MM/yyyy"
+  className="sleepfix-date-input"
+          wrapperClassName="sleepfix-date-wrap"
+  placeholderText="Select date"
+/>
   <input
     type="time"
     value={sleepStartTime}
@@ -284,12 +325,15 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
   Sleep End
 </label>
       <div style={{ display: "flex", gap: 12 }}>
-  <input
-    type="date"
-    value={sleepEndDate}
-    onChange={(e) => setSleepEndDate(e.target.value)}
-    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
-  />
+  
+<DatePicker
+  selected={sleepEndDate ? parseISODate(sleepEndDate) : null}
+  onChange={(d) => setSleepEndDate(d ? formatISODate(d) : "")}
+  dateFormat="dd/MM/yyyy"
+  className="sleepfix-date-input"
+          wrapperClassName="sleepfix-date-wrap"
+  placeholderText="Select date"
+/>
   <input
     type="time"
     value={sleepEndTime}
@@ -308,7 +352,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
         <select
           value={primaryDriver}
           onChange={(e) => setPrimaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
+          style={{ width: "100%", padding: 10 }}
         >
           {DRIVER_OPTIONS.map((d) => (
             <option key={d} value={d}>
@@ -323,7 +367,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
         <select
           value={secondaryDriver}
           onChange={(e) => setSecondaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
+          style={{ width: "100%", padding: 10 }}
         >
           {DRIVER_OPTIONS.map((d) => (
             <option key={d} value={d}>
@@ -339,7 +383,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
           value={userNotes}
           onChange={(e) => setUserNotes(e.target.value)}
           placeholder="e.g., neighbor noise until midnight, but slept well after"
-         style={{ width: "100%", padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8, minHeight: 110 }}
+          style={{ width: "100%", padding: 10, minHeight: 90 }}
         />
       </div>
 
