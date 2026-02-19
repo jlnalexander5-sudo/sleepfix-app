@@ -206,7 +206,7 @@ setSleepEnd(end.toISOString().slice(0, 16));
 
       const { error } = await supabase
         .from("night_user_drivers")
-        .upsert(upsertPayload, { onConflict: "night_id,user_id" });
+        .upsert(upsertPayload, { onConflict: "night_id" });
 
       if (error) throw error;
 
