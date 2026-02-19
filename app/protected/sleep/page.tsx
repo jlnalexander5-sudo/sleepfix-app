@@ -330,7 +330,9 @@ onChange={(d: Date | null) =>
   
 <DatePicker
   selected={sleepEndDate ? parseISODate(sleepEndDate) : null}
-  onChange={(d) => setSleepEndDate(d ? formatISODate(d) : "")}
+onChange={(d: Date | null) =>
+  setSleepEndDate(d ? formatISODate(d) : "")
+}
   dateFormat="dd/MM/yyyy"
   className="sleepfix-date-input"
           wrapperClassName="sleepfix-date-wrap"
