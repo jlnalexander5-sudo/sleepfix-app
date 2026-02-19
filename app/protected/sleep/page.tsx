@@ -117,7 +117,10 @@ const [sleepEnd, setSleepEnd] = useState<string>("");
     setMetrics((rows as NightMetricsRow[]) ?? []);
     setLatestNightId((rows as NightMetricsRow[])?.[0]?.night_id ?? null);
   }
-
+const [sleepStartDate, setSleepStartDate] = useState("");
+const [sleepStartTime, setSleepStartTime] = useState("");
+const [sleepEndDate, setSleepEndDate] = useState("");
+const [sleepEndTime, setSleepEndTime] = useState("");
   useEffect(() => {
     // set default datetime-local values on the client
 const start = new Date();
