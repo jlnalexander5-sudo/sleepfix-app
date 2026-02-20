@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import dynamic from "next/dynamic";
-const DatePicker = dynamic(() => import("react-datepicker"), { ssr: false });
+const DatePicker = dynamic(() => import("react-datepicker").then((m) => m.default as any), { ssr: false }) as any;
 import "react-datepicker/dist/react-datepicker.css";
 
 type NightMetricsRow = {
@@ -132,6 +132,13 @@ const [sleepStartDate, setSleepStartDate] = useState("");
 const [sleepStartTime, setSleepStartTime] = useState("");
 const [sleepEndDate, setSleepEndDate] = useState("");
 const [sleepEndTime, setSleepEndTime] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  // avoid prerender issues (DatePicker uses Date in props)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     // set default datetime-local values on the client
 const start = new Date();
@@ -273,6 +280,21 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
 
       <style jsx global>{`
         /* Make the date picker (calendar) BIGGER */
+        /* Bigger DatePicker popup (calendar) */
+        .react-datepicker { font-size: 1.05rem; }
+        .react-datepicker__header { font-size: 1.05rem; }
+        .react-datepicker__current-month, .react-datepicker-time__header { font-size: 1.05rem; }
+        .react-datepicker__day-name, .react-datepicker__day, .react-datepicker__time-name {
+          width: 2.4rem;
+          line-height: 2.4rem;
+          margin: 0.1rem;
+        }
+        .react-datepicker__navigation-icon::before {
+          border-width: 3px 3px 0 0;
+          height: 10px;
+          width: 10px;
+        }
+
         .react-datepicker { font-size: 16px; }
         .react-datepicker__current-month,
         .react-datepicker-time__header,
@@ -305,6 +327,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
 </label>
        <div style={{ display: "flex", gap: 12 }}>
   
+              {mounted && (
 <DatePicker
   selected={sleepStartDate ? parseISODate(sleepStartDate) : null}
   onChange={(d: Date | null) => setSleepStartDate(d ? formatISODate(d) : "")}
@@ -313,6 +336,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
           wrapperClassName="sleepfix-date-wrap"
   placeholderText="Select date"
 />
+              )}
   <input
     type="time"
     value={sleepStartTime}
@@ -327,6 +351,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
 </label>
       <div style={{ display: "flex", gap: 12 }}>
   
+              {mounted && (
 <DatePicker
   selected={sleepEndDate ? parseISODate(sleepEndDate) : null}
   onChange={(d: Date | null) => setSleepEndDate(d ? formatISODate(d) : "")}
@@ -335,6 +360,7 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
           wrapperClassName="sleepfix-date-wrap"
   placeholderText="Select date"
 />
+              )}
   <input
     type="time"
     value={sleepEndTime}
@@ -416,6 +442,8 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
           ))
         )}
       </div>
+
+
     </div>
   );
 }
