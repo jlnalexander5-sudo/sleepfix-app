@@ -1,213 +1,379 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { useEffect, useMemo, useState } from "react";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
-const [localDate, setLocalDate] = useState("");
+type BaselineRow = {
+  id: string;
+  user_id: string;
+  local_date: string; // YYYY-MM-DD
+  baseline_bedtime: string | null; // "HH:MM:SS"
+  baseline_waketime: string | null; // "HH:MM:SS"
+  baseline_sleep_latency_min: number | null;
+  baseline_wakeups_count: number | null;
+  baseline_total_sleep_min: number | null;
+  notes: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
 
-useEffect(() => {
-  const d = new Date();
+function toYYYYMMDDLocal(d = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  setLocalDate(`${y}-${m}-${day}`);
+  return `${y}-${m}-${day}`;
+}
+
+function toHHMM(t: string | null) {
+  if (!t) return "";
+  return t.length >= 5 ? t.slice(0, 5) : t; // "HH:MM:SS" -> "HH:MM"
+}
+
+function hhmmToTimeOrNull(v: string) {
+  // input type="time" gives "HH:MM"
+  if (!v) return null;
+  return `${v}:00`; // store as "HH:MM:SS"
 }
 
 export default function BaselinePage() {
-  const supabase = createBrowserSupabaseClient();
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
-  const [msg, setMsg] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
+
   const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
-  // Baseline 5 inputs
-  const [baselineBedtime, setBaselineBedtime] = useState<string>("22:30");
-  const [baselineWaketime, setBaselineWaketime] = useState<string>("07:30");
+  const [localDate, setLocalDate] = useState<string>("");
+
+  // form fields
+  const [baselineBedtime, setBaselineBedtime] = useState<string>(""); // HH:MM
+  const [baselineWaketime, setBaselineWaketime] = useState<string>(""); // HH:MM
   const [baselineLatencyMin, setBaselineLatencyMin] = useState<number>(20);
-  const [baselineWakeupsCount, setBaselineWakeupsCount] = useState<number>(1);
-  const [baselineTotalSleepMin, setBaselineTotalSleepMin] = useState<number>(450);
+  const [baselineWakeups, setBaselineWakeups] = useState<number>(1);
+  const [baselineTotalSleepMin, setBaselineTotalSleepMin] = useState<number>(420); // 7h default
   const [notes, setNotes] = useState<string>("");
 
-  // which baseline row we’re editing (simple = “today”)
-  const [localDate, setLocalDate] = useState<string>(todayLocalDate());
+  const [row, setRow] = useState<BaselineRow | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setUserId(data?.user?.id ?? null);
-    })();
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      setStatus("Checking session...");
+
+      const today = toYYYYMMDDLocal();
+      setLocalDate(today);
+
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) {
+        if (!cancelled) {
+          setError(userErr.message);
+          setStatus("Failed to get user.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      const user = userData.user;
+      if (!user) {
+        if (!cancelled) {
+          setStatus("Not logged in.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (cancelled) return;
+
+      setUserId(user.id);
+      setEmail(user.email ?? null);
+      setStatus("Loading baseline...");
+
+      // Load baseline for today (one per user per local_date)
+      const { data: existing, error: readErr } = await supabase
+        .from("rrsm_baselines")
+        .select(
+          "id, user_id, local_date, baseline_bedtime, baseline_waketime, baseline_sleep_latency_min, baseline_wakeups_count, baseline_total_sleep_min, notes, created_at, updated_at"
+        )
+        .eq("user_id", user.id)
+        .eq("local_date", today)
+        .maybeSingle<BaselineRow>();
+
+      if (readErr) {
+        if (!cancelled) {
+          setError(readErr.message);
+          setStatus("Failed to load baseline.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (cancelled) return;
+
+      if (existing) {
+        setRow(existing);
+        setBaselineBedtime(toHHMM(existing.baseline_bedtime));
+        setBaselineWaketime(toHHMM(existing.baseline_waketime));
+        setBaselineLatencyMin(existing.baseline_sleep_latency_min ?? 20);
+        setBaselineWakeups(existing.baseline_wakeups_count ?? 1);
+        setBaselineTotalSleepMin(existing.baseline_total_sleep_min ?? 420);
+        setNotes(existing.notes ?? "");
+        setStatus("Ready.");
+      } else {
+        // No row yet — just show defaults; user saves to create it
+        setStatus("Ready (no baseline saved for today yet).");
+      }
+
+      setLoading(false);
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [supabase]);
 
-  async function loadBaseline() {
-    setMsg("");
-    if (!userId) {
-      setMsg("Not signed in.");
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("rrsm_baselines")
-      .select(
-        "baseline_bedtime, baseline_waketime, baseline_sleep_latency_min, baseline_wakeups_count, baseline_total_sleep_min, notes"
-      )
-      .eq("user_id", userId)
-      .eq("local_date", localDate)
-      .maybeSingle();
-
-    if (error) {
-      setMsg(`Load failed: ${error.message}`);
-      return;
-    }
-    if (!data) {
-      setMsg("No baseline saved for this date yet.");
-      return;
-    }
-
-    setBaselineBedtime((data.baseline_bedtime as string) ?? "22:30");
-    setBaselineWaketime((data.baseline_waketime as string) ?? "07:30");
-    setBaselineLatencyMin((data.baseline_sleep_latency_min as number) ?? 20);
-    setBaselineWakeupsCount((data.baseline_wakeups_count as number) ?? 1);
-    setBaselineTotalSleepMin((data.baseline_total_sleep_min as number) ?? 450);
-    setNotes((data.notes as string) ?? "");
-    setMsg("Loaded.");
-  }
-
   async function saveBaseline() {
-    setMsg("");
-    if (!userId) {
-      setMsg("Not signed in.");
-      return;
-    }
+    if (!userId || !localDate) return;
+
+    setSaving(true);
+    setError(null);
+    setStatus("Saving baseline...");
 
     const payload = {
       user_id: userId,
       local_date: localDate,
-      baseline_bedtime: baselineBedtime,
-      baseline_waketime: baselineWaketime,
-      baseline_sleep_latency_min: baselineLatencyMin,
-      baseline_wakeups_count: baselineWakeupsCount,
-      baseline_total_sleep_min: baselineTotalSleepMin,
+      baseline_bedtime: hhmmToTimeOrNull(baselineBedtime),
+      baseline_waketime: hhmmToTimeOrNull(baselineWaketime),
+      baseline_sleep_latency_min: Number.isFinite(baselineLatencyMin)
+        ? baselineLatencyMin
+        : null,
+      baseline_wakeups_count: Number.isFinite(baselineWakeups)
+        ? baselineWakeups
+        : null,
+      baseline_total_sleep_min: Number.isFinite(baselineTotalSleepMin)
+        ? baselineTotalSleepMin
+        : null,
       notes: notes || null,
     };
 
-    const { error } = await supabase
+    // NOTE: This expects a UNIQUE constraint on (user_id, local_date).
+    // If it doesn't exist yet, Supabase will throw an error and we'll add it next.
+    const { data, error: upErr } = await supabase
       .from("rrsm_baselines")
-      .upsert(payload, { onConflict: "user_id,local_date" });
+      .upsert(payload, { onConflict: "user_id,local_date" })
+      .select(
+        "id, user_id, local_date, baseline_bedtime, baseline_waketime, baseline_sleep_latency_min, baseline_wakeups_count, baseline_total_sleep_min, notes, created_at, updated_at"
+      )
+      .single<BaselineRow>();
 
-    if (error) {
-      setMsg(`Save failed: ${error.message}`);
+    if (upErr) {
+      setError(upErr.message);
+      setStatus("Save failed.");
+      setSaving(false);
       return;
     }
-    setMsg("Saved baseline ✅");
+
+    setRow(data);
+    setStatus("Saved ✅");
+    setSaving(false);
   }
 
-  const labelStyle: React.CSSProperties = { fontSize: 18, fontWeight: 700 };
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: 14,
-    fontSize: 18,
-    fontWeight: 600,
-    borderRadius: 8,
-    background: "#3b3b3b",
-    color: "white",
-    border: "1px solid #555",
-  };
-
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 800 }}>RRSM Baseline</h1>
+    <main
+      style={{
+        maxWidth: 820,
+        margin: "32px auto",
+        padding: "0 16px",
+        fontSize: 18,
+        lineHeight: 1.4,
+      }}
+    >
+      <h1 style={{ fontSize: 32, fontWeight: 900, marginBottom: 8 }}>
+        RRSM Baseline
+      </h1>
 
-      <div style={{ marginTop: 18 }}>
-        <label style={labelStyle}>Baseline date</label>
-        <input
-          type="date"
-          value={localDate}
-          onChange={(e) => setLocalDate(e.target.value)}
-          style={inputStyle}
-        />
-        <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-          <button
-            onClick={loadBaseline}
-            style={{ padding: "12px 14px", fontSize: 16, borderRadius: 8 }}
+      <div style={{ opacity: 0.85, marginBottom: 14 }}>
+        {email ? `Signed in as ${email}` : "Signed in"}
+        {localDate ? ` • Date: ${localDate}` : ""}
+      </div>
+
+      <div
+        style={{
+          border: "1px solid rgba(255,255,255,0.14)",
+          borderRadius: 14,
+          padding: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Status: {status}</div>
+        {loading && <div>Loading...</div>}
+        {error && <div style={{ color: "salmon" }}>Error: {error}</div>}
+      </div>
+
+      {!loading && (
+        <div
+          style={{
+            border: "1px solid rgba(255,255,255,0.14)",
+            borderRadius: 14,
+            padding: 16,
+          }}
+        >
+          <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 10 }}>
+            Baseline inputs (5)
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 14,
+            }}
           >
-            Load
-          </button>
+            <label style={{ display: "block" }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                Baseline bedtime
+              </div>
+              <input
+                type="time"
+                value={baselineBedtime}
+                onChange={(e) => setBaselineBedtime(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: 14,
+                  borderRadius: 12,
+                  fontSize: 18,
+                }}
+              />
+            </label>
+
+            <label style={{ display: "block" }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                Baseline wake time
+              </div>
+              <input
+                type="time"
+                value={baselineWaketime}
+                onChange={(e) => setBaselineWaketime(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: 14,
+                  borderRadius: 12,
+                  fontSize: 18,
+                }}
+              />
+            </label>
+
+            <label style={{ display: "block" }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                Baseline sleep latency (min)
+              </div>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={baselineLatencyMin}
+                onChange={(e) => setBaselineLatencyMin(Number(e.target.value))}
+                style={{
+                  width: "100%",
+                  padding: 14,
+                  borderRadius: 12,
+                  fontSize: 18,
+                }}
+              />
+            </label>
+
+            <label style={{ display: "block" }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                Baseline wake-ups (count)
+              </div>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={baselineWakeups}
+                onChange={(e) => setBaselineWakeups(Number(e.target.value))}
+                style={{
+                  width: "100%",
+                  padding: 14,
+                  borderRadius: 12,
+                  fontSize: 18,
+                }}
+              />
+            </label>
+
+            <label style={{ display: "block", gridColumn: "1 / -1" }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                Baseline total sleep (minutes)
+              </div>
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={baselineTotalSleepMin}
+                onChange={(e) =>
+                  setBaselineTotalSleepMin(Number(e.target.value))
+                }
+                style={{
+                  width: "100%",
+                  padding: 14,
+                  borderRadius: 12,
+                  fontSize: 18,
+                }}
+              />
+              <div style={{ opacity: 0.75, marginTop: 6 }}>
+                Tip: 420 = 7h, 480 = 8h, 360 = 6h
+              </div>
+            </label>
+
+            <label style={{ display: "block", gridColumn: "1 / -1" }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>Notes</div>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={4}
+                style={{
+                  width: "100%",
+                  padding: 14,
+                  borderRadius: 12,
+                  fontSize: 18,
+                }}
+                placeholder="Optional. Anything stable about your baseline sleep pattern?"
+              />
+            </label>
+          </div>
+
           <button
             onClick={saveBaseline}
-            style={{ padding: "12px 14px", fontSize: 16, borderRadius: 8 }}
+            disabled={saving}
+            style={{
+              width: "100%",
+              padding: 16,
+              borderRadius: 12,
+              fontSize: 18,
+              fontWeight: 900,
+              cursor: "pointer",
+              marginTop: 16,
+            }}
           >
-            Save baseline
+            {saving ? "Saving..." : "Save baseline"}
           </button>
+
+          <hr style={{ margin: "18px 0", opacity: 0.2 }} />
+
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>
+            Debug (saved row)
+          </div>
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.9 }}>
+            {JSON.stringify(row, null, 2)}
+          </pre>
         </div>
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <label style={labelStyle}>Typical bedtime</label>
-        <input
-          type="time"
-          value={baselineBedtime}
-          onChange={(e) => setBaselineBedtime(e.target.value)}
-          style={inputStyle}
-        />
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <label style={labelStyle}>Typical wake time</label>
-        <input
-          type="time"
-          value={baselineWaketime}
-          onChange={(e) => setBaselineWaketime(e.target.value)}
-          style={inputStyle}
-        />
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <label style={labelStyle}>Typical sleep latency (minutes)</label>
-        <input
-          type="number"
-          min={0}
-          max={240}
-          value={baselineLatencyMin}
-          onChange={(e) => setBaselineLatencyMin(Number(e.target.value))}
-          style={inputStyle}
-        />
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <label style={labelStyle}>Typical wake-ups (count)</label>
-        <input
-          type="number"
-          min={0}
-          max={20}
-          value={baselineWakeupsCount}
-          onChange={(e) => setBaselineWakeupsCount(Number(e.target.value))}
-          style={inputStyle}
-        />
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <label style={labelStyle}>Typical total sleep (minutes)</label>
-        <input
-          type="number"
-          min={0}
-          max={1000}
-          value={baselineTotalSleepMin}
-          onChange={(e) => setBaselineTotalSleepMin(Number(e.target.value))}
-          style={inputStyle}
-        />
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <label style={labelStyle}>Notes (optional)</label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          style={{ ...inputStyle, minHeight: 90 }}
-        />
-      </div>
-
-      {msg ? (
-        <div style={{ marginTop: 14, fontSize: 16, opacity: 0.9 }}>{msg}</div>
-      ) : null}
-    </div>
+      )}
+    </main>
   );
 }
