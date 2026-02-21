@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import RRSMInsightCard from "@/components/RRSMInsightCard";
 import dynamic from "next/dynamic";
 const DatePicker = dynamic(() => import("react-datepicker").then((m) => m.default as any), { ssr: false }) as any;
 import "react-datepicker/dist/react-datepicker.css";
