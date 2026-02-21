@@ -269,29 +269,7 @@ export default function HabitsPage() {
     const r = rows[date];
     const checked = r?.[key] === true;
 
-
-    return (
-      <label
-        key={String(key)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 0",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => upsertField(date, { [key]: e.target.checked } as any)}
-        />
-        <span>{label}</span>
-      </label>
-    );
-  }
-
-  function rrsmCheckbox(
+    function rrsmCheckbox(
     date: string,
     key: keyof Pick<
       DailyRRSMFactorRow,
@@ -439,3 +417,4 @@ export default function HabitsPage() {
     </div>
   );
 }
+
