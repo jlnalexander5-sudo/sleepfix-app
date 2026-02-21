@@ -60,7 +60,7 @@ export default function HabitsPage() {
     Record<string, DailyRRSMFactorRow | undefined>
   >({});
 
-  // Build today + last 7 days on client only (avoid new Date() during prerender)
+  // Build today + last 7 days on client only
   useEffect(() => {
     const today = new Date();
     const todayYMD = toYMD(today);
@@ -76,7 +76,7 @@ export default function HabitsPage() {
     setDayList(out);
   }, []);
 
-  // Load data
+  // Load habits + rrsm factors
   useEffect(() => {
     let cancelled = false;
 
@@ -92,16 +92,12 @@ export default function HabitsPage() {
         }
         if (!cancelled) setUserId(user.id);
 
-        // Need dayList ready
-        if (dayList.length !== 7) {
-          if (!cancelled) setStatus("Loading…");
-          return;
-        }
+        if (dayList.length !== 7) return;
 
         const fromYMD = dayList[0];
         const toYMDStr = dayList[dayList.length - 1];
 
-        const { data, error } = await supabase
+        const { data: habitsData, error: habitsErr } = await supabase
           .from("daily_habits")
           .select(
             "id,user_id,created_at,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour"
@@ -111,15 +107,13 @@ export default function HabitsPage() {
           .lte("date", toYMDStr)
           .order("date", { ascending: true });
 
-        if (error) throw error;
+        if (habitsErr) throw habitsErr;
 
-        const map: Record<string, DailyHabitRow | undefined> = {};
-        for (const r of (data ?? []) as DailyHabitRow[]) {
-          map[r.date] = r;
+        const habitsMap: Record<string, DailyHabitRow | undefined> = {};
+        for (const r of (habitsData ?? []) as DailyHabitRow[]) {
+          habitsMap[r.date] = r;
         }
 
-
-        // RRSM-specific factors (Part 2 notes)
         const { data: rrsmData, error: rrsmErr } = await supabase
           .from("daily_rrsm_factors")
           .select(
@@ -136,8 +130,9 @@ export default function HabitsPage() {
         for (const r of (rrsmData ?? []) as DailyRRSMFactorRow[]) {
           rrsmMap[r.local_date] = r;
         }
+
         if (!cancelled) {
-          setRows(map);
+          setRows(habitsMap);
           setRrsmRows(rrsmMap);
           setStatus("Ready.");
         }
@@ -155,7 +150,6 @@ export default function HabitsPage() {
   async function upsertField(date: string, patch: Partial<DailyHabitRow>) {
     if (!userId) return;
 
-    // optimistic update
     setRows((prev) => {
       const current = prev[date];
       const next: DailyHabitRow = {
@@ -178,13 +172,14 @@ export default function HabitsPage() {
       const payload: DailyHabitRow = {
         user_id: userId,
         date,
-        caffeine_after_2pm: patch.caffeine_after_2pm ?? rows[date]?.caffeine_after_2pm ?? null,
+        caffeine_after_2pm:
+          patch.caffeine_after_2pm ?? rows[date]?.caffeine_after_2pm ?? null,
         alcohol: patch.alcohol ?? rows[date]?.alcohol ?? null,
         exercise: patch.exercise ?? rows[date]?.exercise ?? null,
-        screens_last_hour: patch.screens_last_hour ?? rows[date]?.screens_last_hour ?? null,
+        screens_last_hour:
+          patch.screens_last_hour ?? rows[date]?.screens_last_hour ?? null,
       };
 
-      // Note: assumes you have a unique constraint on (user_id, date)
       const { error } = await supabase
         .from("daily_habits")
         .upsert(payload as any, { onConflict: "user_id,date" });
@@ -202,7 +197,6 @@ export default function HabitsPage() {
   ) {
     if (!userId) return;
 
-    // optimistic update
     setRrsmRows((prev) => {
       const current = prev[local_date];
       const next: DailyRRSMFactorRow = {
@@ -227,24 +221,25 @@ export default function HabitsPage() {
     try {
       setStatus("Saving…");
 
+      const base = rrsmRows[local_date];
+
       const payload: DailyRRSMFactorRow = {
         user_id: userId,
         local_date,
-        ambient_heat_high:
-          patch.ambient_heat_high ?? rrsmRows[local_date]?.ambient_heat_high ?? null,
-        hot_drinks_late: patch.hot_drinks_late ?? rrsmRows[local_date]?.hot_drinks_late ?? null,
-        heavy_food_late: patch.heavy_food_late ?? rrsmRows[local_date]?.heavy_food_late ?? null,
+        ambient_heat_high: patch.ambient_heat_high ?? base?.ambient_heat_high ?? null,
+        hot_drinks_late: patch.hot_drinks_late ?? base?.hot_drinks_late ?? null,
+        heavy_food_late: patch.heavy_food_late ?? base?.heavy_food_late ?? null,
         intense_thinking_late:
-          patch.intense_thinking_late ?? rrsmRows[local_date]?.intense_thinking_late ?? null,
+          patch.intense_thinking_late ?? base?.intense_thinking_late ?? null,
         visualization_attempted:
-          patch.visualization_attempted ?? rrsmRows[local_date]?.visualization_attempted ?? null,
+          patch.visualization_attempted ?? base?.visualization_attempted ?? null,
         fought_wakefulness:
-          patch.fought_wakefulness ?? rrsmRows[local_date]?.fought_wakefulness ?? null,
+          patch.fought_wakefulness ?? base?.fought_wakefulness ?? null,
         cold_shower_evening:
-          patch.cold_shower_evening ?? rrsmRows[local_date]?.cold_shower_evening ?? null,
+          patch.cold_shower_evening ?? base?.cold_shower_evening ?? null,
         ice_water_evening:
-          patch.ice_water_evening ?? rrsmRows[local_date]?.ice_water_evening ?? null,
-        notes: patch.notes ?? rrsmRows[local_date]?.notes ?? null,
+          patch.ice_water_evening ?? base?.ice_water_evening ?? null,
+        notes: patch.notes ?? base?.notes ?? null,
       };
 
       const { error } = await supabase
@@ -283,9 +278,7 @@ export default function HabitsPage() {
         <input
           type="checkbox"
           checked={checked}
-          onChange={(e) =>
-            upsertField(date, { [key]: e.target.checked } as any)
-          }
+          onChange={(e) => upsertField(date, { [key]: e.target.checked } as any)}
         />
         <span>{label}</span>
       </label>
@@ -333,49 +326,6 @@ export default function HabitsPage() {
     );
   }
 
-    return (
-      <label
-        key={String(key)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 0",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) =>
-            upsertRRSMField(date, { [key]: e.target.checked } as any)
-          }
-        />
-        <span>{label}</span>
-      </label>
-    );
-  }
-    return (
-      <label
-        key={String(key)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 0",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => upsertField(date, { [key]: e.target.checked } as any)}
-        />
-        <span>{label}</span>
-      </label>
-    );
-  }
-
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
@@ -400,7 +350,14 @@ export default function HabitsPage() {
             <div style={{ opacity: 0.9 }}>{status}</div>
           </div>
 
-          <div style={{ marginTop: 10, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              gap: 10,
+              justifyContent: "flex-end",
+            }}
+          >
             <a href="/protected/dashboard" style={{ textDecoration: "underline" }}>
               Dashboard →
             </a>
@@ -441,7 +398,9 @@ export default function HabitsPage() {
               {checkbox(d, "screens_last_hour", "Screens last hour")}
 
               <details style={{ marginTop: 10 }}>
-                <summary style={{ cursor: "pointer", fontWeight: 800, opacity: 0.9 }}>
+                <summary
+                  style={{ cursor: "pointer", fontWeight: 800, opacity: 0.9 }}
+                >
                   RRSM Factors (Part 2)
                 </summary>
 
@@ -463,5 +422,3 @@ export default function HabitsPage() {
     </div>
   );
 }
-
-
