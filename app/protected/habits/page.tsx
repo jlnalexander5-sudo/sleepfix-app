@@ -14,6 +14,22 @@ type DailyHabitRow = {
   screens_last_hour: boolean | null;
 };
 
+type DailyRRSMFactorRow = {
+  id?: string;
+  user_id: string;
+  created_at?: string;
+  local_date: string; // YYYY-MM-DD
+  ambient_heat_high: boolean | null;
+  hot_drinks_late: boolean | null;
+  heavy_food_late: boolean | null;
+  intense_thinking_late: boolean | null;
+  visualization_attempted: boolean | null;
+  fought_wakefulness: boolean | null;
+  cold_shower_evening: boolean | null;
+  ice_water_evening: boolean | null;
+  notes?: string | null;
+};
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -39,6 +55,10 @@ export default function HabitsPage() {
   const [rows, setRows] = useState<Record<string, DailyHabitRow | undefined>>(
     {}
   );
+
+  const [rrsmRows, setRrsmRows] = useState<
+    Record<string, DailyRRSMFactorRow | undefined>
+  >({});
 
   // Build today + last 7 days on client only (avoid new Date() during prerender)
   useEffect(() => {
@@ -98,8 +118,27 @@ export default function HabitsPage() {
           map[r.date] = r;
         }
 
+
+        // RRSM-specific factors (Part 2 notes)
+        const { data: rrsmData, error: rrsmErr } = await supabase
+          .from("daily_rrsm_factors")
+          .select(
+            "id,user_id,created_at,local_date,ambient_heat_high,hot_drinks_late,heavy_food_late,intense_thinking_late,visualization_attempted,fought_wakefulness,cold_shower_evening,ice_water_evening,notes"
+          )
+          .eq("user_id", user.id)
+          .gte("local_date", fromYMD)
+          .lte("local_date", toYMDStr)
+          .order("local_date", { ascending: true });
+
+        if (rrsmErr) throw rrsmErr;
+
+        const rrsmMap: Record<string, DailyRRSMFactorRow | undefined> = {};
+        for (const r of (rrsmData ?? []) as DailyRRSMFactorRow[]) {
+          rrsmMap[r.local_date] = r;
+        }
         if (!cancelled) {
           setRows(map);
+          setRrsmRows(rrsmMap);
           setStatus("Ready.");
         }
       } catch (e: any) {
@@ -157,6 +196,68 @@ export default function HabitsPage() {
     }
   }
 
+  async function upsertRRSMField(
+    local_date: string,
+    patch: Partial<DailyRRSMFactorRow>
+  ) {
+    if (!userId) return;
+
+    // optimistic update
+    setRrsmRows((prev) => {
+      const current = prev[local_date];
+      const next: DailyRRSMFactorRow = {
+        id: current?.id,
+        user_id: userId,
+        created_at: current?.created_at,
+        local_date,
+        ambient_heat_high: current?.ambient_heat_high ?? null,
+        hot_drinks_late: current?.hot_drinks_late ?? null,
+        heavy_food_late: current?.heavy_food_late ?? null,
+        intense_thinking_late: current?.intense_thinking_late ?? null,
+        visualization_attempted: current?.visualization_attempted ?? null,
+        fought_wakefulness: current?.fought_wakefulness ?? null,
+        cold_shower_evening: current?.cold_shower_evening ?? null,
+        ice_water_evening: current?.ice_water_evening ?? null,
+        notes: current?.notes ?? null,
+        ...patch,
+      };
+      return { ...prev, [local_date]: next };
+    });
+
+    try {
+      setStatus("Saving…");
+
+      const payload: DailyRRSMFactorRow = {
+        user_id: userId,
+        local_date,
+        ambient_heat_high:
+          patch.ambient_heat_high ?? rrsmRows[local_date]?.ambient_heat_high ?? null,
+        hot_drinks_late: patch.hot_drinks_late ?? rrsmRows[local_date]?.hot_drinks_late ?? null,
+        heavy_food_late: patch.heavy_food_late ?? rrsmRows[local_date]?.heavy_food_late ?? null,
+        intense_thinking_late:
+          patch.intense_thinking_late ?? rrsmRows[local_date]?.intense_thinking_late ?? null,
+        visualization_attempted:
+          patch.visualization_attempted ?? rrsmRows[local_date]?.visualization_attempted ?? null,
+        fought_wakefulness:
+          patch.fought_wakefulness ?? rrsmRows[local_date]?.fought_wakefulness ?? null,
+        cold_shower_evening:
+          patch.cold_shower_evening ?? rrsmRows[local_date]?.cold_shower_evening ?? null,
+        ice_water_evening:
+          patch.ice_water_evening ?? rrsmRows[local_date]?.ice_water_evening ?? null,
+        notes: patch.notes ?? rrsmRows[local_date]?.notes ?? null,
+      };
+
+      const { error } = await supabase
+        .from("daily_rrsm_factors")
+        .upsert(payload as any, { onConflict: "user_id,local_date" });
+
+      if (error) throw error;
+      setStatus("Ready.");
+    } catch (e: any) {
+      setStatus(e?.message ?? "Save failed.");
+    }
+  }
+
   function checkbox(
     date: string,
     key: keyof Pick<
@@ -168,6 +269,47 @@ export default function HabitsPage() {
     const r = rows[date];
     const checked = r?.[key] === true;
 
+
+  function rrsmCheckbox(
+    date: string,
+    key: keyof Pick<
+      DailyRRSMFactorRow,
+      | "ambient_heat_high"
+      | "hot_drinks_late"
+      | "heavy_food_late"
+      | "intense_thinking_late"
+      | "visualization_attempted"
+      | "fought_wakefulness"
+      | "cold_shower_evening"
+      | "ice_water_evening"
+    >,
+    label: string
+  ) {
+    const r = rrsmRows[date];
+    const checked = r?.[key] === true;
+
+    return (
+      <label
+        key={String(key)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 0",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) =>
+            upsertRRSMField(date, { [key]: e.target.checked } as any)
+          }
+        />
+        <span>{label}</span>
+      </label>
+    );
+  }
     return (
       <label
         key={String(key)}
@@ -252,6 +394,23 @@ export default function HabitsPage() {
               {checkbox(d, "alcohol", "Alcohol")}
               {checkbox(d, "exercise", "Exercise")}
               {checkbox(d, "screens_last_hour", "Screens last hour")}
+
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 800, opacity: 0.9 }}>
+                  RRSM Factors (Part 2)
+                </summary>
+
+                <div style={{ marginTop: 10 }}>
+                  {rrsmCheckbox(d, "ambient_heat_high", "Hot day / ambient heat high")}
+                  {rrsmCheckbox(d, "hot_drinks_late", "Hot drinks late")}
+                  {rrsmCheckbox(d, "heavy_food_late", "Heavy food late")}
+                  {rrsmCheckbox(d, "intense_thinking_late", "Intense thinking late")}
+                  {rrsmCheckbox(d, "visualization_attempted", "Tried visualization at night")}
+                  {rrsmCheckbox(d, "fought_wakefulness", "Fought wakefulness (forced sleep)")}
+                  {rrsmCheckbox(d, "cold_shower_evening", "Cold shower evening")}
+                  {rrsmCheckbox(d, "ice_water_evening", "Ice water evening")}
+                </div>
+              </details>
             </div>
           ))}
         </div>
