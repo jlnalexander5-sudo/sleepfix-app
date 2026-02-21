@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import RRSMInsightCard from "@/components/RRSMInsightCard";
+import RRSMInsightCard, { type RRSMInsight } from "@/components/RRSMInsightCard";
 import dynamic from "next/dynamic";
-const DatePicker = dynamic(() => import("react-datepicker").then((m) => m.default as any), { ssr: false }) as any;
 import "react-datepicker/dist/react-datepicker.css";
+const DatePicker = dynamic(() => import("react-datepicker").then((m) => m.default as any), { ssr: false }) as any;
 
 type NightMetricsRow = {
   night_id: string;
@@ -88,6 +88,7 @@ const [sleepEnd, setSleepEnd] = useState<string>("");
   // latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
+const [rrsmInsight, setRrsmInsight] = useState<RRSMInsight | null>(null);
 
   // driver confirmation
   const [primaryDriver, setPrimaryDriver] = useState<string>("Nothing / no clear driver");
@@ -455,7 +456,6 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
           )}
         </div>
       </details>
-      </div>
 
 
     </div>
