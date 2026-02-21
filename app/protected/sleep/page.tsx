@@ -427,21 +427,34 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
 
       <hr style={{ margin: "28px 0" }} />
 
-      <h2 style={{ fontSize: 18, fontWeight: 800 }}>Last 7 nights (metrics view)</h2>
-      <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 13, opacity: 0.95 }}>
-        {metrics.length === 0 ? (
-          <div>No rows yet.</div>
-        ) : (
-          metrics.map((m) => (
-            <div key={m.night_id} style={{ padding: "8px 0", borderBottom: "1px solid #333" }}>
-              <div>night_id: {m.night_id}</div>
-              <div>duration_min: {String(m.duration_min)}</div>
-              <div>latency_min: {String(m.latency_min)}</div>
-              <div>wakeups_count: {String(m.wakeups_count)}</div>
-              <div>quality_num: {String(m.quality_num)}</div>
-            </div>
-          ))
-        )}
+     <h2 style={{ fontSize: 18, fontWeight: 900 }}>Your RRSM Insight</h2>
+
+      <div style={{ marginTop: 12 }}>
+        <RRSMInsightCard insight={rrsmInsight} />
+      </div>
+
+      {/* Optional: keep a hidden debug section instead of showing raw metrics to users */}
+      <details style={{ marginTop: 14, opacity: 0.9 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 800 }}>
+          Debug (show raw sleep metrics)
+        </summary>
+
+        <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 13 }}>
+          {metrics.length === 0 ? (
+            <div>No rows yet.</div>
+          ) : (
+            metrics.map((m) => (
+              <div key={m.night_id} style={{ padding: "8px 0", borderBottom: "1px solid #333" }}>
+                <div>night_id: {m.night_id}</div>
+                <div>duration_min: {String(m.duration_min)}</div>
+                <div>latency_min: {String(m.latency_min)}</div>
+                <div>wakeups_count: {String(m.wakeups_count)}</div>
+                <div>quality_num: {String(m.quality_num)}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </details>
       </div>
 
 
