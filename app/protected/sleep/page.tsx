@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import RRSMInsightCard, { type RRSMInsight } from "@/components/RRSMInsightCard";
 import dynamic from "next/dynamic";
 import "react-datepicker/dist/react-datepicker.css";
@@ -65,7 +65,9 @@ function parseISODate(yyyyMmDd: string): Date {
 
 function formatISODate(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}function toLocalDateYYYYMMDD(d: Date) {
+}
+
+function toLocalDateYYYYMMDD(d: Date) {
   // local date (browser timezone)
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
@@ -88,8 +90,9 @@ const [sleepEnd, setSleepEnd] = useState<string>("");
   // latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
-const [rrsmInsight, setRrsmInsight] = useState<RRSMInsight | null>(null);
-  const [rrsmInsightLoading, setRrsmInsightLoading] = useState(false);
+  const [rrsmInsight, setRrsmInsight] = useState<RRSMInsight | null>(null);
+  // Start true so we don't render the card with null on first paint.
+  const [rrsmInsightLoading, setRrsmInsightLoading] = useState(true);
   const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
 
 
@@ -470,9 +473,11 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
           <div style={{ color: "tomato", fontWeight: 700 }}>
             {rrsmInsightError}
           </div>
-        ) : (
-          <RRSMInsightCard insight={rrsmInsight} />
-        )}
+	        ) : rrsmInsight ? (
+	          <RRSMInsightCard insight={rrsmInsight} />
+	        ) : (
+	          <div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
+	        )}
       </div>
 
       {/* Optional: keep a hidden debug section instead of showing raw metrics to users */}
