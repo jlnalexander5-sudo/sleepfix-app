@@ -239,7 +239,6 @@ setSleepEndTime(end.toISOString().slice(11, 16));
      const data = await res.json();
 	 const firstInsight = data?.insights?.[0] ?? null;
 	 setRrsmInsight(firstInsight);
-      setRrsmInsight(json);
     } catch (e: any) {
       setRrsmInsight(null);
       setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
