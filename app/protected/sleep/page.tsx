@@ -89,6 +89,9 @@ const [sleepEnd, setSleepEnd] = useState<string>("");
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
 const [rrsmInsight, setRrsmInsight] = useState<RRSMInsight | null>(null);
+  const [rrsmInsightLoading, setRrsmInsightLoading] = useState(false);
+  const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
+
 
   // driver confirmation
   const [primaryDriver, setPrimaryDriver] = useState<string>("Nothing / no clear driver");
@@ -157,6 +160,7 @@ setSleepEnd(end.toISOString().slice(0, 16));
 setSleepEndDate(end.toISOString().slice(0, 10));
 setSleepEndTime(end.toISOString().slice(11, 16));
     loadUserAndMetrics();
+    fetchRrsmInsight();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -203,10 +207,39 @@ setSleepEndTime(end.toISOString().slice(11, 16));
       setLatestNightId(newNightId);
       setMsg("Night saved ✅");
       await loadUserAndMetrics();
+      await fetchRrsmInsight();
     } catch (e: any) {
       setMsg(`Save night failed ❌ ${e?.message ?? String(e)}`);
     } finally {
       setSavingNight(false);
+    }
+  }
+
+  
+  async function fetchRrsmInsight() {
+    try {
+      setRrsmInsightLoading(true);
+      setRrsmInsightError(null);
+
+      const res = await fetch("/api/rrsm/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Keep body optional; include days so it's explicit.
+        body: JSON.stringify({ days: 7 }),
+      });
+
+      if (!res.ok) {
+        const raw = await res.text();
+        throw new Error(`RRSM analyze failed (${res.status}): ${raw || res.statusText}`);
+      }
+
+      const json = (await res.json()) as RRSMInsight;
+      setRrsmInsight(json);
+    } catch (e: any) {
+      setRrsmInsight(null);
+      setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
+    } finally {
+      setRrsmInsightLoading(false);
     }
   }
 
@@ -431,7 +464,15 @@ const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
      <h2 style={{ fontSize: 18, fontWeight: 900 }}>Your RRSM Insight</h2>
 
       <div style={{ marginTop: 12 }}>
-        <RRSMInsightCard insight={rrsmInsight} />
+        {rrsmInsightLoading ? (
+          <div style={{ opacity: 0.85 }}>Analyzing last 7 days…</div>
+        ) : rrsmInsightError ? (
+          <div style={{ color: "tomato", fontWeight: 700 }}>
+            {rrsmInsightError}
+          </div>
+        ) : (
+          <RRSMInsightCard insight={rrsmInsight} />
+        )}
       </div>
 
       {/* Optional: keep a hidden debug section instead of showing raw metrics to users */}
