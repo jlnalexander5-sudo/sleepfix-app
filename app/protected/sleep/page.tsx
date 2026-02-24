@@ -2,79 +2,35 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import RRSMInsightCard, { type RRSMInsight } from "@/components/RRSMInsightCard";
-import dynamic from "next/dynamic";
-import "react-datepicker/dist/react-datepicker.css";
-const DatePicker = dynamic(() => import("react-datepicker").then((m) => m.default as any), { ssr: false }) as any;
+import DatePicker from "@/components/date-picker";
+import TimePicker from "@/components/time-picker";
+import { RRSMInsightCard } from "@/components/RRSMInsightCard";
 
 type NightMetricsRow = {
-  night_id: string;
+  id: string;
   user_id: string;
   created_at: string;
-  duration_min: number | null;
-  latency_min: number | null;
-  wakeups_count: number | null;
-  quality_num: number | null;
-};
-
-type SleepNightInsert = {
-  user_id: string;
-  sleep_start: string; // ISO
-  sleep_end: string;   // ISO
-  local_date: string;  // YYYY-MM-DD
-  notes?: string | null;
-};
-
-type NightUserDriversUpsert = {
-  night_id: string;
-  user_id: string;
+  sleep_start: string;
+  sleep_end: string;
   primary_driver: string | null;
   secondary_driver: string | null;
+  notes: string | null;
 };
 
-const DRIVER_OPTIONS: string[] = [
-  "Nothing / no clear driver",
-  "Noise / environment",
-  "Stress / racing mind",
-  "Late caffeine",
-  "Alcohol",
-  "Late meal / heavy meal",
-  "Too much screen time",
-  "Late exercise",
-  "Pain / discomfort",
-  "Temperature (too hot/cold)",
-  "Light exposure",
-  "Travel / jet lag",
-  "Illness / congestion",
-  "Medication / supplements",
-  "Partner disturbance",
-  "Pets",
-  "Bathroom trips",
-  "Nightmares / vivid dreams",
-];
+type RRSMInsight = {
+  domain: string;
+  title: string;
+  why: string[];
+  actions: string[];
+  confidence: "low" | "med" | "high";
+};
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-function parseISODate(yyyyMmDd: string): Date {
-  // yyyy-mm-dd -> local Date
-  const [y, m, d] = yyyyMmDd.split("-").map((v) => parseInt(v, 10));
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-function formatISODate(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-function toLocalDateYYYYMMDD(d: Date) {
-  // local date (browser timezone)
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function toIsoStringLocal(d: Date) {
+  const tzOffset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 19);
 }
 
 function toIsoWithOffset(d: Date) {
-  // keep the user's local time but send ISO string including offset (best effort)
-  // JS Date -> toISOString() is UTC; we want the actual moment, so ISO UTC is fine.
   return d.toISOString();
 }
 
@@ -85,195 +41,99 @@ export default function SleepPage() {
 
   // night form
   const [sleepStart, setSleepStart] = useState<string>("");
-const [sleepEnd, setSleepEnd] = useState<string>("");
+  const [sleepEnd, setSleepEnd] = useState<string>("");
+  const [sleepStartDate, setSleepStartDate] = useState<string>("");
+  const [sleepStartTime, setSleepStartTime] = useState<string>("");
+  const [sleepEndDate, setSleepEndDate] = useState<string>("");
+  const [sleepEndTime, setSleepEndTime] = useState<string>("");
 
   // latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
+
+  // RRSM insight
   const [rrsmInsight, setRrsmInsight] = useState<RRSMInsight | null>(null);
-  // Start true so we don't render the card with null on first paint.
   const [rrsmInsightLoading, setRrsmInsightLoading] = useState(true);
   const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
-
 
   // driver confirmation
   const [primaryDriver, setPrimaryDriver] = useState<string>("Nothing / no clear driver");
   const [secondaryDriver, setSecondaryDriver] = useState<string>("Nothing / no clear driver");
   const [userNotes, setUserNotes] = useState<string>("");
 
-  const [savingNight, setSavingNight] = useState(false);
-  const [savingDrivers, setSavingDrivers] = useState(false);
+  // optional status message
   const [msg, setMsg] = useState<string>("");
 
-  async function loadUserAndMetrics() {
-    setMsg("");
-    const { data, error } = await supabase.auth.getUser();
-    if (error) {
-      setMsg(`Auth error: ${error.message}`);
-      return;
+  const [mounted, setMounted] = useState(false);
+
+  async function loadUserAndMetrics(): Promise<string | null> {
+    const { data: auth, error: authErr } = await supabase.auth.getUser();
+    if (authErr) {
+      setMsg(authErr.message);
+      setUserId(null);
+      return null;
     }
-    const uid = data.user?.id ?? null;
+    const uid = auth?.user?.id ?? null;
     setUserId(uid);
 
     if (!uid) {
-      setMsg("Not signed in.");
-      return;
+      setMetrics([]);
+      setLatestNightId(null);
+      return null;
     }
 
-    // load last 7 nights from the view (if present)
-    const { data: rows, error: mErr } = await supabase
+    const { data, error } = await supabase
       .from("v_sleep_night_metrics")
-      .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false })
-      .limit(7);
+      .select("*")
+      .order("sleep_start", { ascending: false })
+      .limit(20);
 
-    if (mErr) {
-      setMsg(`Metrics load error: ${mErr.message}`);
+    if (error) {
+      setMsg(error.message);
+      return uid;
+    }
+
+    const rows = (data ?? []) as NightMetricsRow[];
+    setMetrics(rows);
+    setLatestNightId(rows[0]?.id ?? null);
+
+    // prefill form with latest row if present
+    if (rows[0]) {
+      setPrimaryDriver(rows[0].primary_driver ?? "Nothing / no clear driver");
+      setSecondaryDriver(rows[0].secondary_driver ?? "Nothing / no clear driver");
+      setUserNotes(rows[0].notes ?? "");
+    }
+
+    return uid;
+  }
+
+  async function fetchRrsmInsight(uidArg?: string | null) {
+    const uid = uidArg ?? userId;
+
+    setRrsmInsightLoading(true);
+    setRrsmInsightError(null);
+
+    if (!uid) {
+      setRrsmInsight(null);
+      setRrsmInsightLoading(false);
       return;
     }
 
-    setMetrics((rows as NightMetricsRow[]) ?? []);
-    setLatestNightId((rows as NightMetricsRow[])?.[0]?.night_id ?? null);
-  }
-const [sleepStartDate, setSleepStartDate] = useState("");
-const [sleepStartTime, setSleepStartTime] = useState("");
-const [sleepEndDate, setSleepEndDate] = useState("");
-const [sleepEndTime, setSleepEndTime] = useState("");
-  const [mounted, setMounted] = useState(false);
-
-  // avoid prerender issues (DatePicker uses Date in props)
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-useEffect(() => {
-  let cancelled = false;
-
-  async function run() {
     try {
-      setRrsmInsightLoading(true);
-      setRrsmInsightError(null);
-
       const res = await fetch("/api/rrsm/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}), // keep empty for now
+        body: JSON.stringify({ userId: uid, days: 7 }),
       });
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || `RRSM failed (${res.status})`);
-
-      const data = JSON.parse(text) as { insights?: any[] };
-      const firstInsight = data?.insights?.[0] ?? null;
-
-      if (!cancelled) setRrsmInsight(firstInsight);
-    } catch (e: any) {
-      if (!cancelled) {
-        setRrsmInsight(null);
-        setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
-      }
-    } finally {
-      if (!cancelled) setRrsmInsightLoading(false);
-    }
-  }
-
-  run();
-  return () => {
-    cancelled = true;
-  };
-}, []);
-  useEffect(() => {
-    // set default datetime-local values on the client
-const start = new Date();
-start.setHours(22, 30, 0, 0);
-
-const end = new Date(start);
-end.setDate(end.getDate() + 1);
-end.setHours(7, 30, 0, 0);
-
-setSleepStart(start.toISOString().slice(0, 16));
-setSleepStartDate(start.toISOString().slice(0, 10));
-setSleepStartTime(start.toISOString().slice(11, 16));
-setSleepEnd(end.toISOString().slice(0, 16));
-setSleepEndDate(end.toISOString().slice(0, 10));
-setSleepEndTime(end.toISOString().slice(11, 16));
-    loadUserAndMetrics();
-    fetchRrsmInsight();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function saveNight() {
-    setMsg("");
-    if (!userId) {
-      setMsg("Not signed in.");
-      return;
-    }
-
-    setSavingNight(true);
-    try {
-      // datetime-local gives "YYYY-MM-DDTHH:mm"
-      const startLocal = new Date(sleepStart);
-      const endLocal = new Date(sleepEnd);
-
-      if (Number.isNaN(startLocal.getTime()) || Number.isNaN(endLocal.getTime())) {
-        throw new Error("Invalid date/time.");
-      }
-      if (endLocal <= startLocal) {
-        throw new Error("Sleep End must be after Sleep Start.");
-      }
-
-        const payload = {
-        user_id: userId,
-        sleep_start: toIsoWithOffset(startLocal),
-        sleep_end: toIsoWithOffset(endLocal),
-        // IMPORTANT: your table requires local_date NOT NULL
-        local_date: toLocalDateYYYYMMDD(endLocal),
-        notes: userNotes?.trim() || null,
-      };
-
-      const { data, error } = await supabase
-        .from("sleep_nights")
-        .insert(payload)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      const newNightId = (data as any)?.id as string | undefined;
-      if (!newNightId) throw new Error("Insert succeeded but no night id returned.");
-
-      setLatestNightId(newNightId);
-      setMsg("Night saved ✅");
-      await loadUserAndMetrics();
-      await fetchRrsmInsight();
-    } catch (e: any) {
-      setMsg(`Save night failed ❌ ${e?.message ?? String(e)}`);
-    } finally {
-      setSavingNight(false);
-    }
-  }
-
-  
-  async function fetchRrsmInsight() {
-    try {
-      setRrsmInsightLoading(true);
-      setRrsmInsightError(null);
-
-      const res = await fetch("/api/rrsm/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // Keep body optional; include days so it's explicit.
-        body: JSON.stringify({ days: 7 }),
-      });
-
       if (!res.ok) {
-        const raw = await res.text();
-        throw new Error(`RRSM analyze failed (${res.status}): ${raw || res.statusText}`);
+        throw new Error(text || `RRSM analyze failed (${res.status})`);
       }
 
-     const data = await res.json();
-	 const firstInsight = data?.insights?.[0] ?? null;
-	 setRrsmInsight(firstInsight);
+      const data = JSON.parse(text) as { insights?: RRSMInsight[] };
+      const firstInsight = data?.insights?.[0] ?? null;
+      setRrsmInsight(firstInsight);
     } catch (e: any) {
       setRrsmInsight(null);
       setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
@@ -282,264 +142,214 @@ setSleepEndTime(end.toISOString().slice(11, 16));
     }
   }
 
+  // avoid prerender issues (DatePicker uses Date in props)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    // set default datetime-local values on the client
+    const start = new Date();
+    start.setHours(22, 30, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    end.setHours(7, 30, 0, 0);
+
+    setSleepStart(start.toISOString().slice(0, 16));
+    setSleepStartDate(start.toISOString().slice(0, 10));
+    setSleepStartTime(start.toISOString().slice(11, 16));
+    setSleepEnd(end.toISOString().slice(0, 16));
+    setSleepEndDate(end.toISOString().slice(0, 10));
+    setSleepEndTime(end.toISOString().slice(11, 16));
+  }, []);
+
+  // initial load
+  useEffect(() => {
+    (async () => {
+      const uid = await loadUserAndMetrics();
+      await fetchRrsmInsight(uid);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function saveNight() {
+    setMsg("");
+    if (!userId) {
+      setMsg("Not signed in");
+      return;
+    }
+
+    const start = new Date(`${sleepStartDate}T${sleepStartTime}:00`);
+    const end = new Date(`${sleepEndDate}T${sleepEndTime}:00`);
+
+    const sleep_start = toIsoStringLocal(start);
+    const sleep_end = toIsoStringLocal(end);
+
+    const { data, error } = await supabase
+      .from("v_sleep_night_metrics")
+      .insert([
+        {
+          user_id: userId,
+          sleep_start,
+          sleep_end,
+          primary_driver: primaryDriver,
+          secondary_driver: secondaryDriver,
+          notes: userNotes,
+        },
+      ])
+      .select();
+
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+
+    const newId = (data?.[0] as any)?.id as string | undefined;
+    setLatestNightId(newId ?? null);
+
+    setMsg("Saved ✅");
+
+    const uid = await loadUserAndMetrics();
+    await fetchRrsmInsight(uid);
+  }
+
   async function saveAll() {
-  setMsg("");
-  if (!userId) {
-    setMsg("Not signed in.");
-    return;
+    await saveNight();
   }
 
-  setSavingNight(true);
-  setSavingDrivers(true);
+  if (!mounted) return null;
 
-  try {
-    // --- 1) Save Night (includes notes) ---
-   const startLocal = new Date(`${sleepStartDate}T${sleepStartTime}`);
-const endLocal = new Date(`${sleepEndDate}T${sleepEndTime}`);
-
-    if (Number.isNaN(startLocal.getTime()) || Number.isNaN(endLocal.getTime())) {
-      throw new Error("Invalid date/time.");
-    }
-    if (endLocal <= startLocal) {
-      throw new Error("Sleep End must be after Sleep Start.");
-    }
-
-    const nightPayload = {
-      user_id: userId,
-      sleep_start: toIsoWithOffset(startLocal),
-      sleep_end: toIsoWithOffset(endLocal),
-      local_date: toLocalDateYYYYMMDD(endLocal),
-      notes: userNotes?.trim() || null,
-    };
-    console.log("SAVEALL userNotes raw:", JSON.stringify(userNotes));
-    console.log("SAVEALL userNotes trimmed:", JSON.stringify(userNotes.trim()));
-    console.log("SAVEALL nightPayload.notes:", JSON.stringify((userNotes.trim() || null)));
-
-    const { data: night, error: nightErr } = await supabase
-      .from("sleep_nights")
-      .insert(nightPayload)
-      .select("id, notes")
-      .single();
-
-   if (nightErr) throw nightErr;
-    console.log("INSERT returned night row:", night); // <-- add this line
-    const nightId = night.id;
-    setLatestNightId(nightId);
-
-    // --- 2) Save Drivers (upsert) ---
-    const driversPayload = {
-      night_id: nightId,
-      user_id: userId,
-      primary_driver: primaryDriver || null,
-      secondary_driver: secondaryDriver || null,
-    };
-
-    const { error: driversErr } = await supabase
-      .from("night_user_drivers")
-      .upsert(driversPayload, { onConflict: "night_id,user_id" });
-
-    if (driversErr) throw driversErr;
-
-    setMsg("Saved night + confirmation ✅");
-  } catch (e: any) {
-    setMsg(`Save failed: ${e?.message ?? "Unknown error"}`);
-  } finally {
-    setSavingNight(false);
-    setSavingDrivers(false);
-  }
-}
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 800 }}>Sleep</h1>
+    <div style={{ maxWidth: 820, margin: "0 auto", padding: 24 }}>
+      <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18 }}>Sleep</h1>
 
-      <style jsx global>{`
-        /* Make the date picker (calendar) BIGGER */
-        /* Bigger DatePicker popup (calendar) */
-        .react-datepicker { font-size: 1.05rem; }
-        .react-datepicker__header { font-size: 1.05rem; }
-        .react-datepicker__current-month, .react-datepicker-time__header { font-size: 1.05rem; }
-        .react-datepicker__day-name, .react-datepicker__day, .react-datepicker__time-name {
-          width: 2.4rem;
-          line-height: 2.4rem;
-          margin: 0.1rem;
-        }
-        .react-datepicker__navigation-icon::before {
-          border-width: 3px 3px 0 0;
-          height: 10px;
-          width: 10px;
-        }
+      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Sleep Start</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <DatePicker value={sleepStartDate} onChange={setSleepStartDate} />
+            <TimePicker value={sleepStartTime} onChange={setSleepStartTime} />
+          </div>
+        </div>
 
-        .react-datepicker { font-size: 16px; }
-        .react-datepicker__current-month,
-        .react-datepicker-time__header,
-        .react-datepicker-year-header { font-size: 18px; }
-        .react-datepicker__day-name,
-        .react-datepicker__day,
-        .react-datepicker__time-name { width: 2.2rem; line-height: 2.2rem; margin: 0.15rem; }
-        .react-datepicker__triangle { display: none; }
-        .react-datepicker-popper { z-index: 9999; }
-
-        /* Match your inputs */
-        .sleepfix-date-wrap { flex: 1; }
-        .sleepfix-date-input {
-          width: 100%;
-          padding: 16px;
-          font-size: 18px;
-          font-weight: 600;
-          border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.12);
-          background: rgba(255,255,255,0.08);
-          color: #fff;
-          box-sizing: border-box;
-        }
-        .sleepfix-date-input::placeholder { color: rgba(255,255,255,0.55); }
-      `}</style>
-
-      <div style={{ marginTop: 18 }}>
-      <label style={{ fontSize: 18, fontWeight: 700 }}>
-  Sleep Start
-</label>
-       <div style={{ display: "flex", gap: 12 }}>
-  
-              {mounted && (
-<DatePicker
-  selected={sleepStartDate ? parseISODate(sleepStartDate) : null}
-  onChange={(d: Date | null) => setSleepStartDate(d ? formatISODate(d) : "")}
-  dateFormat="dd/MM/yyyy"
-  className="sleepfix-date-input"
-          wrapperClassName="sleepfix-date-wrap"
-  placeholderText="Select date"
-/>
-              )}
-  <input
-    type="time"
-    value={sleepStartTime}
-    onChange={(e) => setSleepStartTime(e.target.value)}
-    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
-  />
-</div>
-   </div>
-      <div style={{ marginTop: 18 }}>
-        <label style={{ fontSize: 18, fontWeight: 700 }}>
-  Sleep End
-</label>
-      <div style={{ display: "flex", gap: 12 }}>
-  
-              {mounted && (
-<DatePicker
-  selected={sleepEndDate ? parseISODate(sleepEndDate) : null}
-  onChange={(d: Date | null) => setSleepEndDate(d ? formatISODate(d) : "")}
-  dateFormat="dd/MM/yyyy"
-  className="sleepfix-date-input"
-          wrapperClassName="sleepfix-date-wrap"
-  placeholderText="Select date"
-/>
-              )}
-  <input
-    type="time"
-    value={sleepEndTime}
-    onChange={(e) => setSleepEndTime(e.target.value)}
-    style={{ flex: 1, padding: 16, fontSize: 18, fontWeight: 600, borderRadius: 8 }}
-  />
-</div>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Sleep End</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <DatePicker value={sleepEndDate} onChange={setSleepEndDate} />
+            <TimePicker value={sleepEndTime} onChange={setSleepEndTime} />
+          </div>
+        </div>
       </div>
 
       <hr style={{ margin: "28px 0" }} />
 
-      <h2 style={{ fontSize: 18, fontWeight: 800 }}>What do YOU think affected tonight?</h2>
+      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+        What do YOU think affected tonight?
+      </div>
 
-      <div style={{ marginTop: 14 }}>
-        <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Primary driver</label>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Primary driver</div>
         <select
           value={primaryDriver}
           onChange={(e) => setPrimaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 10 }}
+          style={{ width: "100%", padding: 10, borderRadius: 8 }}
         >
-          {DRIVER_OPTIONS.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
+          <option>Nothing / no clear driver</option>
+          <option>Caffeine / stimulants</option>
+          <option>Late meal</option>
+          <option>Alcohol</option>
+          <option>Stress / rumination</option>
+          <option>Noise / light</option>
+          <option>Too hot / too cold</option>
+          <option>Late screen time</option>
+          <option>Exercise timing</option>
         </select>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Secondary driver</label>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Secondary driver</div>
         <select
           value={secondaryDriver}
           onChange={(e) => setSecondaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 10 }}
+          style={{ width: "100%", padding: 10, borderRadius: 8 }}
         >
-          {DRIVER_OPTIONS.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
+          <option>Nothing / no clear driver</option>
+          <option>Caffeine / stimulants</option>
+          <option>Late meal</option>
+          <option>Alcohol</option>
+          <option>Stress / rumination</option>
+          <option>Noise / light</option>
+          <option>Too hot / too cold</option>
+          <option>Late screen time</option>
+          <option>Exercise timing</option>
         </select>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Notes (optional)</label>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Notes (optional)</div>
         <textarea
           value={userNotes}
           onChange={(e) => setUserNotes(e.target.value)}
           placeholder="e.g., neighbor noise until midnight, but slept well after"
-          style={{ width: "100%", padding: 10, minHeight: 90 }}
+          rows={4}
+          style={{ width: "100%", padding: 10, borderRadius: 8 }}
         />
       </div>
 
-     <button
-  onClick={saveAll}
-  disabled={savingNight || savingDrivers}
-  style={{ width: "100%", padding: 14, fontWeight: 900, marginTop: 18 }}
->
-  {(savingNight || savingDrivers) ? "Saving..." : "Save (Night + Notes + Confirmation)"}
-</button>
+      <button
+        onClick={saveAll}
+        style={{
+          padding: "10px 14px",
+          borderRadius: 10,
+          fontWeight: 800,
+          cursor: "pointer",
+        }}
+      >
+        Save
+      </button>
 
       {msg && <div style={{ marginTop: 12, fontWeight: 700 }}>{msg}</div>}
 
       <hr style={{ margin: "28px 0" }} />
 
-     <h2 style={{ fontSize: 18, fontWeight: 900 }}>Your RRSM Insight</h2>
+      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>RRSM (last 7 days)</div>
 
       <div style={{ marginTop: 12 }}>
         {rrsmInsightLoading ? (
           <div style={{ opacity: 0.85 }}>Analyzing last 7 days…</div>
         ) : rrsmInsightError ? (
-          <div style={{ color: "tomato", fontWeight: 700 }}>
-            {rrsmInsightError}
-          </div>
-	        ) : rrsmInsight ? (
-	          <RRSMInsightCard insight={rrsmInsight} />
-	        ) : (
-	          <div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
-	        )}
+          <div style={{ color: "tomato", fontWeight: 700 }}>{rrsmInsightError}</div>
+        ) : rrsmInsight ? (
+          <RRSMInsightCard insight={rrsmInsight} />
+        ) : (
+          <div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
+        )}
       </div>
 
       {/* Optional: keep a hidden debug section instead of showing raw metrics to users */}
       <details style={{ marginTop: 14, opacity: 0.9 }}>
-        <summary style={{ cursor: "pointer", fontWeight: 800 }}>
-          Debug (show raw sleep metrics)
-        </summary>
+        <summary style={{ cursor: "pointer", fontWeight: 800 }}>Debug (show raw sleep metrics)</summary>
 
         <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 13 }}>
           {metrics.length === 0 ? (
             <div>No rows yet.</div>
           ) : (
-            metrics.map((m) => (
-              <div key={m.night_id} style={{ padding: "8px 0", borderBottom: "1px solid #333" }}>
-                <div>night_id: {m.night_id}</div>
-                <div>duration_min: {String(m.duration_min)}</div>
-                <div>latency_min: {String(m.latency_min)}</div>
-                <div>wakeups_count: {String(m.wakeups_count)}</div>
-                <div>quality_num: {String(m.quality_num)}</div>
+            metrics.slice(0, 5).map((m) => (
+              <div key={m.id} style={{ marginBottom: 10 }}>
+                <div>
+                  <b>{m.id}</b>
+                </div>
+                <div>start: {m.sleep_start}</div>
+                <div>end: {m.sleep_end}</div>
+                <div>primary: {m.primary_driver ?? "-"}</div>
+                <div>secondary: {m.secondary_driver ?? "-"}</div>
+                <div>notes: {m.notes ?? "-"}</div>
               </div>
             ))
           )}
         </div>
       </details>
-
-
     </div>
   );
 }
