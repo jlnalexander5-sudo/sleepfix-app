@@ -1,37 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+/* eslint-disable react/no-unescaped-entities */
+
+import React, { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import DatePicker from "@/components/date-picker";
-import TimePicker from "@/components/time-picker";
-import { RRSMInsightCard } from "@/components/RRSMInsightCard";
+import RRSMInsightCard, { RRSMInsight } from "@/components/RRSMInsightCard";
+
+const DatePicker = dynamic(
+  () => import("react-datepicker").then((m) => m.default as any),
+  { ssr: false }
+) as any;
 
 type NightMetricsRow = {
   id: string;
   user_id: string;
   created_at: string;
-  sleep_start: string;
-  sleep_end: string;
-  primary_driver: string | null;
-  secondary_driver: string | null;
-  notes: string | null;
+  night_id: string;
+  metric_key: string;
+  metric_value: number | string | null;
 };
 
-type RRSMInsight = {
-  domain: string;
-  title: string;
-  why: string[];
-  actions: string[];
-  confidence: "low" | "med" | "high";
-};
-
-function toIsoStringLocal(d: Date) {
-  const tzOffset = d.getTimezoneOffset() * 60000;
-  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 19);
+function toIsoLocalDate(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-function toIsoWithOffset(d: Date) {
-  return d.toISOString();
+function toLocalTimeHHMM(d: Date) {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function parseLocalDateTime(dateStr: string, timeStr: string) {
+  // dateStr: "YYYY-MM-DD", timeStr: "HH:MM"
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const [hh, mm] = timeStr.split(":").map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0, 0, 0);
 }
 
 export default function SleepPage() {
@@ -39,15 +47,15 @@ export default function SleepPage() {
 
   const [userId, setUserId] = useState<string | null>(null);
 
-  // night form
-  const [sleepStart, setSleepStart] = useState<string>("");
-  const [sleepEnd, setSleepEnd] = useState<string>("");
+  // Night form inputs
   const [sleepStartDate, setSleepStartDate] = useState<string>("");
   const [sleepStartTime, setSleepStartTime] = useState<string>("");
   const [sleepEndDate, setSleepEndDate] = useState<string>("");
   const [sleepEndTime, setSleepEndTime] = useState<string>("");
 
-  // latest / metrics
+  const [mounted, setMounted] = useState(false);
+
+  // Latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
 
@@ -56,268 +64,318 @@ export default function SleepPage() {
   const [rrsmInsightLoading, setRrsmInsightLoading] = useState(true);
   const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
 
-  // driver confirmation
+  // Driver confirmation (simple fields for now)
   const [primaryDriver, setPrimaryDriver] = useState<string>("Nothing / no clear driver");
   const [secondaryDriver, setSecondaryDriver] = useState<string>("Nothing / no clear driver");
   const [userNotes, setUserNotes] = useState<string>("");
 
-  // optional status message
-  const [msg, setMsg] = useState<string>("");
-
-  const [mounted, setMounted] = useState(false);
-
-  async function loadUserAndMetrics(): Promise<string | null> {
-    const { data: auth, error: authErr } = await supabase.auth.getUser();
-    if (authErr) {
-      setMsg(authErr.message);
-      setUserId(null);
-      return null;
-    }
-    const uid = auth?.user?.id ?? null;
-    setUserId(uid);
-
-    if (!uid) {
-      setMetrics([]);
-      setLatestNightId(null);
-      return null;
-    }
-
-    const { data, error } = await supabase
-      .from("v_sleep_night_metrics")
-      .select("*")
-      .order("sleep_start", { ascending: false })
-      .limit(20);
-
-    if (error) {
-      setMsg(error.message);
-      return uid;
-    }
-
-    const rows = (data ?? []) as NightMetricsRow[];
-    setMetrics(rows);
-    setLatestNightId(rows[0]?.id ?? null);
-
-    // prefill form with latest row if present
-    if (rows[0]) {
-      setPrimaryDriver(rows[0].primary_driver ?? "Nothing / no clear driver");
-      setSecondaryDriver(rows[0].secondary_driver ?? "Nothing / no clear driver");
-      setUserNotes(rows[0].notes ?? "");
-    }
-
-    return uid;
-  }
-
-  async function fetchRrsmInsight(uidArg?: string | null) {
-    const uid = uidArg ?? userId;
-
-    setRrsmInsightLoading(true);
-    setRrsmInsightError(null);
-
-    if (!uid) {
-      setRrsmInsight(null);
-      setRrsmInsightLoading(false);
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/rrsm/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: uid, days: 7 }),
-      });
-
-      const text = await res.text();
-      if (!res.ok) {
-        throw new Error(text || `RRSM analyze failed (${res.status})`);
-      }
-
-      const data = JSON.parse(text) as { insights?: RRSMInsight[] };
-      const firstInsight = data?.insights?.[0] ?? null;
-      setRrsmInsight(firstInsight);
-    } catch (e: any) {
-      setRrsmInsight(null);
-      setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
-    } finally {
-      setRrsmInsightLoading(false);
-    }
-  }
-
-  // avoid prerender issues (DatePicker uses Date in props)
+  // Avoid prerender issues (DatePicker uses Date in props)
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Default datetime-local values on client
   useEffect(() => {
-    // set default datetime-local values on the client
     const start = new Date();
-    start.setHours(22, 30, 0, 0);
+    start.setHours(23, 30, 0, 0);
 
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
-    end.setHours(7, 30, 0, 0);
+    end.setHours(20, 30, 0, 0);
 
-    setSleepStart(start.toISOString().slice(0, 16));
-    setSleepStartDate(start.toISOString().slice(0, 10));
-    setSleepStartTime(start.toISOString().slice(11, 16));
-    setSleepEnd(end.toISOString().slice(0, 16));
-    setSleepEndDate(end.toISOString().slice(0, 10));
-    setSleepEndTime(end.toISOString().slice(11, 16));
+    setSleepStartDate(toIsoLocalDate(start));
+    setSleepStartTime(toLocalTimeHHMM(start));
+    setSleepEndDate(toIsoLocalDate(end));
+    setSleepEndTime(toLocalTimeHHMM(end));
   }, []);
 
-  // initial load
+  // Get user
   useEffect(() => {
     (async () => {
-      const uid = await loadUserAndMetrics();
-      await fetchRrsmInsight(uid);
+      const { data } = await supabase.auth.getUser();
+      setUserId(data?.user?.id ?? null);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [supabase]);
+
+  // Load latest night + metrics
+  useEffect(() => {
+    if (!userId) return;
+
+    (async () => {
+      // Latest night id
+      const { data: nightRows, error: nightErr } = await supabase
+        .from("sleep_nights")
+        .select("id, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (nightErr) {
+        setLatestNightId(null);
+        setMetrics([]);
+        return;
+      }
+
+      const nightId = nightRows?.[0]?.id ?? null;
+      setLatestNightId(nightId);
+
+      if (!nightId) {
+        setMetrics([]);
+        return;
+      }
+
+      const { data: metricRows, error: metricsErr } = await supabase
+        .from("v_sleep_night_metrics")
+        .select("*")
+        .eq("night_id", nightId)
+        .order("created_at", { ascending: false });
+
+      if (metricsErr) {
+        setMetrics([]);
+        return;
+      }
+
+      setMetrics((metricRows ?? []) as NightMetricsRow[]);
+    })();
+  }, [supabase, userId]);
+
+  // Fetch RRSM insight from API (POST only)
+  useEffect(() => {
+    if (!userId) return;
+
+    (async () => {
+      setRrsmInsightLoading(true);
+      setRrsmInsightError(null);
+
+      try {
+        const res = await fetch("/api/rrsm/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days: 7 }),
+        });
+
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
+        }
+
+        const data = (await res.json()) as { insights?: RRSMInsight[] };
+        const firstInsight = data?.insights?.[0] ?? null;
+        setRrsmInsight(firstInsight);
+      } catch (e: any) {
+        setRrsmInsight(null);
+        setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
+      } finally {
+        setRrsmInsightLoading(false);
+      }
+    })();
+  }, [userId]);
 
   async function saveNight() {
-    setMsg("");
-    if (!userId) {
-      setMsg("Not signed in");
-      return;
-    }
+    if (!userId) return;
 
-    const start = new Date(`${sleepStartDate}T${sleepStartTime}:00`);
-    const end = new Date(`${sleepEndDate}T${sleepEndTime}:00`);
+    const start = parseLocalDateTime(sleepStartDate, sleepStartTime);
+    const end = parseLocalDateTime(sleepEndDate, sleepEndTime);
 
-    const sleep_start = toIsoStringLocal(start);
-    const sleep_end = toIsoStringLocal(end);
-
-    const { data, error } = await supabase
-      .from("v_sleep_night_metrics")
-      .insert([
-        {
-          user_id: userId,
-          sleep_start,
-          sleep_end,
-          primary_driver: primaryDriver,
-          secondary_driver: secondaryDriver,
-          notes: userNotes,
-        },
-      ])
-      .select();
+    const { data: inserted, error } = await supabase
+      .from("sleep_nights")
+      .insert({
+        user_id: userId,
+        sleep_start: start.toISOString(),
+        sleep_end: end.toISOString(),
+        primary_driver: primaryDriver,
+        secondary_driver: secondaryDriver,
+        notes: userNotes,
+      })
+      .select("id")
+      .single();
 
     if (error) {
-      setMsg(error.message);
+      alert(error.message);
       return;
     }
 
-    const newId = (data?.[0] as any)?.id as string | undefined;
-    setLatestNightId(newId ?? null);
+    // reload latest night + metrics
+    const newId = inserted?.id ?? null;
+    setLatestNightId(newId);
+    if (newId) {
+      const { data: metricRows } = await supabase
+        .from("v_sleep_night_metrics")
+        .select("*")
+        .eq("night_id", newId)
+        .order("created_at", { ascending: false });
 
-    setMsg("Saved ✅");
-
-    const uid = await loadUserAndMetrics();
-    await fetchRrsmInsight(uid);
-  }
-
-  async function saveAll() {
-    await saveNight();
+      setMetrics((metricRows ?? []) as NightMetricsRow[]);
+    }
   }
 
   if (!mounted) return null;
 
+  const startDateObj = sleepStartDate ? new Date(`${sleepStartDate}T00:00:00`) : new Date();
+  const endDateObj = sleepEndDate ? new Date(`${sleepEndDate}T00:00:00`) : new Date();
+
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto", padding: 24 }}>
+    <div style={{ maxWidth: 920, margin: "0 auto", padding: "24px 18px" }}>
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18 }}>Sleep</h1>
 
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Sleep Start</div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <DatePicker value={sleepStartDate} onChange={setSleepStartDate} />
-            <TimePicker value={sleepStartTime} onChange={setSleepStartTime} />
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep Start</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
+              <DatePicker
+                selected={startDateObj}
+                onChange={(d: Date) => setSleepStartDate(toIsoLocalDate(d))}
+                dateFormat="dd/MM/yyyy"
+                className="w-full"
+              />
+            </div>
+
+            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
+              <input
+                type="time"
+                value={sleepStartTime}
+                onChange={(e) => setSleepStartTime(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  color: "white",
+                  fontSize: 18,
+                  outline: "none",
+                }}
+              />
+            </div>
           </div>
         </div>
 
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Sleep End</div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <DatePicker value={sleepEndDate} onChange={setSleepEndDate} />
-            <TimePicker value={sleepEndTime} onChange={setSleepEndTime} />
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep End</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
+              <DatePicker
+                selected={endDateObj}
+                onChange={(d: Date) => setSleepEndDate(toIsoLocalDate(d))}
+                dateFormat="dd/MM/yyyy"
+                className="w-full"
+              />
+            </div>
+
+            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
+              <input
+                type="time"
+                value={sleepEndTime}
+                onChange={(e) => setSleepEndTime(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  color: "white",
+                  fontSize: 18,
+                  outline: "none",
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      <hr style={{ margin: "28px 0" }} />
+      <hr style={{ margin: "18px 0", opacity: 0.3 }} />
 
-      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-        What do YOU think affected tonight?
-      </div>
+      <div style={{ marginTop: 8 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
+          What do YOU think affected tonight?
+        </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Primary driver</div>
-        <select
-          value={primaryDriver}
-          onChange={(e) => setPrimaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 10, borderRadius: 8 }}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Primary driver</div>
+          <select
+            value={primaryDriver}
+            onChange={(e) => setPrimaryDriver(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "#2b2b2b",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
+            <option>Nothing / no clear driver</option>
+            <option>Stress / worry</option>
+            <option>Late caffeine</option>
+            <option>Late meal</option>
+            <option>Alcohol</option>
+            <option>Too much screen time</option>
+            <option>Exercise timing</option>
+            <option>Temperature / environment</option>
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Secondary driver</div>
+          <select
+            value={secondaryDriver}
+            onChange={(e) => setSecondaryDriver(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "#2b2b2b",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
+            <option>Nothing / no clear driver</option>
+            <option>Stress / worry</option>
+            <option>Late caffeine</option>
+            <option>Late meal</option>
+            <option>Alcohol</option>
+            <option>Too much screen time</option>
+            <option>Exercise timing</option>
+            <option>Temperature / environment</option>
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Notes (optional)</div>
+          <textarea
+            value={userNotes}
+            onChange={(e) => setUserNotes(e.target.value)}
+            placeholder="e.g., neighbor noise until midnight, but slept well after"
+            style={{
+              width: "100%",
+              minHeight: 90,
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "#2b2b2b",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          />
+        </div>
+
+        <button
+          onClick={saveNight}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "white",
+            color: "black",
+            fontWeight: 800,
+            border: "none",
+            cursor: "pointer",
+          }}
         >
-          <option>Nothing / no clear driver</option>
-          <option>Caffeine / stimulants</option>
-          <option>Late meal</option>
-          <option>Alcohol</option>
-          <option>Stress / rumination</option>
-          <option>Noise / light</option>
-          <option>Too hot / too cold</option>
-          <option>Late screen time</option>
-          <option>Exercise timing</option>
-        </select>
+          Save night
+        </button>
       </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Secondary driver</div>
-        <select
-          value={secondaryDriver}
-          onChange={(e) => setSecondaryDriver(e.target.value)}
-          style={{ width: "100%", padding: 10, borderRadius: 8 }}
-        >
-          <option>Nothing / no clear driver</option>
-          <option>Caffeine / stimulants</option>
-          <option>Late meal</option>
-          <option>Alcohol</option>
-          <option>Stress / rumination</option>
-          <option>Noise / light</option>
-          <option>Too hot / too cold</option>
-          <option>Late screen time</option>
-          <option>Exercise timing</option>
-        </select>
-      </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Notes (optional)</div>
-        <textarea
-          value={userNotes}
-          onChange={(e) => setUserNotes(e.target.value)}
-          placeholder="e.g., neighbor noise until midnight, but slept well after"
-          rows={4}
-          style={{ width: "100%", padding: 10, borderRadius: 8 }}
-        />
-      </div>
-
-      <button
-        onClick={saveAll}
-        style={{
-          padding: "10px 14px",
-          borderRadius: 10,
-          fontWeight: 800,
-          cursor: "pointer",
-        }}
-      >
-        Save
-      </button>
-
-      {msg && <div style={{ marginTop: 12, fontWeight: 700 }}>{msg}</div>}
-
-      <hr style={{ margin: "28px 0" }} />
-
-      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>RRSM (last 7 days)</div>
-
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 18 }}>
         {rrsmInsightLoading ? (
-          <div style={{ opacity: 0.85 }}>Analyzing last 7 days…</div>
+          <div style={{ opacity: 0.85 }}>Analyzing last 7 days...</div>
         ) : rrsmInsightError ? (
           <div style={{ color: "tomato", fontWeight: 700 }}>{rrsmInsightError}</div>
         ) : rrsmInsight ? (
@@ -327,29 +385,45 @@ export default function SleepPage() {
         )}
       </div>
 
-      {/* Optional: keep a hidden debug section instead of showing raw metrics to users */}
       <details style={{ marginTop: 14, opacity: 0.9 }}>
         <summary style={{ cursor: "pointer", fontWeight: 800 }}>Debug (show raw sleep metrics)</summary>
 
         <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 13 }}>
-          {metrics.length === 0 ? (
-            <div>No rows yet.</div>
-          ) : (
-            metrics.slice(0, 5).map((m) => (
-              <div key={m.id} style={{ marginBottom: 10 }}>
-                <div>
-                  <b>{m.id}</b>
-                </div>
-                <div>start: {m.sleep_start}</div>
-                <div>end: {m.sleep_end}</div>
-                <div>primary: {m.primary_driver ?? "-"}</div>
-                <div>secondary: {m.secondary_driver ?? "-"}</div>
-                <div>notes: {m.notes ?? "-"}</div>
-              </div>
-            ))
-          )}
+          <div style={{ opacity: 0.9 }}>latestNightId: {latestNightId ?? "(none)"}</div>
+          <div style={{ marginTop: 10 }}>
+            {metrics.length === 0 ? (
+              <div>No rows yet.</div>
+            ) : (
+              <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(metrics, null, 2)}</pre>
+            )}
+          </div>
         </div>
       </details>
+
+      <style jsx global>{`
+        /* Bigger DatePicker popup (calendar) */
+        .react-datepicker {
+          font-size: 1rem;
+        }
+        .react-datepicker__header {
+          padding-top: 0.8rem;
+        }
+        .react-datepicker__month {
+          margin: 0.4rem 1rem;
+        }
+        .react-datepicker__day-name,
+        .react-datepicker__day,
+        .react-datepicker__time-name {
+          width: 2.2rem;
+          line-height: 2.2rem;
+          margin: 0.15rem;
+        }
+        .react-datepicker__current-month,
+        .react-datepicker-time__header,
+        .react-datepicker-year-header {
+          font-size: 1.1rem;
+        }
+      `}</style>
     </div>
   );
 }
