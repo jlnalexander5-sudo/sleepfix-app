@@ -146,7 +146,42 @@ const [sleepEndTime, setSleepEndTime] = useState("");
   useEffect(() => {
     setMounted(true);
   }, []);
+useEffect(() => {
+  let cancelled = false;
 
+  async function run() {
+    try {
+      setRrsmInsightLoading(true);
+      setRrsmInsightError(null);
+
+      const res = await fetch("/api/rrsm/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}), // keep empty for now
+      });
+
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || `RRSM failed (${res.status})`);
+
+      const data = JSON.parse(text) as { insights?: any[] };
+      const firstInsight = data?.insights?.[0] ?? null;
+
+      if (!cancelled) setRrsmInsight(firstInsight);
+    } catch (e: any) {
+      if (!cancelled) {
+        setRrsmInsight(null);
+        setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
+      }
+    } finally {
+      if (!cancelled) setRrsmInsightLoading(false);
+    }
+  }
+
+  run();
+  return () => {
+    cancelled = true;
+  };
+}, []);
   useEffect(() => {
     // set default datetime-local values on the client
 const start = new Date();
