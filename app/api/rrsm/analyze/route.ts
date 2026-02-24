@@ -13,8 +13,14 @@ type Insight = {
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
-
-export async function POST() {
+ 
+  export async function GET() {
+  return NextResponse.json(
+    { error: "Use POST /api/rrsm/analyze" },
+    { status: 405 }
+  );
+}
+  export async function POST() {
   const cookieStore = await cookies();
 
   const supabase = createServerClient(
@@ -38,13 +44,9 @@ export async function POST() {
       },
     }
   );
-// Allow GET for quick testing (it just forwards to POST)
-export async function GET(req: Request) {
-  return POST(req);
-}
 
 // (Optional but recommended) avoid static caching on Vercel
-export const dynamic = "force-dynamic";
+  export const dynamic = "force-dynamic";
   
   // 1) Auth
   const { data: auth, error: authErr } = await supabase.auth.getUser();
