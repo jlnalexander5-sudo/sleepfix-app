@@ -1,7 +1,8 @@
-// app/api/rrsm/analyze/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+
+export const dynamic = "force-dynamic";
 
 type Insight = {
   domain: string;
@@ -11,27 +12,33 @@ type Insight = {
   confidence: "low" | "med" | "high";
 };
 
-export async function GET() {
-  return NextResponse.json({ error: "Use POST." }, { status: 405 });
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
 }
 
-export async function POST(req: Request) {
-  // 0) Supabase server client (cookie-based)
-  const cookieStore = cookies();
+export async function GET() {
+  return NextResponse.json({ error: "Use POST /api/rrsm/analyze" }, { status: 405 });
+}
+
+export async function POST() {
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: any) {
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options: any) {
-          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        setAll(cookiesToSet: any[]) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // ignore (safe in route handlers)
+          }
         },
       },
     }
@@ -46,41 +53,81 @@ export async function POST(req: Request) {
   // 2) Date window (last 7 days)
   const now = new Date();
   const pad2 = (n: number) => String(n).padStart(2, "0");
-  const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const toYMD = (d: Date) =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-  const toYMDStr = toYMD(now);
-  const from = new Date(now);
-  from.setDate(from.getDate() - 6);
-  const fromYMD = toYMD(from);
+  const end = new Date(now);
+  end.setHours(0, 0, 0, 0);
 
-  // 3) Fetch last 7 days (adjust table/column names if needed)
-  const { data: nights, error: nightsErr } = await supabase
-    .from("v_sleep_night_metrics")
-    .select("*")
-    .eq("user_id", user.id)
-    .gte("date", fromYMD)
-    .lte("date", toYMDStr)
-    .order("date", { ascending: true });
+  const start = new Date(end);
+  start.setDate(start.getDate() - 6);
 
-  if (nightsErr) {
-    return NextResponse.json({ error: nightsErr.message }, { status: 500 });
-  }
+  const fromYMD = toYMD(start);
+  const toYMDStr = toYMD(end);
 
-  // 4) Simple placeholder insight (keep your existing logic)
-  const loggedCount = Array.isArray(nights) ? nights.length : 0;
+  // 3) Pull habits + rrsm factors
+  const [{ data: habits, error: habitsErr }, { data: rrsm, error: rrsmErr }] =
+    await Promise.all([
+      supabase
+        .from("daily_habits")
+        .select("date,caffeine_after_2pm,alcohol,exercise,screens_last_hour")
+        .eq("user_id", user.id)
+        .gte("date", fromYMD)
+        .lte("date", toYMDStr),
+      supabase
+        .from("daily_rrsm_factors")
+        .select(
+          "local_date,ambient_heat_high,hot_drinks_late,heavy_food_late,intense_thinking_late,visualization_attempted,fought_wakefulness,cold_shower_evening,ice_water_evening,notes"
+        )
+        .eq("user_id", user.id)
+        .gte("local_date", fromYMD)
+        .lte("local_date", toYMDStr),
+    ]);
+
+  if (habitsErr) return NextResponse.json({ error: habitsErr.message }, { status: 500 });
+  if (rrsmErr) return NextResponse.json({ error: rrsmErr.message }, { status: 500 });
+
+  const countTrue = <T extends Record<string, any>>(rows: T[], key: keyof T) =>
+    (rows ?? []).reduce((acc, r) => acc + (r?.[key] === true ? 1 : 0), 0);
+
+  const h = habits ?? [];
+  const r = rrsm ?? [];
+
+  const heat = countTrue(r, "ambient_heat_high");
+  const screens = countTrue(h, "screens_last_hour");
+  const caffeine = countTrue(h, "caffeine_after_2pm");
+  const alcohol = countTrue(h, "alcohol");
+  const hotDrinks = countTrue(r, "hot_drinks_late");
+  const heavyFood = countTrue(r, "heavy_food_late");
+  const intenseThinking = countTrue(r, "intense_thinking_late");
+  const visualization = countTrue(r, "visualization_attempted");
+  const foughtWake = countTrue(r, "fought_wakefulness");
+  const coldShower = countTrue(r, "cold_shower_evening");
+  const iceWater = countTrue(r, "ice_water_evening");
+  const exercise = countTrue(h, "exercise");
+
+  const dn2Load = heat + screens + caffeine + alcohol + hotDrinks + heavyFood + intenseThinking;
+  const dn2BadPractices = visualization + foughtWake + coldShower + iceWater;
+
+  const confScore = clamp(Math.round(((dn2Load + dn2BadPractices) / 14) * 100), 0, 100);
+  const confidence: Insight["confidence"] =
+    confScore >= 55 ? "high" : confScore >= 30 ? "med" : "low";
 
   const why: string[] = [];
-  let confidence: "low" | "med" | "high" = "low";
+  if (heat) why.push(`Heat logged ${heat}/7`);
+  if (screens) why.push(`Screens last hour ${screens}/7`);
+  if (caffeine) why.push(`Caffeine after 2pm ${caffeine}/7`);
+  if (alcohol) why.push(`Alcohol ${alcohol}/7`);
+  if (hotDrinks) why.push(`Hot drinks late ${hotDrinks}/7`);
+  if (heavyFood) why.push(`Heavy food late ${heavyFood}/7`);
+  if (intenseThinking) why.push(`Intense thinking late ${intenseThinking}/7`);
+  if (visualization) why.push(`Visualization attempted ${visualization}/7`);
+  if (foughtWake) why.push(`Fought wakefulness ${foughtWake}/7`);
+  if (coldShower) why.push(`Cold shower evening ${coldShower}/7`);
+  if (iceWater) why.push(`Ice water evening ${iceWater}/7`);
+  if (exercise) why.push(`Exercise ${exercise}/7`);
 
-  if (loggedCount >= 5) {
-    why.push(`Enough data logged: ${loggedCount}/7 nights`);
-    confidence = "med";
-  } else {
-    why.push(`Not enough logged signals in last 7 days yet (${loggedCount}/7).`);
-    confidence = "low";
-  }
-
-  const actions = [
+  const actions: string[] = [
     "Cool-neutral environment (stable, not cold)",
     "Reduce visual rhythm at night (no fast motion / screens)",
     "Outbound discharge (walk / gentle chores) before stillness",
@@ -92,7 +139,7 @@ export async function POST(req: Request) {
   const insight: Insight = {
     domain: "RB2 / DN2 (Rhythm overload + compressed pause)",
     title: "Wired-but-tired pattern detected",
-    why,
+    why: why.length ? why : ["Not enough logged signals in last 7 days yet."],
     actions,
     confidence,
   };
