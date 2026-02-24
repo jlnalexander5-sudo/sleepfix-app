@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
-
+.react-datepicker {
+  font-family: inherit;
+}
+.react-datepicker__triangle {
+  display: none;
+}
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : "http://localhost:3000";
