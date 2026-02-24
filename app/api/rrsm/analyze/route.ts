@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
+// ✅ MUST be top-level (NOT inside POST)
+export const dynamic = "force-dynamic";
+
 type Insight = {
   domain: string;
   title: string;
@@ -13,15 +16,16 @@ type Insight = {
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
- 
-  export async function GET() {
+
+export async function GET() {
   return NextResponse.json(
     { error: "Use POST /api/rrsm/analyze" },
     { status: 405 }
   );
 }
-  export async function POST() {
-  const cookieStore = await cookies();
+
+export async function POST() {
+  const cookieStore = cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,31 +37,31 @@ function clamp(n: number, min: number, max: number) {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
           } catch {
-            // In Route Handlers, setAll can throw in some edge cases.
-            // Safe to ignore for read-only auth checks.
+            // ignore
           }
         },
       },
     }
   );
 
-// (Optional but recommended) avoid static caching on Vercel
-  export const dynamic = "force-dynamic";
-  
   // 1) Auth
   const { data: auth, error: authErr } = await supabase.auth.getUser();
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
+  if (authErr)
+    return NextResponse.json({ error: authErr.message }, { status: 401 });
+
   const user = auth?.user;
-  if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  if (!user)
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   // 2) Date window (last 7 days)
   const now = new Date();
   const pad2 = (n: number) => String(n).padStart(2, "0");
-  const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const toYMD = (d: Date) =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
   const end = new Date(now);
   end.setHours(0, 0, 0, 0);
@@ -87,11 +91,13 @@ function clamp(n: number, min: number, max: number) {
         .lte("local_date", toYMDStr),
     ]);
 
-  if (habitsErr) return NextResponse.json({ error: habitsErr.message }, { status: 500 });
-  if (rrsmErr) return NextResponse.json({ error: rrsmErr.message }, { status: 500 });
+  if (habitsErr)
+    return NextResponse.json({ error: habitsErr.message }, { status: 500 });
+  if (rrsmErr)
+    return NextResponse.json({ error: rrsmErr.message }, { status: 500 });
 
   const countTrue = <T extends Record<string, any>>(rows: T[], key: keyof T) =>
-    (rows ?? []).reduce((acc, r) => acc + (r?.[key] === true ? 1 : 0), 0);
+    (rows ?? []).reduce((acc, row) => acc + (row?.[key] === true ? 1 : 0), 0);
 
   const h = habits ?? [];
   const r = rrsm ?? [];
@@ -109,10 +115,16 @@ function clamp(n: number, min: number, max: number) {
   const iceWater = countTrue(r, "ice_water_evening");
   const exercise = countTrue(h, "exercise");
 
-  const dn2Load = heat + screens + caffeine + alcohol + hotDrinks + heavyFood + intenseThinking;
+  const dn2Load =
+    heat + screens + caffeine + alcohol + hotDrinks + heavyFood + intenseThinking;
   const dn2BadPractices = visualization + foughtWake + coldShower + iceWater;
 
-  const confScore = clamp(Math.round(((dn2Load + dn2BadPractices) / 14) * 100), 0, 100);
+  const confScore = clamp(
+    Math.round(((dn2Load + dn2BadPractices) / 14) * 100),
+    0,
+    100
+  );
+
   const confidence: Insight["confidence"] =
     confScore >= 55 ? "high" : confScore >= 30 ? "med" : "low";
 
