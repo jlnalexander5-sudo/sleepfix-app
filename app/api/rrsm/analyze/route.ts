@@ -38,7 +38,14 @@ export async function POST() {
       },
     }
   );
+// Allow GET for quick testing (it just forwards to POST)
+export async function GET(req: Request) {
+  return POST(req);
+}
 
+// (Optional but recommended) avoid static caching on Vercel
+export const dynamic = "force-dynamic";
+  
   // 1) Auth
   const { data: auth, error: authErr } = await supabase.auth.getUser();
   if (authErr) return NextResponse.json({ error: authErr.message }, { status: 401 });
