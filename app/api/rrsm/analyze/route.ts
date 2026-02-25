@@ -1,4 +1,3 @@
-type Confidence = "low" | "medium" | "high";
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -13,14 +12,14 @@ type NightMetricsRow = {
 };
 
 // Keep this small + explicit so TS never complains during deploy
-type Confidence = "low" | "medium" | "high";
+type ConfidenceLevel = "low" | "medium" | "high";
 
 type Insight = {
   domain: string;
   title: string;
   why: string[];
   actions: string[];
-  confidence: Confidence;
+  confidence: ConfidenceLevel;
 };
 
 function toNum(v: unknown): number | null {
