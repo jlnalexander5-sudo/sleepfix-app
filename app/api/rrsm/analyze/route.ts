@@ -205,12 +205,15 @@ export async function POST(req: Request) {
 
   // Pull last N days of metrics (adjust table/view name to yours if needed)
   const { data: rows, error } = await supabase
-    from("v_sleep_night_metrics")
-.select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
-.eq("user_id", user.id)
-.order("created_at", { ascending: false })
-.limit(days);
+  .from("v_sleep_night_metrics")
+  .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
+  .eq("user_id", user.id)
+  .order("created_at", { ascending: false })
+  .limit(days);
 
+if (error) {
+  return NextResponse.json({ error: error.message }, { status: 500 });
+}
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
