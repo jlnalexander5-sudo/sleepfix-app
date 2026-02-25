@@ -211,10 +211,6 @@ const { data: rows, error: rowsErr } = await supabase
   .order("created_at", { ascending: false })
   .limit(days);
 
-if (rowsErr) {
-  return NextResponse.json({ error: rowsErr.message }, { status: 500 });
-}
-
 if (error) {
   return NextResponse.json({ error: error.message }, { status: 500 });
 }
