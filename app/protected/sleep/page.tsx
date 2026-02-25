@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import RRSMInsightCard, { RRSMInsight } from "@/components/RRSMInsightCard";
 
 const DatePicker = dynamic(
@@ -43,7 +43,7 @@ function parseLocalDateTime(dateStr: string, timeStr: string) {
 }
 
 export default function SleepPage() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   const [userId, setUserId] = useState<string | null>(null);
 
