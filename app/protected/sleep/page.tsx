@@ -376,16 +376,38 @@ setRrsmInsight(data?.insights?.[0] ?? null);
       </div>
 
       <div style={{ marginTop: 18 }}>
-        {rrsmInsightLoading ? (
-          <div style={{ opacity: 0.85 }}>Analyzing last 7 days...</div>
-        ) : rrsmInsightError ? (
-          <div style={{ color: "tomato", fontWeight: 700 }}>{rrsmInsightError}</div>
-        ) : rrsmInsight ? (
-          <RRSMInsightCard insight={rrsmInsight} />
-        ) : (
-          <div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
-        )}
+  {rrsmInsightLoading ? (
+    <div style={{ opacity: 0.85 }}>Analyzing last 7 days...</div>
+  ) : rrsmInsightError ? (
+    <div style={{ color: "tomato", fontWeight: 700 }}>{rrsmInsightError}</div>
+  ) : rrsmInsight ? (
+    <div style={{ display: "grid", gap: 12 }}>
+      <RRSMInsightCard insight={rrsmInsight} />
+
+      <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 12, padding: 12 }}>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Your input (tonight)</div>
+
+        <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
+          <div>
+            <span style={{ opacity: 0.7 }}>Primary:</span>{" "}
+            <span style={{ fontWeight: 700 }}>{primaryDriver || "(none)"}</span>
+          </div>
+          <div>
+            <span style={{ opacity: 0.7 }}>Secondary:</span>{" "}
+            <span style={{ fontWeight: 700 }}>{secondaryDriver || "(none)"}</span>
+          </div>
+          <div>
+            <span style={{ opacity: 0.7 }}>Notes:</span>{" "}
+            <span style={{ fontWeight: 700 }}>{userNotes?.trim() ? userNotes : "(none)"}</span>
+          </div>
+        </div>
       </div>
+    </div>
+  ) : (
+    <div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
+  )}
+</div>
+
 
       <details style={{ marginTop: 14, opacity: 0.9 }}>
         <summary style={{ cursor: "pointer", fontWeight: 800 }}>Debug (show raw sleep metrics)</summary>
