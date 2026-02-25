@@ -148,18 +148,14 @@ export default function SleepPage() {
       setRrsmInsightError(null);
 
       try {
-      const res = await fetch("/api/rrsm/analyze", {
+   const res = await fetch("/api/rrsm/analyze", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     days: 7,
-    // send what the user just entered (makes the insight smarter)
-    sleepStart,
-    sleepEnd,
-    primaryDriver,
-    secondaryDriver,
-    notes: userNotes,
+    includeDrivers: true,
   }),
+});
 });
 
 if (!res.ok) {
