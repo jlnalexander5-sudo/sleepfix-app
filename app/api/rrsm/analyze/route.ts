@@ -299,7 +299,15 @@ const { data: rows, error: rowsErr } = await supabase
     confidence,
   };
 }
-
+const insight = computeInsight({
+    days,
+    rows: (rows ?? []) as NightMetricsRow[],
+    context: {
+      primaryDriver: body?.primaryDriver,
+      secondaryDriver: body?.secondaryDriver,
+      notes: body?.notes,
+    },
+  });
   return NextResponse.json({
     window: { days, count: (rows ?? []).length },
     insights: insight ? [insight] : [],
