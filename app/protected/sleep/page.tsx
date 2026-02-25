@@ -138,8 +138,10 @@ export default function SleepPage() {
 
       setMetrics((metricRows ?? []) as NightMetricsRow[]);
 
-    // Re-run RRSM analysis using what the user just entered (A: show updated insight after saving)
-    await runRrsmAnalyze({ sleepStart: start.toISOString(), sleepEnd: end.toISOString() });
+      // Re-run RRSM analysis using what the user just entered (A: show updated insight after saving)
+      const start = parseLocalDateTime(sleepStartDate, sleepStartTime);
+      const end = parseLocalDateTime(sleepEndDate, sleepEndTime);
+      await runRrsmAnalyze({ sleepStart: start.toISOString(), sleepEnd: end.toISOString() });
     })();
   }, [supabase, userId]);
 
@@ -230,8 +232,10 @@ export default function SleepPage() {
 
       setMetrics((metricRows ?? []) as NightMetricsRow[]);
 
-    // Re-run RRSM analysis using what the user just entered (A: show updated insight after saving)
-    await runRrsmAnalyze({ sleepStart: start.toISOString(), sleepEnd: end.toISOString() });
+      // Re-run RRSM analysis using what the user just entered (A: show updated insight after saving)
+      const start = parseLocalDateTime(sleepStartDate, sleepStartTime);
+      const end = parseLocalDateTime(sleepEndDate, sleepEndTime);
+      await runRrsmAnalyze({ sleepStart: start.toISOString(), sleepEnd: end.toISOString() });
     }
   }
 
