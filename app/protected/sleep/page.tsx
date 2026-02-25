@@ -148,20 +148,27 @@ export default function SleepPage() {
       setRrsmInsightError(null);
 
       try {
-        const res = await fetch("/api/rrsm/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ days: 7 }),
-        });
+      const res = await fetch("/api/rrsm/analyze", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    days: 7,
+    // send what the user just entered (makes the insight smarter)
+    sleepStart,
+    sleepEnd,
+    primaryDriver,
+    secondaryDriver,
+    notes: userNotes,
+  }),
+});
 
-        if (!res.ok) {
-          const t = await res.text();
-          throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
-        }
+if (!res.ok) {
+  const t = await res.text();
+  throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
+}
 
-        const data = (await res.json()) as { insights?: RRSMInsight[] };
-        const firstInsight = data?.insights?.[0] ?? null;
-        setRrsmInsight(firstInsight);
+const data = (await res.json()) as { insights?: RRSMInsight[] };
+setRrsmInsight(data?.insights?.[0] ?? null);
       } catch (e: any) {
         setRrsmInsight(null);
         setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
