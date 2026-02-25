@@ -60,6 +60,7 @@ export default function SleepPage() {
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
 
   // RRSM insight
+  const [rrsmInsights, setRrsmInsights] = useState<RRSMInsight[]>([]);
   const [rrsmInsight, setRrsmInsight] = useState<RRSMInsight | null>(null);
   const [rrsmInsightLoading, setRrsmInsightLoading] = useState(true);
   const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
@@ -136,42 +137,62 @@ export default function SleepPage() {
       }
 
       setMetrics((metricRows ?? []) as NightMetricsRow[]);
+
+    // Re-run RRSM analysis using what the user just entered (A: show updated insight after saving)
+    await runRrsmAnalyze({ sleepStart: start.toISOString(), sleepEnd: end.toISOString() });
     })();
   }, [supabase, userId]);
 
-  // Fetch RRSM insight from API (POST only)
-  useEffect(() => {
+  // RRSM analyze (POST only)
+  async function runRrsmAnalyze(overrides?: Partial<{ days: number; includeDrivers: boolean; sleepStart: string; sleepEnd: string; primaryDriver: string; secondaryDriver: string; notes: string }>) {
     if (!userId) return;
 
-    (async () => {
-      setRrsmInsightLoading(true);
-      setRrsmInsightError(null);
+    setRrsmInsightLoading(true);
+    setRrsmInsightError(null);
 
-      try {
-   const res = await fetch("/api/rrsm/analyze", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    days: 7,
-    includeDrivers: true,
-  }),
-});
+    try {
+      const payload = {
+        days: 7,
+        includeDrivers: true,
+        // what the user just entered (helps RRSM reasoning)
+        sleepStart,
+        sleepEnd,
+        primaryDriver,
+        secondaryDriver,
+        notes: userNotes,
+        ...(overrides ?? {}),
+      };
 
-if (!res.ok) {
-  const t = await res.text();
-  throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
-}
+      const res = await fetch("/api/rrsm/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-const data = (await res.json()) as { insights?: RRSMInsight[] };
-setRrsmInsight(data?.insights?.[0] ?? null);
-      } catch (e: any) {
-        setRrsmInsight(null);
-        setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
-      } finally {
-        setRrsmInsightLoading(false);
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
       }
-    })();
+
+      const data = (await res.json()) as { insights?: RRSMInsight[] };
+      const insights = data?.insights ?? [];
+      setRrsmInsights(insights);
+      setRrsmInsight(insights[0] ?? null);
+    } catch (e: any) {
+      setRrsmInsights([]);
+      setRrsmInsight(null);
+      setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
+    } finally {
+      setRrsmInsightLoading(false);
+    }
+  }
+
+  // Fetch RRSM insight on load
+  useEffect(() => {
+    runRrsmAnalyze();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+;
 
   async function saveNight() {
     if (!userId) return;
@@ -208,6 +229,9 @@ setRrsmInsight(data?.insights?.[0] ?? null);
         .order("created_at", { ascending: false });
 
       setMetrics((metricRows ?? []) as NightMetricsRow[]);
+
+    // Re-run RRSM analysis using what the user just entered (A: show updated insight after saving)
+    await runRrsmAnalyze({ sleepStart: start.toISOString(), sleepEnd: end.toISOString() });
     }
   }
 
@@ -380,9 +404,20 @@ setRrsmInsight(data?.insights?.[0] ?? null);
     <div style={{ opacity: 0.85 }}>Analyzing last 7 days...</div>
   ) : rrsmInsightError ? (
     <div style={{ color: "tomato", fontWeight: 700 }}>{rrsmInsightError}</div>
-  ) : rrsmInsight ? (
+  ) : rrsmInsights.length > 0 ? (
     <div style={{ display: "grid", gap: 12 }}>
-      <RRSMInsightCard insight={rrsmInsight} />
+      <RRSMInsightCard insight={rrsmInsights[0]} />
+
+      {rrsmInsights.length > 1 && (
+        <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 12, padding: 12 }}>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>More insights</div>
+          <div style={{ display: "grid", gap: 12 }}>
+            {rrsmInsights.slice(1).map((ins, i) => (
+              <RRSMInsightCard key={i} insight={ins} />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 12, padding: 12 }}>
         <div style={{ fontWeight: 800, marginBottom: 8 }}>Your input (tonight)</div>
@@ -404,7 +439,7 @@ setRrsmInsight(data?.insights?.[0] ?? null);
       </div>
     </div>
   ) : (
-    <div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
+<div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
   )}
 </div>
 
