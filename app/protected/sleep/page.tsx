@@ -156,7 +156,6 @@ export default function SleepPage() {
     includeDrivers: true,
   }),
 });
-});
 
 if (!res.ok) {
   const t = await res.text();
