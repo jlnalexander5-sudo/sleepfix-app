@@ -213,15 +213,92 @@ const { data: rows, error: rowsErr } = await supabase
   if (rowsErr) {
   return NextResponse.json({ error: rowsErr.message }, { status: 500 });
 }
-  const insight = computeInsight({
-    days,
-    rows: (rows ?? []) as NightMetricsRow[],
-    context: {
-      primaryDriver: body?.primaryDriver,
-      secondaryDriver: body?.secondaryDriver,
-      notes: body?.notes,
-    },
-  });
+ function computeInsight({
+  days,
+  rows,
+  context,
+}: {
+  days: number;
+  rows: NightMetricsRow[];
+  context?: {
+    primaryDriver?: string;
+    secondaryDriver?: string;
+    notes?: string;
+  };
+}) {
+  if (!rows || rows.length < 3) {
+    return {
+      code: "INSUFFICIENT_DATA",
+      title: "Not enough data yet",
+      why: "Log at least 3 nights to detect a pattern.",
+      actions: ["Keep logging sleep for a few more nights"],
+      confidence: "low",
+    };
+  }
+
+  const durations = rows.map((r) => r.duration_min || 0);
+  const avg =
+    durations.reduce((a, b) => a + b, 0) / durations.length;
+
+  const variance =
+    durations.reduce((sum, val) => sum + Math.abs(val - avg), 0) /
+    durations.length;
+
+  const variabilityHigh = variance > 90;
+
+  let pattern = "stable";
+  let title = "Sleep pattern stable";
+  let why = "Your recent sleep duration is relatively consistent.";
+  let actions = ["Maintain consistent wake time"];
+
+  if (variabilityHigh) {
+    pattern = "variability";
+    title = "Rhythm variability pattern detected";
+    why =
+      "Your sleep duration varies significantly across recent nights. That inconsistency disrupts circadian prediction.";
+    actions = [
+      "Pick a fixed wake time (±30 min)",
+      "Avoid sleeping in after late nights",
+      "Stabilize light exposure within 30 min of waking",
+    ];
+  }
+
+  // 👇 NEW PART — Compare with user input
+
+  const userDrivers = [
+    context?.primaryDriver,
+    context?.secondaryDriver,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  let confidence = "medium";
+
+  if (pattern === "variability" && userDrivers.includes("late")) {
+    confidence = "high";
+    why +=
+      " Your reported driver aligns with the detected rhythm disruption.";
+  }
+
+  if (!userDrivers) {
+    confidence = "medium";
+  }
+
+  if (userDrivers && pattern === "stable") {
+    confidence = "low";
+    why +=
+      " However, your reported drivers do not match detected pattern. More data may clarify.";
+  }
+
+  return {
+    code: pattern.toUpperCase(),
+    title,
+    why,
+    actions,
+    confidence,
+  };
+}
 
   return NextResponse.json({
     window: { days, count: (rows ?? []).length },
