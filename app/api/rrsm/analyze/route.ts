@@ -203,13 +203,17 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({} as any));
   const days = Math.max(3, Math.min(30, Number(body?.days ?? 7)));
 
-  // Pull last N days of metrics (adjust table/view name to yours if needed)
-  const { data: rows, error } = await supabase
+   //  Pull last N days of metrics
+const { data: rows, error: rowsErr } = await supabase
   .from("v_sleep_night_metrics")
   .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
   .eq("user_id", user.id)
   .order("created_at", { ascending: false })
   .limit(days);
+
+if (rowsErr) {
+  return NextResponse.json({ error: rowsErr.message }, { status: 500 });
+}
 
 if (error) {
   return NextResponse.json({ error: error.message }, { status: 500 });
