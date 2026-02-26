@@ -92,18 +92,15 @@
 
 /* SleepFix responsive input sizing (mobile/tablet) */
 :root{
-  --sf-box-pad: 10px 12px;
-  --sf-box-font: 18px;
-  --sf-box-height: 56px;
+  --sf-input-pad: 10px 12px;
+  --sf-input-font: 16px;
 }
 
 @media (max-width: 768px){
   :root{
-    --sf-box-pad: 12px 12px;
-    --sf-box-font: 20px;
-    --sf-box-height: 60px;
+    --sf-input-pad: 8px 10px;
+    --sf-input-font: 15px;
   }
-}
 }
 
 /* Ensure react-datepicker inputs actually fill their container (prevents tiny date box on mobile) */
@@ -115,35 +112,6 @@
 .react-datepicker__input-container input{
   width: 100%;
   box-sizing: border-box;
-}
-/* Sleep page date/time boxes */
-.sf-input-box{
-  background: #222;
-  border-radius: 12px;
-  padding: var(--sf-box-pad);
-  height: var(--sf-box-height);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-}
-
-.sf-datetime-input{
-  width: 100%;
-  background: transparent;
-  border: 0;
-  outline: none;
-  color: #fff;
-  font-size: var(--sf-box-font);
-  font-weight: 600;
-  text-align: center;
-  padding: 0;
-  line-height: 1.1;
-}
-
-/* Ensure react-datepicker inputs match the same sizing */
-.react-datepicker__input-container input.sf-datetime-input{
-  padding: 0; /* padding handled by .sf-input-box */
-  font-size: var(--sf-box-font);
-  text-align: center;
+  padding: var(--sf-input-pad);
+  font-size: var(--sf-input-font);
 }
