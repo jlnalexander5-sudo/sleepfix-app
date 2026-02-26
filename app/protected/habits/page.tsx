@@ -41,17 +41,13 @@ export default function HabitsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [todayYMD, setTodayYMD] = useState<string>("");
 
-  // IMPORTANT: avoid calling `new Date()` during build-time prerender
-  // (Next can prerender client components). We set it after mount.
   useEffect(() => {
+    // Use Date() only on the client after mount to avoid Next.js prerender errors
     setTodayYMD(toYMD(new Date()));
   }, []);
 
   const fromYMD = useMemo(() => (todayYMD ? addDays(todayYMD, -6) : ""), [todayYMD]);
-  const dayList = useMemo(
-    () => (todayYMD && fromYMD ? buildDayList(fromYMD, todayYMD) : []),
-    [fromYMD, todayYMD]
-  );
+  const dayList = useMemo(() => (todayYMD ? buildDayList(fromYMD, todayYMD) : []), [fromYMD, todayYMD]);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,12 +58,6 @@ export default function HabitsPage() {
   // Load user + last 7 days of habits
   useEffect(() => {
     let cancelled = false;
-  // Wait until the client has computed today's date (avoid build-time prerender issues)
-    if (!todayYMD || !fromYMD || dayList.length === 0) {
-      setLoading(true);
-      return;
-    }
-
 
     async function load() {
       setLoading(true);
@@ -140,13 +130,16 @@ export default function HabitsPage() {
       },
     }));
 
+    const existing = (rowsByDate[date] ?? {}) as DailyHabitRow;
+    // Remove keys that would cause duplicate properties in an object literal
+    const { user_id: _u, date: _d, ...rest } = existing as any;
+
     const payload: DailyHabitRow = {
+      ...rest,
       user_id: userId,
       date,
-      // preserve other fields if already present
-      ...(rowsByDate[date] ?? {}),
       [field]: value,
-    };
+    } as DailyHabitRow;
 
     const { error: upsertErr } = await supabase
       .from("daily_habits")
