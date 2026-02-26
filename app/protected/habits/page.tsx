@@ -330,7 +330,14 @@ export default function HabitsPage() {
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Habits</h1>
+          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Tags</h1>
+        <p style={{ marginTop: 8, marginBottom: 0, maxWidth: 760, opacity: 0.85, lineHeight: 1.4 }}>
+          Tick what was true for each day. These tags help SleepFix connect your day-to-day context to your sleep metrics and detect patterns.
+          If you’re not sure, leave it blank.
+        </p>
+        <p style={{ marginTop: 6, marginBottom: 0, maxWidth: 760, opacity: 0.8, lineHeight: 1.4 }}>
+          <strong>Simple tags first.</strong> The “RRSM” section is optional / advanced.
+        </p>
           <div style={{ marginTop: 6, opacity: 0.8 }}>
             Today: {todayStr || "—"}
           </div>
@@ -370,7 +377,7 @@ export default function HabitsPage() {
 
       <div style={{ marginTop: 18 }}>
         <div style={{ opacity: 0.75, marginBottom: 10 }}>
-          Last 7 days (oldest → newest)
+          Last 7 days (oldest → newest) — tag what was true
         </div>
 
         <div
@@ -401,7 +408,7 @@ export default function HabitsPage() {
                 <summary
                   style={{ cursor: "pointer", fontWeight: 800, opacity: 0.9 }}
                 >
-                  RRSM Factors (Part 2)
+                  Advanced tags (RRSM)
                 </summary>
 
                 <div style={{ marginTop: 10 }}>
