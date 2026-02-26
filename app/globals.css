@@ -89,3 +89,29 @@
 }
 
 /* If you had more .react-datepicker__* rules in layout.tsx, move ALL of them here too */
+
+/* SleepFix responsive input sizing (mobile/tablet) */
+:root{
+  --sf-input-pad: 10px 12px;
+  --sf-input-font: 16px;
+}
+
+@media (max-width: 768px){
+  :root{
+    --sf-input-pad: 8px 10px;
+    --sf-input-font: 15px;
+  }
+}
+
+/* Ensure react-datepicker inputs actually fill their container (prevents tiny date box on mobile) */
+.react-datepicker-wrapper,
+.react-datepicker__input-container{
+  width: 100%;
+}
+
+.react-datepicker__input-container input{
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--sf-input-pad);
+  font-size: var(--sf-input-font);
+}
