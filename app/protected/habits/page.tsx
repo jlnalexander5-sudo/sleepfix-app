@@ -39,9 +39,19 @@ function buildDayList(fromYMD: string, toYMDStr: string) {
 
 export default function HabitsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const todayYMD = useMemo(() => toYMD(new Date()), []);
-  const fromYMD = useMemo(() => addDays(todayYMD, -6), [todayYMD]);
-  const dayList = useMemo(() => buildDayList(fromYMD, todayYMD), [fromYMD, todayYMD]);
+  const [todayYMD, setTodayYMD] = useState<string>("");
+
+  // IMPORTANT: avoid calling `new Date()` during build-time prerender
+  // (Next can prerender client components). We set it after mount.
+  useEffect(() => {
+    setTodayYMD(toYMD(new Date()));
+  }, []);
+
+  const fromYMD = useMemo(() => (todayYMD ? addDays(todayYMD, -6) : ""), [todayYMD]);
+  const dayList = useMemo(
+    () => (todayYMD && fromYMD ? buildDayList(fromYMD, todayYMD) : []),
+    [fromYMD, todayYMD]
+  );
 
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +62,12 @@ export default function HabitsPage() {
   // Load user + last 7 days of habits
   useEffect(() => {
     let cancelled = false;
+  // Wait until the client has computed today's date (avoid build-time prerender issues)
+    if (!todayYMD || !fromYMD || dayList.length === 0) {
+      setLoading(true);
+      return;
+    }
+
 
     async function load() {
       setLoading(true);
@@ -125,13 +141,12 @@ export default function HabitsPage() {
     }));
 
     const payload: DailyHabitRow = {
-      // preserve other fields if already present
-      ...(rowsByDate[date] ?? {}),
       user_id: userId,
       date,
-      // dynamic field (checkbox)
+      // preserve other fields if already present
+      ...(rowsByDate[date] ?? {}),
       [field]: value,
-    } as DailyHabitRow;
+    };
 
     const { error: upsertErr } = await supabase
       .from("daily_habits")
