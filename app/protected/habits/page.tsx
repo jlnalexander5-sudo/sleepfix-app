@@ -1,260 +1,235 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import React, { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type DailyHabitRow = {
   id?: string;
   user_id: string;
-  created_at?: string;
   date: string; // YYYY-MM-DD
-  caffeine_after_2pm: boolean | null;
-  alcohol: boolean | null;
-  exercise: boolean | null;
-  screens_last_hour: boolean | null;
+  caffeine_after_2pm?: boolean | null;
+  alcohol?: boolean | null;
+  exercise?: boolean | null;
+  screens_last_hour?: boolean | null;
 };
-
-type DailyRRSMFactorRow = {
-  id?: string;
-  user_id: string;
-  created_at?: string;
-  local_date: string; // YYYY-MM-DD
-  ambient_heat_high: boolean | null;
-  hot_drinks_late: boolean | null;
-  heavy_food_late: boolean | null;
-  intense_thinking_late: boolean | null;
-  visualization_attempted: boolean | null;
-  fought_wakefulness: boolean | null;
-  cold_shower_evening: boolean | null;
-  ice_water_evening: boolean | null;
-  notes?: string | null;
-};
-
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
 
 function toYMD(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-function startOfLocalDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+function addDays(ymd: string, delta: number) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+  dt.setDate(dt.getDate() + delta);
+  return toYMD(dt);
+}
+
+function buildDayList(fromYMD: string, toYMDStr: string) {
+  const out: string[] = [];
+  let cur = fromYMD;
+  while (cur <= toYMDStr) {
+    out.push(cur);
+    cur = addDays(cur, 1);
+  }
+  return out;
 }
 
 export default function HabitsPage() {
-  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+  const supabase = useMemo(() => createClient(), []);
+  const todayYMD = useMemo(() => toYMD(new Date()), []);
+  const fromYMD = useMemo(() => addDays(todayYMD, -6), [todayYMD]);
+  const dayList = useMemo(() => buildDayList(fromYMD, todayYMD), [fromYMD, todayYMD]);
 
-  const [status, setStatus] = useState<string>("Loading…");
-  const [todayStr, setTodayStr] = useState<string>("");
-  const [dayList, setDayList] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [rowsByDate, setRowsByDate] = useState<Record<string, DailyHabitRow>>({});
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const [rows, setRows] = useState<Record<string, DailyHabitRow | undefined>>(
-    {}
-  );
-
-  const [rrsmRows, setRrsmRows] = useState<
-    Record<string, DailyRRSMFactorRow | undefined>
-  >({});
-
-  // Build today + last 7 days on client only
-  useEffect(() => {
-    const today = new Date();
-    const todayYMD = toYMD(today);
-    setTodayStr(todayYMD);
-
-    const start = startOfLocalDay(today);
-    const out: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(start);
-      d.setDate(d.getDate() - i);
-      out.push(toYMD(d));
-    }
-    setDayList(out);
-  }, []);
-
-  // Load habits + rrsm factors
+  // Load user + last 7 days of habits
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      try {
-        setStatus("Loading…");
+      setLoading(true);
+      setError(null);
 
-        const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user) {
-          if (!cancelled) setStatus("Not signed in.");
-          return;
-        }
-        if (!cancelled) setUserId(user.id);
-
-        if (dayList.length !== 7) return;
-
-        const fromYMD = dayList[0];
-        const toYMDStr = dayList[dayList.length - 1];
-
-        const { data: habitsData, error: habitsErr } = await supabase
-          .from("daily_habits")
-          .select(
-            "id,user_id,created_at,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour"
-          )
-          .eq("user_id", user.id)
-          .gte("date", fromYMD)
-          .lte("date", toYMDStr)
-          .order("date", { ascending: true });
-
-        if (habitsErr) throw habitsErr;
-
-        const habitsMap: Record<string, DailyHabitRow | undefined> = {};
-        for (const r of (habitsData ?? []) as DailyHabitRow[]) {
-          habitsMap[r.date] = r;
-        }
-
-        const { data: rrsmData, error: rrsmErr } = await supabase
-          .from("daily_rrsm_factors")
-          .select(
-            "id,user_id,created_at,local_date,ambient_heat_high,hot_drinks_late,heavy_food_late,intense_thinking_late,visualization_attempted,fought_wakefulness,cold_shower_evening,ice_water_evening,notes"
-          )
-          .eq("user_id", user.id)
-          .gte("local_date", fromYMD)
-          .lte("local_date", toYMDStr)
-          .order("local_date", { ascending: true });
-
-        if (rrsmErr) throw rrsmErr;
-
-        const rrsmMap: Record<string, DailyRRSMFactorRow | undefined> = {};
-        for (const r of (rrsmData ?? []) as DailyRRSMFactorRow[]) {
-          rrsmMap[r.local_date] = r;
-        }
-
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !authData?.user) {
         if (!cancelled) {
-          setRows(habitsMap);
-          setRrsmRows(rrsmMap);
-          setStatus("Ready.");
+          setError(authErr?.message ?? "Not signed in.");
+          setLoading(false);
         }
-      } catch (e: any) {
-        if (!cancelled) setStatus(e?.message ?? "Failed to load.");
+        return;
+      }
+
+      const uid = authData.user.id;
+      if (!cancelled) setUserId(uid);
+
+      const { data, error: fetchErr } = await supabase
+        .from("daily_habits")
+        .select("user_id,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour")
+        .eq("user_id", uid)
+        .gte("date", fromYMD)
+        .lte("date", todayYMD)
+        .order("date", { ascending: true });
+
+      if (fetchErr) {
+        if (!cancelled) {
+          setError(fetchErr.message);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const map: Record<string, DailyHabitRow> = {};
+      (data ?? []).forEach((r: any) => {
+        map[r.date] = r as DailyHabitRow;
+      });
+
+      // ensure each date has a row shape (even if empty)
+      dayList.forEach((d) => {
+        if (!map[d]) {
+          map[d] = { user_id: uid, date: d };
+        }
+      });
+
+      if (!cancelled) {
+        setRowsByDate(map);
+        setLoading(false);
       }
     }
 
-   load();
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, fromYMD, todayYMD, dayList]);
 
-return () => {
-  cancelled = true;
-};
-}, [supabase]);
+  async function setHabit(date: string, field: keyof DailyHabitRow, value: boolean) {
+    if (!userId) return;
 
-return (
-    <main className="mx-auto max-w-4xl p-6">
+    setSavingKey(`${date}:${String(field)}`);
+    setError(null);
+
+    // optimistic update
+    setRowsByDate((prev) => ({
+      ...prev,
+      [date]: {
+        ...(prev[date] ?? { user_id: userId, date }),
+        [field]: value,
+      },
+    }));
+
+    const payload: DailyHabitRow = {
+      user_id: userId,
+      date,
+      // preserve other fields if already present
+      ...(rowsByDate[date] ?? {}),
+      [field]: value,
+    };
+
+    const { error: upsertErr } = await supabase
+      .from("daily_habits")
+      .upsert(payload, { onConflict: "user_id,date" });
+
+    if (upsertErr) {
+      setError(upsertErr.message);
+    }
+
+    setSavingKey(null);
+  }
+
+  const todayRow = rowsByDate[todayYMD] ?? (userId ? { user_id: userId, date: todayYMD } : null);
+
+  function HabitCheckbox(props: {
+    date: string;
+    field: keyof DailyHabitRow;
+    label: string;
+  }) {
+    const row = rowsByDate[props.date];
+    const checked = Boolean(row?.[props.field]);
+
+    return (
+      <label className="flex items-center gap-3 rounded-lg border p-3">
+        <input
+          type="checkbox"
+          className="h-4 w-4"
+          checked={checked}
+          onChange={(e) => setHabit(props.date, props.field, e.target.checked)}
+          disabled={!userId || loading}
+        />
+        <div className="flex-1">
+          <div className="font-medium">{props.label}</div>
+          {savingKey === `${props.date}:${String(props.field)}` ? (
+            <div className="text-xs text-neutral-500">Saving…</div>
+          ) : null}
+        </div>
+      </label>
+    );
+  }
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Habits</h1>
         <p className="text-sm text-neutral-600 mt-1">
-          Quick daily check-in (best done <span className="font-medium">today</span>, not backfilled).
+          Simple daily checkboxes. This is just “what happened today”, saved per date.
         </p>
       </div>
 
-      <div className="space-y-6">
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-lg font-semibold">Today’s check-in</div>
-              <div className="text-sm text-neutral-600">{dayList[dayList.length - 1]}</div>
-            </div>
-            <div className="text-sm text-neutral-600">Status: {status}</div>
-          </div>
+      {error ? (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
 
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-3">
-              <div className="font-medium">Simple habits (easy to remember)</div>
-              <div className="space-y-2">
-                {checkbox(dayList[dayList.length - 1], "caffeine_after_2pm", "Caffeine after 2pm")}
-                {checkbox(dayList[dayList.length - 1], "alcohol", "Alcohol")}
-                {checkbox(dayList[dayList.length - 1], "exercise", "Exercise")}
-                {checkbox(dayList[dayList.length - 1], "screens_last_hour", "Screens in last hour")}
+      <section className="rounded-xl border p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold">Today ({todayYMD})</h2>
+          {loading ? <span className="text-sm text-neutral-500">Loading…</span> : null}
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <HabitCheckbox date={todayYMD} field="caffeine_after_2pm" label="Caffeine after 2pm" />
+          <HabitCheckbox date={todayYMD} field="alcohol" label="Alcohol" />
+          <HabitCheckbox date={todayYMD} field="exercise" label="Exercise" />
+          <HabitCheckbox date={todayYMD} field="screens_last_hour" label="Screens in last hour" />
+        </div>
+
+        <p className="text-xs text-neutral-500 mt-4">
+          Tip: These are “binary” signals used for pattern detection later. You don’t need to overthink them.
+        </p>
+      </section>
+
+      <section className="mt-6 rounded-xl border p-4">
+        <h2 className="text-lg font-semibold">Last 7 days</h2>
+        <p className="text-sm text-neutral-600 mt-1">
+          Shows what you ticked on each day (not asking you to remember anything).
+        </p>
+
+        <div className="mt-4 grid gap-2">
+          {dayList.map((d) => {
+            const r = rowsByDate[d];
+            const score =
+              Number(Boolean(r?.caffeine_after_2pm)) +
+              Number(Boolean(r?.alcohol)) +
+              Number(Boolean(r?.exercise)) +
+              Number(Boolean(r?.screens_last_hour));
+            return (
+              <div key={d} className="flex items-center justify-between rounded-lg border p-3">
+                <div className="font-medium">{d}</div>
+                <div className="text-sm text-neutral-600">
+                  ticks: <span className="font-semibold">{score}</span>/4
+                </div>
               </div>
-              <p className="text-xs text-neutral-500 mt-2">
-                Tip: Use the Sleep page “drivers” for your best guess at causes. Habits are just the objective checkboxes.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <details className="rounded-lg border bg-neutral-50 p-3">
-                <summary className="cursor-pointer select-none font-medium">
-                  More factors (optional)
-                </summary>
-                <div className="mt-3 space-y-4">
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium text-neutral-700">Other factors</div>
-                    {rrsmCheckbox(dayList[dayList.length - 1], "hot_day_ambient_heat", "Hot day / ambient heat")}
-                    {rrsmCheckbox(dayList[dayList.length - 1], "hot_drinks_late", "Hot drinks late")}
-                    {rrsmCheckbox(dayList[dayList.length - 1], "heavy_food_late", "Heavy food late")}
-                    {rrsmCheckbox(dayList[dayList.length - 1], "intense_thinking_late", "Intense thinking late")}
-                    {rrsmCheckbox(dayList[dayList.length - 1], "tried_visualization_at_night", "Tried visualization at night")}
-                    {rrsmCheckbox(dayList[dayList.length - 1], "fought_wakefulness_forced_sleep", "Fought wakefulness (forced sleep)")}
-                    {rrsmCheckbox(dayList[dayList.length - 1], "cold_shower_evening", "Cold shower evening")}
-                    {rrsmCheckbox(dayList[dayList.length - 1], "ice_water_evening", "Ice water evening")}
-                  </div>
-                </div>
-              </details>
-              <p className="text-xs text-neutral-500">
-                Optional means optional — you can ignore this entirely and still use Sleep + Dashboard normally.
-              </p>
-            </div>
-          </div>
+            );
+          })}
         </div>
-
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-lg font-semibold">History (last 7 days)</div>
-              <div className="text-sm text-neutral-600">Read-only summary of what you logged each day.</div>
-            </div>
-            <div className="text-sm text-neutral-600">
-              Good days: {dayList.filter((d) => {
-                const r = rowsByDate[d];
-                if (!r) return false;
-                return !!(r.caffeine_after_2pm && r.alcohol && r.exercise && r.screens_last_hour);
-              }).length}/{dayList.length}
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {dayList.map((d) => {
-              const r = rowsByDate[d];
-              const pills: string[] = [];
-              if (r?.caffeine_after_2pm) pills.push("Caffeine");
-              if (r?.alcohol) pills.push("Alcohol");
-              if (r?.exercise) pills.push("Exercise");
-              if (r?.screens_last_hour) pills.push("Screens");
-              return (
-                <div key={d} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-                  <div className="font-mono text-sm">{d}</div>
-                  <div className="flex flex-wrap gap-2">
-                    {pills.length === 0 ? (
-                      <span className="text-sm text-neutral-500">No habits logged</span>
-                    ) : (
-                      pills.map((p) => (
-                        <span key={p} className="rounded-full border bg-neutral-50 px-2 py-0.5 text-xs">
-                          {p}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <p className="text-xs text-neutral-500 mt-3">
-            This is not asking you to “remember 7 nights ago” — it only shows what you entered on those days.
-          </p>
-        </div>
-      </div>
+      </section>
     </main>
   );
 }
-
