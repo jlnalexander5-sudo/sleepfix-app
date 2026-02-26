@@ -1,394 +1,442 @@
-// NOTE: This file was patched to compute avg duration + bedtime consistency + RRSM from sleep7Data
-// and to avoid the “snippets everywhere” problem.
-
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client";
+import RRSMInsightCard from "@/components/RRSMInsightCard";
 
-type DailyHabitRow = {
-  id: string;
+type NightRow = {
+  night_id: string;
   user_id: string;
   created_at: string;
-  date: string; // YYYY-MM-DD
-  caffeine_after_2pm: boolean | null;
-  alcohol: boolean | null;
-  exercise: boolean | null;
-  screens_last_hour: boolean | null;
+  duration_min: number | null;
+  latency_min: number | null;
+  wakeups_count: number | null;
+  quality_num: number | null;
+  // optional if you added these columns later
+  primary_driver?: string | null;
+  secondary_driver?: string | null;
+  notes?: string | null;
 };
 
-type SleepLogRow = {
-  id: string;
-  user_id: string;
-  created_at: string;
-  sleep_start: string | null; // ISO
-  sleep_end: string | null; // ISO
-  quality: number | null; // 1-5
-  notes: string | null;
+type RRSMInsight = {
+  code?: string;
+  domain?: string;
+  title: string;
+  why: string[];
+  actions: string[];
+  confidence: "low" | "medium" | "high";
+  // optional
+  meta?: Record<string, unknown>;
 };
 
-function toYMD(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function fmtDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 
-function startOfLocalDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+function safeAvg(nums: Array<number | null | undefined>) {
+  const xs = nums.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  if (!xs.length) return null;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
-function minutesOfDayFromISO(iso: string) {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
 }
 
-// Circular mean for minutes-of-day (handles wraparound near midnight)
-function circularMeanMinutes(values: number[]) {
-  const toRad = (m: number) => (m / (24 * 60)) * 2 * Math.PI;
-  const xs = values.map((m) => Math.cos(toRad(m)));
-  const ys = values.map((m) => Math.sin(toRad(m)));
-  const meanX = xs.reduce((a, b) => a + b, 0) / values.length;
-  const meanY = ys.reduce((a, b) => a + b, 0) / values.length;
-  const ang = Math.atan2(meanY, meanX);
-  const norm = ang < 0 ? ang + 2 * Math.PI : ang;
-  const mins = (norm / (2 * Math.PI)) * (24 * 60);
-  return mins;
+function riskFromScore(score: number | null) {
+  // Simple placeholder until RRSM risk scoring is formalized.
+  if (score === null) return { level: "—", label: "No data" };
+  if (score >= 80) return { level: "Low", label: "Stable" };
+  if (score >= 60) return { level: "Moderate", label: "Watch" };
+  return { level: "High", label: "At risk" };
 }
 
-// Circular standard deviation (minutes)
-function circularStdMinutes(values: number[]) {
-  const toRad = (m: number) => (m / (24 * 60)) * 2 * Math.PI;
-  const xs = values.map((m) => Math.cos(toRad(m)));
-  const ys = values.map((m) => Math.sin(toRad(m)));
-  const meanX = xs.reduce((a, b) => a + b, 0) / values.length;
-  const meanY = ys.reduce((a, b) => a + b, 0) / values.length;
-  const R = Math.sqrt(meanX * meanX + meanY * meanY);
-  // circular std in radians:
-  const stdRad = Math.sqrt(-2 * Math.log(Math.max(R, 1e-9)));
-  // convert to minutes:
-  return (stdRad / (2 * Math.PI)) * (24 * 60);
-}
-
-function formatDateTime(dt: string) {
-  const d = new Date(dt);
-  const day = String(d.getDate()).padStart(2, "0");
-  const mo = String(d.getMonth() + 1).padStart(2, "0");
-  const y = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${day}/${mo}/${y}, ${hh}:${mm}`;
-}
-
-function durationMinutes(startIso?: string | null, endIso?: string | null) {
-  if (!startIso || !endIso) return null;
-  const a = new Date(startIso).getTime();
-  const b = new Date(endIso).getTime();
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  const diff = Math.round((b - a) / 60000);
-  if (!Number.isFinite(diff)) return null;
-  return diff;
-}
-
-function formatMinutesHuman(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h <= 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-}
-
-function isGoodDay(r: DailyHabitRow | undefined) {
-  if (!r) return false;
-  return (
-    r.caffeine_after_2pm === false &&
-    r.alcohol === false &&
-    r.exercise === true &&
-    r.screens_last_hour === false
-  );
+function sparkline(values: number[]) {
+  // Minimal text sparkline without any chart libs
+  const blocks = "▁▂▃▄▅▆▇█";
+  if (values.length === 0) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return "▅".repeat(values.length);
+  return values
+    .map((v) => {
+      const t = (v - min) / (max - min);
+      const idx = Math.max(0, Math.min(blocks.length - 1, Math.round(t * (blocks.length - 1))));
+      return blocks[idx];
+    })
+    .join("");
 }
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
 
-  const [status, setStatus] = useState<string>("Loading…");
-  const [todayStr, setTodayStr] = useState<string>("");
-  const [dayList, setDayList] = useState<string[]>([]);
-  const [habits7, setHabits7] = useState<DailyHabitRow[]>([]);
-  const [latestSleep, setLatestSleep] = useState<SleepLogRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
-  const [avgQuality7, setAvgQuality7] = useState<number | null>(null);
-  const [avgDuration7, setAvgDuration7] = useState<number | null>(null); // minutes
-  const [bedtimeMean7, setBedtimeMean7] = useState<number | null>(null); // minutes-of-day
-  const [bedtimeVar7, setBedtimeVar7] = useState<number | null>(null); // minutes variability
-  const [rrsmScore7, setRrsmScore7] = useState<number | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [rows, setRows] = useState<NightRow[]>([]);
 
-  const latestDurationMins = durationMinutes(latestSleep?.sleep_start, latestSleep?.sleep_end);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightErr, setInsightErr] = useState<string | null>(null);
+  const [insight, setInsight] = useState<RRSMInsight | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setErr(null);
 
-    async function load() {
-      try {
-        setStatus("Loading…");
-
-        const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user) {
-          if (!cancelled) setStatus("Not signed in.");
-          return;
-        }
-
-        const today = new Date();
-        const todayYMD = toYMD(today);
-        if (!cancelled) setTodayStr(todayYMD);
-
-        // build last 7 days list (inclusive today), oldest -> newest
-        const out: string[] = [];
-        const start = startOfLocalDay(today);
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(start);
-          d.setDate(d.getDate() - i);
-          out.push(toYMD(d));
-        }
-        if (!cancelled) setDayList(out);
-
-        const fromYMD = out[0];
-        const toYMDStr = out[out.length - 1];
-
-        // fetch habits for last 7 days
-        const { data: habitsData, error: habitsErr } = await supabase
-          .from("daily_habits")
-          .select("id,user_id,created_at,date,caffeine_after_2pm,alcohol,exercise,screens_last_hour")
-          .gte("date", fromYMD)
-          .lte("date", toYMDStr)
-          .order("date", { ascending: true });
-
-        if (habitsErr) throw habitsErr;
-
-        // fetch latest sleep log
-        const { data: sleepData, error: sleepErr } = await supabase
-          .from("sleep_logs")
-          .select("id,user_id,created_at,sleep_start,sleep_end,quality,notes")
-          .order("sleep_start", { ascending: false })
-          .limit(1);
-
-        if (sleepErr) throw sleepErr;
-
-        const latest = (sleepData ?? [])[0] ?? null;
-
-        // fetch last 7 sleep logs (for averages + consistency)
-        const { data: sleep7Data, error: sleep7Err } = await supabase
-          .from("sleep_logs")
-          .select("sleep_start,sleep_end,quality")
-          .order("sleep_start", { ascending: false })
-          .limit(7);
-
-        // compute: avg quality, avg duration, bedtime mean + variability, RRSM score (0-100)
-        let avgQ: number | null = null;
-        let avgDur: number | null = null; // minutes
-        let bedMean: number | null = null; // minutes-of-day
-        let bedVar: number | null = null; // minutes (circular std)
-        let rrsm: number | null = null;
-
-        if (sleep7Err) {
-          console.warn("sleep7Err", sleep7Err);
-        } else {
-          const qualities = (sleep7Data ?? [])
-            .map((r: any) => r?.quality)
-            .filter((q: any) => typeof q === "number") as number[];
-          if (qualities.length) {
-            avgQ = Math.round((qualities.reduce((a, b) => a + b, 0) / qualities.length) * 10) / 10;
-          }
-
-          const durations = (sleep7Data ?? [])
-            .map((r: any) => durationMinutes(r?.sleep_start ?? null, r?.sleep_end ?? null))
-            .filter((m: any) => typeof m === "number" && Number.isFinite(m) && m > 0) as number[];
-          if (durations.length) {
-            avgDur = Math.round((durations.reduce((a, b) => a + b, 0) / durations.length) * 10) / 10;
-          }
-
-          const bedtimes = (sleep7Data ?? [])
-            .map((r: any) => (r?.sleep_start ? minutesOfDayFromISO(r.sleep_start) : null))
-            .filter((m: any) => typeof m === "number" && Number.isFinite(m)) as number[];
-          if (bedtimes.length) {
-            bedMean = circularMeanMinutes(bedtimes);
-            bedVar = circularStdMinutes(bedtimes);
-          }
-
-          // RRSM v1 (tweak anytime)
-          // Quality (1-5) -> 0..50
-          const qScore = avgQ == null ? 0 : Math.max(0, Math.min(50, ((avgQ - 1) / 4) * 50));
-          // Duration: target 8h, score drops to 0 at +/- 3h
-          const durScore =
-            avgDur == null
-              ? 0
-              : (() => {
-                  const idealMin = 8 * 60;
-                  const diff = Math.abs(avgDur - idealMin);
-                  const score = 25 * Math.max(0, 1 - diff / (3 * 60));
-                  return Math.max(0, Math.min(25, score));
-                })();
-          // Bedtime variability (circular std): 0min ->15, 120min+ ->0
-          const varScore =
-            bedVar == null ? 0 : Math.max(0, Math.min(15, 15 * (1 - Math.min(bedVar, 120) / 120)));
-
-          rrsm = Math.round((qScore + durScore + varScore) * 10) / 10;
-        }
-
-        if (!cancelled) {
-          setHabits7(habitsData ?? []);
-          setLatestSleep(latest);
-          setAvgQuality7(avgQ);
-          setAvgDuration7(avgDur);
-          setBedtimeMean7(bedMean);
-          setBedtimeVar7(bedVar);
-          setRrsmScore7(rrsm);
-          setStatus("Ready.");
-        }
-      } catch (e: any) {
-        console.error(e);
-        if (!cancelled) setStatus(e?.message ?? "Error");
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id ?? null;
+      setUserId(uid);
+      if (!uid) {
+        setRows([]);
+        setLoading(false);
+        return;
       }
-    }
 
-    load();
+      const { data, error } = await supabase
+        .from("v_sleep_night_metrics")
+        .select(
+          "night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num,primary_driver,secondary_driver,notes"
+        )
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false })
+        .limit(7);
 
-    return () => {
-      cancelled = true;
-    };
+      if (error) {
+        setErr(error.message);
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      setRows((data ?? []) as NightRow[]);
+      setLoading(false);
+    })();
   }, [supabase]);
 
-  const habitsByDate = useMemo(() => {
-    const m = new Map<string, DailyHabitRow>();
-    for (const r of habits7) m.set(r.date, r);
-    return m;
-  }, [habits7]);
+  // Fetch RRSM insight for the same 7-night window
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      setInsightLoading(true);
+      setInsightErr(null);
+      try {
+        const res = await fetch("/api/rrsm/analyze", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ days: 7, includeDrivers: true }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j?.error ?? `RRSM analyze failed (${res.status})`);
+        }
+        const j = (await res.json()) as { insights?: RRSMInsight[] };
+        setInsight(j?.insights?.[0] ?? null);
+      } catch (e: any) {
+        setInsight(null);
+        setInsightErr(e?.message ?? "Failed to load RRSM insight");
+      } finally {
+        setInsightLoading(false);
+      }
+    })();
+  }, [userId]);
 
-  const goodDaysCount = useMemo(() => {
-    let c = 0;
-    for (const d of dayList) {
-      if (isGoodDay(habitsByDate.get(d))) c++;
-    }
-    return c;
-  }, [dayList, habitsByDate]);
+  const today = useMemo(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  const nightsRecorded = rows.length;
+  const avgQuality = safeAvg(rows.map((r) => r.quality_num));
+  const avgDuration = safeAvg(rows.map((r) => r.duration_min));
+  const avgLatency = safeAvg(rows.map((r) => r.latency_min));
+  const avgWakeups = safeAvg(rows.map((r) => r.wakeups_count));
+
+  // "Sleep Success" placeholder: % nights with quality >= 4
+  const successScore = useMemo(() => {
+    const qs = rows.map((r) => r.quality_num).filter((n): n is number => typeof n === "number");
+    if (!qs.length) return null;
+    const good = qs.filter((q) => q >= 4).length;
+    return Math.round((good / qs.length) * 100);
+  }, [rows]);
+
+  const risk = useMemo(() => riskFromScore(successScore), [successScore]);
+
+  const qualitySeries = useMemo(() => {
+    // oldest -> newest for sparkline
+    const xs = [...rows]
+      .reverse()
+      .map((r) => r.quality_num)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    return xs;
+  }, [rows]);
+
+  const durationSeries = useMemo(() => {
+    const xs = [...rows]
+      .reverse()
+      .map((r) => r.duration_min)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    return xs;
+  }, [rows]);
+
+  const latencySeries = useMemo(() => {
+    const xs = [...rows]
+      .reverse()
+      .map((r) => r.latency_min)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    return xs;
+  }, [rows]);
+
+  const wakeSeries = useMemo(() => {
+    const xs = [...rows]
+      .reverse()
+      .map((r) => r.wakeups_count)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    return xs;
+  }, [rows]);
+
+  const latest = rows[0] ?? null;
+
+  const trendLabel = useMemo(() => {
+    const qs = qualitySeries;
+    if (qs.length < 4) return "—";
+    const last3 = qs.slice(-3);
+    const prev3 = qs.slice(-6, -3);
+    if (prev3.length < 3) return "—";
+    const a = safeAvg(prev3) ?? 0;
+    const b = safeAvg(last3) ?? 0;
+    const diff = b - a;
+    if (diff > 0.25) return "Getting better";
+    if (diff < -0.25) return "Getting worse";
+    return "Stable";
+  }, [qualitySeries]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="text-sm opacity-70">Today: {todayStr || "—"}</div>
-      </div>
-
-      <div className="rounded-xl border p-4">
-        <div className="font-medium">Status: {status}</div>
-      </div>
-
-      <div className="rounded-xl border p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Today’s habits</h2>
-          <Link className="underline opacity-80 hover:opacity-100" href="/protected/habits">
+    <div style={{ maxWidth: 980, margin: "0 auto", padding: "22px 14px 60px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 34, margin: 0 }}>Dashboard</h1>
+          <div style={{ opacity: 0.75, marginTop: 4 }}>Today: {today}</div>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/protected/sleep" style={{ textDecoration: "underline" }}>
+            Open sleep →
+          </Link>
+          <Link href="/protected/habits" style={{ textDecoration: "underline" }}>
             Open habits →
           </Link>
         </div>
-
-        <div className="space-y-2">
-          {(() => {
-            const r = habitsByDate.get(todayStr);
-            return (
-              <div className="text-sm space-y-2">
-                <div> {r?.caffeine_after_2pm === false ? "✅" : "❌"} Caffeine after 2pm</div>
-                <div> {r?.alcohol === false ? "✅" : "❌"} Alcohol</div>
-                <div> {r?.exercise === true ? "✅" : "—"} Exercise</div>
-                <div> {r?.screens_last_hour === false ? "✅" : "❌"} Screens last hour</div>
-              </div>
-            );
-          })()}
-        </div>
-
-        <div className="pt-2 space-y-2">
-          <div className="text-sm font-medium">Last 7 days (good days): {goodDaysCount}/{dayList.length || 7}</div>
-
-          <div className="text-sm opacity-80">
-            Avg sleep quality (last 7): {avgQuality7 == null ? "—" : avgQuality7}
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            {dayList.map((d) => {
-              const ok = isGoodDay(habitsByDate.get(d));
-              return (
-                <div
-                  key={d}
-                  className="border rounded-lg px-3 py-2 text-xs flex items-center gap-2"
-                  title={d}
-                >
-                  <div className="opacity-70">{d.slice(5)}</div>
-                  <div>{ok ? "✅" : "❌"}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="text-xs opacity-70 pt-1">
-            Rule used: a “good day” means all 4 boxes are ticked.
-          </div>
-        </div>
       </div>
 
-      <div className="rounded-xl border p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Latest sleep log</h2>
-          <Link className="underline opacity-80 hover:opacity-100" href="/protected/sleep">
-            Open sleep →
-          </Link>
-        </div>
-
-        {latestSleep ? (
-          <div className="text-sm space-y-1">
-            <div>Start: {latestSleep.sleep_start ? formatDateTime(latestSleep.sleep_start) : "—"}</div>
-            <div>End: {latestSleep.sleep_end ? formatDateTime(latestSleep.sleep_end) : "—"}</div>
-            <div>Quality: {latestSleep.quality ?? "—"} / 5</div>
-            <div className="pt-2 font-semibold">Notes:</div>
-            <div className="opacity-90 whitespace-pre-wrap">{latestSleep.notes || "—"}</div>
-
-            <div className="pt-3 space-y-1">
-              <div className="font-semibold">Last 7 days average quality</div>
-              <div>{avgQuality7 == null ? "—" : `${avgQuality7} / 5`}</div>
-
-              <div className="font-semibold pt-2">Last 7 days average duration</div>
-              <div>{avgDuration7 == null ? "—" : formatMinutesHuman(Math.round(avgDuration7))}</div>
-
-              <div className="font-semibold pt-2">Bedtime consistency</div>
-              <div>
-                {bedtimeVar7 == null
-                  ? "—"
-                  : `±${Math.round(bedtimeVar7)} min (lower = more consistent)`}
-              </div>
-
-              <div className="font-semibold pt-2">RRSM score (v1)</div>
-              <div>{rrsmScore7 == null ? "—" : rrsmScore7}</div>
-            </div>
-
-            <div className="pt-3 text-xs opacity-70">
-              Latest duration: {latestDurationMins == null ? "—" : formatMinutesHuman(latestDurationMins)}
-            </div>
-          </div>
+      {/* Status */}
+      <div
+        style={{
+          marginTop: 14,
+          border: "1px solid rgba(0,0,0,0.08)",
+          borderRadius: 12,
+          padding: 14,
+          background: "rgba(0,0,0,0.02)",
+        }}
+      >
+        <div style={{ fontWeight: 700 }}>Status</div>
+        {loading ? (
+          <div style={{ opacity: 0.85, marginTop: 6 }}>Loading your last 7 nights…</div>
+        ) : err ? (
+          <div style={{ color: "tomato", fontWeight: 700, marginTop: 6 }}>{err}</div>
         ) : (
-          <div className="text-sm opacity-70">No sleep logs yet.</div>
+          <div style={{ opacity: 0.85, marginTop: 6 }}>Ready.</div>
         )}
       </div>
 
-      <div className="flex gap-4">
-        <Link className="underline" href="/protected/habits">
-          Go to Habits
-        </Link>
-        <Link className="underline" href="/protected/sleep">
-          Go to Sleep
-        </Link>
+      {/* KPI grid */}
+      <div
+        style={{
+          marginTop: 18,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+          gap: 12,
+        }}
+      >
+        <KpiCard label="Nights recorded (last 7)" value={loading ? "…" : String(nightsRecorded)} sub="" />
+        <KpiCard
+          label="Avg sleep quality (last 7)"
+          value={avgQuality == null ? "—" : String(round1(avgQuality))}
+          sub={qualitySeries.length ? sparkline(qualitySeries) : ""}
+        />
+        <KpiCard
+          label="Avg duration (min)"
+          value={avgDuration == null ? "—" : String(Math.round(avgDuration))}
+          sub={durationSeries.length ? sparkline(durationSeries) : ""}
+        />
+        <KpiCard
+          label="Avg latency (min)"
+          value={avgLatency == null ? "—" : String(Math.round(avgLatency))}
+          sub={latencySeries.length ? sparkline(latencySeries) : ""}
+        />
+        <KpiCard
+          label="Avg wake-ups"
+          value={avgWakeups == null ? "—" : String(round1(avgWakeups))}
+          sub={wakeSeries.length ? sparkline(wakeSeries) : ""}
+        />
+        <KpiCard
+          label="Sleep success score"
+          value={successScore == null ? "—" : `${successScore}%`}
+          sub={successScore == null ? "" : `Trend: ${trendLabel}`}
+        />
+        <KpiCard label="Current risk level" value={risk.level} sub={risk.label} />
       </div>
+
+      {/* Quality distribution */}
+      <div
+        style={{
+          marginTop: 18,
+          border: "1px solid rgba(0,0,0,0.08)",
+          borderRadius: 14,
+          padding: 16,
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: 10 }}>Last 7-night sleep quality distribution</div>
+        <QualityDistribution rows={rows} loading={loading} />
+      </div>
+
+      {/* Latest night explanation panel */}
+      <div
+        style={{
+          marginTop: 18,
+          display: "grid",
+          gridTemplateColumns: "1.1fr 0.9fr",
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderRadius: 14,
+            padding: 16,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+            <div style={{ fontWeight: 800 }}>Latest night explanation</div>
+            <div style={{ opacity: 0.75 }}>{latest ? fmtDate(latest.created_at) : ""}</div>
+          </div>
+          {!latest ? (
+            <div style={{ opacity: 0.75, marginTop: 10 }}>No sleep logs yet. Add one in Sleep.</div>
+          ) : (
+            <div style={{ marginTop: 10, lineHeight: 1.5 }}>
+              <div style={{ opacity: 0.8, marginBottom: 8 }}>
+                What you entered (drivers) helps the RRSM engine contextualize patterns.
+              </div>
+              <div>
+                <strong>Primary:</strong> {latest.primary_driver ?? "(none)"}
+              </div>
+              <div>
+                <strong>Secondary:</strong> {latest.secondary_driver ?? "(none)"}
+              </div>
+              <div>
+                <strong>Notes:</strong> {latest.notes ?? "(none)"}
+              </div>
+              <div style={{ marginTop: 10, opacity: 0.85 }}>
+                <strong>Metrics:</strong>{" "}
+                {latest.duration_min != null ? `${latest.duration_min} min` : "—"}
+                {latest.latency_min != null ? ` · Latency ${latest.latency_min} min` : ""}
+                {latest.wakeups_count != null ? ` · Wake-ups ${latest.wakeups_count}` : ""}
+                {latest.quality_num != null ? ` · Quality ${latest.quality_num}` : ""}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderRadius: 14,
+            padding: 16,
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 10 }}>RRSM: what to do next</div>
+          {insightLoading ? (
+            <div style={{ opacity: 0.75 }}>Analyzing last 7 days…</div>
+          ) : insightErr ? (
+            <div style={{ color: "tomato", fontWeight: 700 }}>{insightErr}</div>
+          ) : insight ? (
+            <RRSMInsightCard insight={insight} />
+          ) : (
+            <div style={{ opacity: 0.75 }}>No RRSM insight yet.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Raw list */}
+      <details style={{ marginTop: 16, opacity: 0.95 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 800 }}>Debug: last 7 nights (raw)</summary>
+        <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 12, whiteSpace: "pre-wrap" }}>
+          {JSON.stringify(rows, null, 2)}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(0,0,0,0.08)",
+        borderRadius: 14,
+        padding: 14,
+        minHeight: 86,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+      }}
+    >
+      <div style={{ fontWeight: 800, opacity: 0.85 }}>{label}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+        <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: -0.5 }}>{value}</div>
+        <div style={{ fontFamily: "monospace", opacity: 0.6, fontSize: 12 }}>{sub}</div>
+      </div>
+    </div>
+  );
+}
+
+function QualityDistribution({ rows, loading }: { rows: NightRow[]; loading: boolean }) {
+  if (loading) return <div style={{ opacity: 0.75 }}>Loading…</div>;
+  const qs = rows
+    .map((r) => r.quality_num)
+    .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  if (!qs.length) return <div style={{ opacity: 0.75 }}>No quality scores yet.</div>;
+
+  const counts = [1, 2, 3, 4, 5].map((k) => qs.filter((q) => q === k).length);
+  const max = Math.max(...counts, 1);
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {[1, 2, 3, 4, 5].map((k, idx) => {
+        const c = counts[idx];
+        const w = Math.round((c / max) * 100);
+        return (
+          <div key={k} style={{ display: "grid", gridTemplateColumns: "70px 1fr 40px", gap: 10, alignItems: "center" }}>
+            <div style={{ fontWeight: 800 }}>Q{k}</div>
+            <div style={{ height: 10, borderRadius: 999, background: "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+              <div style={{ width: `${w}%`, height: "100%", background: "rgba(0,0,0,0.55)" }} />
+            </div>
+            <div style={{ textAlign: "right", fontFamily: "monospace", opacity: 0.8 }}>{c}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
