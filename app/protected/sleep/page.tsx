@@ -298,7 +298,7 @@ setRrsmInsight(data?.insights?.[0] ?? null);
             onChange={(e) => setPrimaryDriver(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 12px",
+              padding: "var(--sf-input-pad)",
               borderRadius: 10,
               background: "#2b2b2b",
               color: "white",
@@ -323,7 +323,7 @@ setRrsmInsight(data?.insights?.[0] ?? null);
             onChange={(e) => setSecondaryDriver(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 12px",
+              padding: "var(--sf-input-pad)",
               borderRadius: 10,
               background: "#2b2b2b",
               color: "white",
@@ -350,7 +350,7 @@ setRrsmInsight(data?.insights?.[0] ?? null);
             style={{
               width: "100%",
               minHeight: 90,
-              padding: "10px 12px",
+              padding: "var(--sf-input-pad)",
               borderRadius: 10,
               background: "#2b2b2b",
               color: "white",
