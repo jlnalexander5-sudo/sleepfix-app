@@ -225,29 +225,17 @@ setRrsmInsight(data?.insights?.[0] ?? null);
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep Start</div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
+            <div className="sf-input-box">
               <DatePicker
                 selected={startDateObj}
                 onChange={(d: Date) => setSleepStartDate(toIsoLocalDate(d))}
                 dateFormat="dd/MM/yyyy"
-                className="w-full"
+                className="sf-datetime-input"
               />
             </div>
 
-            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
-              <input
-                type="time"
-                value={sleepStartTime}
-                onChange={(e) => setSleepStartTime(e.target.value)}
-                style={{
-                  width: "100%",
-                  background: "transparent",
-                  border: "none",
-                  color: "white",
-                  fontSize: 18,
-                  outline: "none",
-                }}
-              />
+            <div className="sf-input-box">
+              <input type="time" value={sleepStartTime} onChange={(e) => setSleepStartTime(e.target.value)} className="sf-datetime-input" />
             </div>
           </div>
         </div>
@@ -256,29 +244,17 @@ setRrsmInsight(data?.insights?.[0] ?? null);
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep End</div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
+            <div className="sf-input-box">
               <DatePicker
                 selected={endDateObj}
                 onChange={(d: Date) => setSleepEndDate(toIsoLocalDate(d))}
                 dateFormat="dd/MM/yyyy"
-                className="w-full"
+                className="sf-datetime-input"
               />
             </div>
 
-            <div style={{ background: "#222", borderRadius: 10, padding: 12 }}>
-              <input
-                type="time"
-                value={sleepEndTime}
-                onChange={(e) => setSleepEndTime(e.target.value)}
-                style={{
-                  width: "100%",
-                  background: "transparent",
-                  border: "none",
-                  color: "white",
-                  fontSize: 18,
-                  outline: "none",
-                }}
-              />
+            <div className="sf-input-box">
+              <input type="time" value={sleepEndTime} onChange={(e) => setSleepEndTime(e.target.value)} className="sf-datetime-input" />
             </div>
           </div>
         </div>
@@ -313,6 +289,19 @@ setRrsmInsight(data?.insights?.[0] ?? null);
             <option>Too much screen time</option>
             <option>Exercise timing</option>
             <option>Temperature / environment</option>
+            <option>Noise</option>
+            <option>Light / bright room</option>
+            <option>Irregular schedule</option>
+            <option>Late work / mental stimulation</option>
+            <option>Daytime nap too late</option>
+            <option>Pain / discomfort</option>
+            <option>Illness / congestion</option>
+            <option>Medication / supplement</option>
+            <option>Nicotine</option>
+            <option>Travel / jet lag</option>
+            <option>Partner disturbance</option>
+            <option>Nightmares / vivid dreams</option>
+            <option>Other (use Notes)</option>
           </select>
         </div>
 
@@ -338,6 +327,19 @@ setRrsmInsight(data?.insights?.[0] ?? null);
             <option>Too much screen time</option>
             <option>Exercise timing</option>
             <option>Temperature / environment</option>
+            <option>Noise</option>
+            <option>Light / bright room</option>
+            <option>Irregular schedule</option>
+            <option>Late work / mental stimulation</option>
+            <option>Daytime nap too late</option>
+            <option>Pain / discomfort</option>
+            <option>Illness / congestion</option>
+            <option>Medication / supplement</option>
+            <option>Nicotine</option>
+            <option>Travel / jet lag</option>
+            <option>Partner disturbance</option>
+            <option>Nightmares / vivid dreams</option>
+            <option>Other (use Notes)</option>
           </select>
         </div>
 
