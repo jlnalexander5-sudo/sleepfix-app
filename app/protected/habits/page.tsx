@@ -142,290 +142,113 @@ export default function HabitsPage() {
     }
 
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [supabase, dayList]);
-
-  async function upsertField(date: string, patch: Partial<DailyHabitRow>) {
-    if (!userId) return;
-
-    setRows((prev) => {
-      const current = prev[date];
-      const next: DailyHabitRow = {
-        id: current?.id,
-        user_id: userId,
-        created_at: current?.created_at,
-        date,
-        caffeine_after_2pm: current?.caffeine_after_2pm ?? null,
-        alcohol: current?.alcohol ?? null,
-        exercise: current?.exercise ?? null,
-        screens_last_hour: current?.screens_last_hour ?? null,
-        ...patch,
-      };
-      return { ...prev, [date]: next };
-    });
-
-    try {
-      setStatus("Saving…");
-
-      const payload: DailyHabitRow = {
-        user_id: userId,
-        date,
-        caffeine_after_2pm:
-          patch.caffeine_after_2pm ?? rows[date]?.caffeine_after_2pm ?? null,
-        alcohol: patch.alcohol ?? rows[date]?.alcohol ?? null,
-        exercise: patch.exercise ?? rows[date]?.exercise ?? null,
-        screens_last_hour:
-          patch.screens_last_hour ?? rows[date]?.screens_last_hour ?? null,
-      };
-
-      const { error } = await supabase
-        .from("daily_habits")
-        .upsert(payload as any, { onConflict: "user_id,date" });
-
-      if (error) throw error;
-      setStatus("Ready.");
-    } catch (e: any) {
-      setStatus(e?.message ?? "Save failed.");
-    }
-  }
-
-  async function upsertRRSMField(
-    local_date: string,
-    patch: Partial<DailyRRSMFactorRow>
-  ) {
-    if (!userId) return;
-
-    setRrsmRows((prev) => {
-      const current = prev[local_date];
-      const next: DailyRRSMFactorRow = {
-        id: current?.id,
-        user_id: userId,
-        created_at: current?.created_at,
-        local_date,
-        ambient_heat_high: current?.ambient_heat_high ?? null,
-        hot_drinks_late: current?.hot_drinks_late ?? null,
-        heavy_food_late: current?.heavy_food_late ?? null,
-        intense_thinking_late: current?.intense_thinking_late ?? null,
-        visualization_attempted: current?.visualization_attempted ?? null,
-        fought_wakefulness: current?.fought_wakefulness ?? null,
-        cold_shower_evening: current?.cold_shower_evening ?? null,
-        ice_water_evening: current?.ice_water_evening ?? null,
-        notes: current?.notes ?? null,
-        ...patch,
-      };
-      return { ...prev, [local_date]: next };
-    });
-
-    try {
-      setStatus("Saving…");
-
-      const base = rrsmRows[local_date];
-
-      const payload: DailyRRSMFactorRow = {
-        user_id: userId,
-        local_date,
-        ambient_heat_high: patch.ambient_heat_high ?? base?.ambient_heat_high ?? null,
-        hot_drinks_late: patch.hot_drinks_late ?? base?.hot_drinks_late ?? null,
-        heavy_food_late: patch.heavy_food_late ?? base?.heavy_food_late ?? null,
-        intense_thinking_late:
-          patch.intense_thinking_late ?? base?.intense_thinking_late ?? null,
-        visualization_attempted:
-          patch.visualization_attempted ?? base?.visualization_attempted ?? null,
-        fought_wakefulness:
-          patch.fought_wakefulness ?? base?.fought_wakefulness ?? null,
-        cold_shower_evening:
-          patch.cold_shower_evening ?? base?.cold_shower_evening ?? null,
-        ice_water_evening:
-          patch.ice_water_evening ?? base?.ice_water_evening ?? null,
-        notes: patch.notes ?? base?.notes ?? null,
-      };
-
-      const { error } = await supabase
-        .from("daily_rrsm_factors")
-        .upsert(payload as any, { onConflict: "user_id,local_date" });
-
-      if (error) throw error;
-      setStatus("Ready.");
-    } catch (e: any) {
-      setStatus(e?.message ?? "Save failed.");
-    }
-  }
-
-  function checkbox(
-    date: string,
-    key: keyof Pick<
-      DailyHabitRow,
-      "caffeine_after_2pm" | "alcohol" | "exercise" | "screens_last_hour"
-    >,
-    label: string
-  ) {
-    const r = rows[date];
-    const checked = r?.[key] === true;
-
     return (
-      <label
-        key={String(key)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 0",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => upsertField(date, { [key]: e.target.checked } as any)}
-        />
-        <span>{label}</span>
-      </label>
-    );
-  }
-
-  function rrsmCheckbox(
-    date: string,
-    key: keyof Pick<
-      DailyRRSMFactorRow,
-      | "ambient_heat_high"
-      | "hot_drinks_late"
-      | "heavy_food_late"
-      | "intense_thinking_late"
-      | "visualization_attempted"
-      | "fought_wakefulness"
-      | "cold_shower_evening"
-      | "ice_water_evening"
-    >,
-    label: string
-  ) {
-    const r = rrsmRows[date];
-    const checked = r?.[key] === true;
-
-    return (
-      <label
-        key={String(key)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 0",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) =>
-            upsertRRSMField(date, { [key]: e.target.checked } as any)
-          }
-        />
-        <span>{label}</span>
-      </label>
-    );
-  }
-
-  return (
-    <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Tags</h1>
-        <p style={{ marginTop: 8, marginBottom: 0, maxWidth: 760, opacity: 0.85, lineHeight: 1.4 }}>
-          Tick what was true for each day. These tags help SleepFix connect your day-to-day context to your sleep metrics and detect patterns.
-          If you’re not sure, leave it blank.
+    <main className="mx-auto max-w-4xl p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Habits</h1>
+        <p className="text-sm text-neutral-600 mt-1">
+          Quick daily check-in (best done <span className="font-medium">today</span>, not backfilled).
         </p>
-        <p style={{ marginTop: 6, marginBottom: 0, maxWidth: 760, opacity: 0.8, lineHeight: 1.4 }}>
-          <strong>Simple tags first.</strong> The “RRSM” section is optional / advanced.
-        </p>
-          <div style={{ marginTop: 6, opacity: 0.8 }}>
-            Today: {todayStr || "—"}
-          </div>
-        </div>
-
-        <div style={{ textAlign: "right" }}>
-          <div
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.03)",
-              minWidth: 180,
-            }}
-          >
-            <div style={{ fontWeight: 700 }}>Status</div>
-            <div style={{ opacity: 0.9 }}>{status}</div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              gap: 10,
-              justifyContent: "flex-end",
-            }}
-          >
-            <a href="/protected/dashboard" style={{ textDecoration: "underline" }}>
-              Dashboard →
-            </a>
-            <a href="/protected/sleep" style={{ textDecoration: "underline" }}>
-              Sleep →
-            </a>
-          </div>
-        </div>
       </div>
 
-      <div style={{ marginTop: 18 }}>
-        <div style={{ opacity: 0.75, marginBottom: 10 }}>
-          Last 7 days (oldest → newest) — tag what was true
-        </div>
+      <div className="space-y-6">
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-lg font-semibold">Today’s check-in</div>
+              <div className="text-sm text-neutral-600">{dayList[dayList.length - 1]}</div>
+            </div>
+            <div className="text-sm text-neutral-600">Status: {status}</div>
+          </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 12,
-          }}
-        >
-          {dayList.map((d) => (
-            <div
-              key={d}
-              style={{
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.03)",
-                padding: 14,
-              }}
-            >
-              <div style={{ fontWeight: 800, marginBottom: 8 }}>{d}</div>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              <div className="font-medium">Simple habits (easy to remember)</div>
+              <div className="space-y-2">
+                {checkbox(dayList[dayList.length - 1], "caffeine_after_2pm", "Caffeine after 2pm")}
+                {checkbox(dayList[dayList.length - 1], "alcohol", "Alcohol")}
+                {checkbox(dayList[dayList.length - 1], "exercise", "Exercise")}
+                {checkbox(dayList[dayList.length - 1], "screens_last_hour", "Screens in last hour")}
+              </div>
+              <p className="text-xs text-neutral-500 mt-2">
+                Tip: Use the Sleep page “drivers” for your best guess at causes. Habits are just the objective checkboxes.
+              </p>
+            </div>
 
-              {checkbox(d, "caffeine_after_2pm", "Caffeine after 2pm")}
-              {checkbox(d, "alcohol", "Alcohol")}
-              {checkbox(d, "exercise", "Exercise")}
-              {checkbox(d, "screens_last_hour", "Screens last hour")}
-
-              <details style={{ marginTop: 10 }}>
-                <summary
-                  style={{ cursor: "pointer", fontWeight: 800, opacity: 0.9 }}
-                >
-                  Advanced tags (RRSM)
+            <div className="space-y-3">
+              <details className="rounded-lg border bg-neutral-50 p-3">
+                <summary className="cursor-pointer select-none font-medium">
+                  More factors (optional)
                 </summary>
-
-                <div style={{ marginTop: 10 }}>
-                  {rrsmCheckbox(d, "ambient_heat_high", "Hot day / ambient heat high")}
-                  {rrsmCheckbox(d, "hot_drinks_late", "Hot drinks late")}
-                  {rrsmCheckbox(d, "heavy_food_late", "Heavy food late")}
-                  {rrsmCheckbox(d, "intense_thinking_late", "Intense thinking late")}
-                  {rrsmCheckbox(d, "visualization_attempted", "Tried visualization at night")}
-                  {rrsmCheckbox(d, "fought_wakefulness", "Fought wakefulness (forced sleep)")}
-                  {rrsmCheckbox(d, "cold_shower_evening", "Cold shower evening")}
-                  {rrsmCheckbox(d, "ice_water_evening", "Ice water evening")}
+                <div className="mt-3 space-y-4">
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-neutral-700">Other factors</div>
+                    {rrsmCheckbox(dayList[dayList.length - 1], "hot_day_ambient_heat", "Hot day / ambient heat")}
+                    {rrsmCheckbox(dayList[dayList.length - 1], "hot_drinks_late", "Hot drinks late")}
+                    {rrsmCheckbox(dayList[dayList.length - 1], "heavy_food_late", "Heavy food late")}
+                    {rrsmCheckbox(dayList[dayList.length - 1], "intense_thinking_late", "Intense thinking late")}
+                    {rrsmCheckbox(dayList[dayList.length - 1], "tried_visualization_at_night", "Tried visualization at night")}
+                    {rrsmCheckbox(dayList[dayList.length - 1], "fought_wakefulness_forced_sleep", "Fought wakefulness (forced sleep)")}
+                    {rrsmCheckbox(dayList[dayList.length - 1], "cold_shower_evening", "Cold shower evening")}
+                    {rrsmCheckbox(dayList[dayList.length - 1], "ice_water_evening", "Ice water evening")}
+                  </div>
                 </div>
               </details>
+              <p className="text-xs text-neutral-500">
+                Optional means optional — you can ignore this entirely and still use Sleep + Dashboard normally.
+              </p>
             </div>
-          ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-lg font-semibold">History (last 7 days)</div>
+              <div className="text-sm text-neutral-600">Read-only summary of what you logged each day.</div>
+            </div>
+            <div className="text-sm text-neutral-600">
+              Good days: {dayList.filter((d) => {
+                const r = rowsByDate[d];
+                if (!r) return false;
+                return !!(r.caffeine_after_2pm && r.alcohol && r.exercise && r.screens_last_hour);
+              }).length}/{dayList.length}
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {dayList.map((d) => {
+              const r = rowsByDate[d];
+              const pills: string[] = [];
+              if (r?.caffeine_after_2pm) pills.push("Caffeine");
+              if (r?.alcohol) pills.push("Alcohol");
+              if (r?.exercise) pills.push("Exercise");
+              if (r?.screens_last_hour) pills.push("Screens");
+              return (
+                <div key={d} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="font-mono text-sm">{d}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {pills.length === 0 ? (
+                      <span className="text-sm text-neutral-500">No habits logged</span>
+                    ) : (
+                      pills.map((p) => (
+                        <span key={p} className="rounded-full border bg-neutral-50 px-2 py-0.5 text-xs">
+                          {p}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="text-xs text-neutral-500 mt-3">
+            This is not asking you to “remember 7 nights ago” — it only shows what you entered on those days.
+          </p>
         </div>
       </div>
-    </div>
+    </main>
+  );
   );
 }
