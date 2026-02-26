@@ -141,8 +141,14 @@ export default function HabitsPage() {
       }
     }
 
-    load();
-    return (
+   load();
+
+return () => {
+  cancelled = true;
+};
+}, [supabase]);
+
+return (
     <main className="mx-auto max-w-4xl p-6">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Habits</h1>
@@ -251,3 +257,4 @@ export default function HabitsPage() {
     </main>
   );
 }
+
