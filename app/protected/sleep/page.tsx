@@ -113,6 +113,35 @@ export default function SleepPage() {
       if (nightErr) {
         setLatestNightId(null);
         setMetrics([]);
+
+    // Optional: auto-log a few obvious habits from the selected drivers (reduces extra data entry)
+    try {
+      const dateForHabits = sleepStartDate;
+      const driverText = `${primaryDriver ?? ""} | ${secondaryDriver ?? ""}`.toLowerCase();
+
+      const autoHabits: Record<string, boolean> = {};
+      if (driverText.includes("screen")) autoHabits.screens_last_hour = true;
+      if (driverText.includes("caffeine")) autoHabits.caffeine_after_2pm = true;
+      if (driverText.includes("alcohol")) autoHabits.alcohol = true;
+      if (driverText.includes("exercise")) autoHabits.exercise = true;
+
+      if (Object.keys(autoHabits).length > 0) {
+        await supabase
+          .from("daily_habits")
+          .upsert(
+            {
+              user_id: userId,
+              date: dateForHabits,
+              ...autoHabits,
+            },
+            { onConflict: "user_id,date" }
+          );
+      }
+    } catch (e) {
+      // Ignore auto-habits errors (sleep log is the primary action)
+      console.warn("Auto-habits failed", e);
+    }
+
         return;
       }
 
