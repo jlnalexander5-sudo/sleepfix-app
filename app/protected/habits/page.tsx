@@ -125,12 +125,13 @@ export default function HabitsPage() {
     }));
 
     const payload: DailyHabitRow = {
-      user_id: userId,
-      date,
       // preserve other fields if already present
       ...(rowsByDate[date] ?? {}),
+      user_id: userId,
+      date,
+      // dynamic field (checkbox)
       [field]: value,
-    };
+    } as DailyHabitRow;
 
     const { error: upsertErr } = await supabase
       .from("daily_habits")
