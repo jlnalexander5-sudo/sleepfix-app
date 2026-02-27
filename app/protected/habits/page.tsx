@@ -39,15 +39,9 @@ function buildDayList(fromYMD: string, toYMDStr: string) {
 
 export default function HabitsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const [todayYMD, setTodayYMD] = useState<string>("");
-
-  useEffect(() => {
-    // Use Date() only on the client after mount to avoid Next.js prerender errors
-    setTodayYMD(toYMD(new Date()));
-  }, []);
-
-  const fromYMD = useMemo(() => (todayYMD ? addDays(todayYMD, -6) : ""), [todayYMD]);
-  const dayList = useMemo(() => (todayYMD ? buildDayList(fromYMD, todayYMD) : []), [fromYMD, todayYMD]);
+  const todayYMD = useMemo(() => toYMD(new Date()), []);
+  const fromYMD = useMemo(() => addDays(todayYMD, -6), [todayYMD]);
+  const dayList = useMemo(() => buildDayList(fromYMD, todayYMD), [fromYMD, todayYMD]);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -130,16 +124,13 @@ export default function HabitsPage() {
       },
     }));
 
-    const existing = (rowsByDate[date] ?? {}) as DailyHabitRow;
-    // Remove keys that would cause duplicate properties in an object literal
-    const { user_id: _u, date: _d, ...rest } = existing as any;
-
     const payload: DailyHabitRow = {
-      ...rest,
       user_id: userId,
       date,
+      // preserve other fields if already present
+      ...(rowsByDate[date] ?? {}),
       [field]: value,
-    } as DailyHabitRow;
+    };
 
     const { error: upsertErr } = await supabase
       .from("daily_habits")
@@ -174,7 +165,7 @@ export default function HabitsPage() {
         <div className="flex-1">
           <div className="font-medium">{props.label}</div>
           {savingKey === `${props.date}:${String(props.field)}` ? (
-            <div className="text-xs text-neutral-500">Saving…</div>
+            <div className="text-sm text-neutral-500">Saving…</div>
           ) : null}
         </div>
       </label>
@@ -182,7 +173,7 @@ export default function HabitsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
+    <main className="mx-auto max-w-3xl px-4 py-8 text-base">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Habits</h1>
         <p className="text-sm text-neutral-600 mt-1">
@@ -209,7 +200,7 @@ export default function HabitsPage() {
           <HabitCheckbox date={todayYMD} field="screens_last_hour" label="Screens in last hour" />
         </div>
 
-        <p className="text-xs text-neutral-500 mt-4">
+        <p className="text-sm text-neutral-500 mt-4">
           Tip: These are “binary” signals used for pattern detection later. You don’t need to overthink them.
         </p>
       </section>
@@ -231,7 +222,7 @@ export default function HabitsPage() {
             return (
               <div key={d} className="flex items-center justify-between rounded-lg border p-3">
                 <div className="font-medium">{d}</div>
-                <div className="text-sm text-neutral-600">
+                <div className="text-base text-neutral-600">
                   ticks: <span className="font-semibold">{score}</span>/4
                 </div>
               </div>
