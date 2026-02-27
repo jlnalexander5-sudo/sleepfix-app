@@ -202,46 +202,70 @@ export async function POST(req: Request) {
   }
   const userId = auth.user.id;
 
-  // Pull last N nights by created_at
-  const { data: nights, error } = await supabase
-    .from("sleep_nights")
-    .select(
-      "id,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,mind_tags,environment_tags,body_tags,protocol_used_name,primary_driver,secondary_driver,notes"
-    )
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(days);
+  // Pull nights within last `days` days (window). After unlock we always analyze the last 7 days by default.
+const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-  if (error) {
-    return NextResponse.json({ insights: [] }, { status: 200 });
-  }
+const { data: nights, error } = await supabase
+  .from("sleep_nights")
+  .select(
+    "id,created_at,sleep_start,sleep_quality,sleep_latency_choice,wake_ups_choice,mind_tags,environment_tags,body_tags,protocol_used_name,primary_driver,secondary_driver,notes"
+  )
+  .eq("user_id", userId)
+  .gte("sleep_start", since)
+  .order("sleep_start", { ascending: false })
+  .limit(50);
 
-  const rows = (nights ?? []) as any[];
+if (error) {
+  return NextResponse.json({ insights: [] }, { status: 200 });
+}
+
+const rows = (nights ?? []) as any[];
 
   // Keep only rows with the three core scales filled
-  const usable = rows.filter(
-    (r) => r.sleep_quality !== null && r.sleep_latency_choice && r.wake_ups_choice !== null && r.wake_ups_choice !== undefined
-  );
+  const usable = rows.filter((r) => {
+  const hasCore =
+    r.sleep_quality !== null &&
+    r.sleep_quality !== undefined &&
+    Number.isFinite(Number(r.sleep_quality)) &&
+    r.sleep_latency_choice &&
+    r.wake_ups_choice !== null &&
+    r.wake_ups_choice !== undefined;
 
-  // Conservative gate: unlock at 3 nights
+  const hasTags =
+    Array.isArray(r.mind_tags) && r.mind_tags.length > 0 &&
+    Array.isArray(r.environment_tags) && r.environment_tags.length > 0 &&
+    Array.isArray(r.body_tags) && r.body_tags.length > 0;
+
+  return hasCore && hasTags;
+});
+
+// Soft lock: unlock at 3 *valid* nights (within the last `days` days)
   if (usable.length < 3) {
-    const remaining = Math.max(0, 3 - usable.length);
-    const insight: Insight = {
-      code: "Setup",
-      title: "Add 3 nights to unlock insights",
-      confidence: "low",
-      why: [
-        "We avoid early conclusions from 1–2 nights.",
-        "Log Sleep Quality (1–10), Latency, and Wake Ups for each night.",
-        remaining ? `Add ${remaining} more night(s) to unlock your first trend preview.` : "Almost there.",
-      ],
-      actions: ["Log tonight’s sleep", "Repeat for 3 nights", "Optional: add Mind/Environment/Body tags to improve protocol suggestions"],
-    };
-    return NextResponse.json({ insights: [insight] }, { status: 200 });
-  }
+  const remaining = Math.max(0, 3 - usable.length);
+  const insight: Insight = {
+    code: "Setup",
+    title: "Building your baseline (unlock at 3 nights)",
+    confidence: "low",
+    why: [
+      `Logged: ${usable.length}/3 valid nights in the last ${days} days.`,
+      "We wait for a minimum pattern window to avoid early / inaccurate conclusions.",
+      "A valid night requires: Sleep Quality (1–10), Latency, Wake Ups, and at least 1 tag in Mind + Environment + Body.",
+      remaining ? `Add ${remaining} more valid night(s) to unlock your first 7‑day insight.` : "Almost there.",
+    ],
+    actions: [
+      "Log tonight’s sleep (start/end)",
+      "Fill Sleep Quality, Latency, Wake Ups",
+      "Add at least 1 tag in Mind + Environment + Body",
+    ],
+  };
+  return NextResponse.json(
+    { locked: true, nightsLogged: usable.length, unlockAt: 3, days, insights: [insight] },
+    { status: 200 }
+  );
+}
 
   // Latest night = first row (sorted desc)
-  const latest = rows[0];
+  const latest = usable[0];
   const q = Number(latest.sleep_quality);
   const latMin = latencyMinutes(latest.sleep_latency_choice) ?? 60;
   const w = wakeUpsCount(latest.wake_ups_choice) ?? 0;
