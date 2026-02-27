@@ -113,35 +113,6 @@ export default function SleepPage() {
       if (nightErr) {
         setLatestNightId(null);
         setMetrics([]);
-
-    // Optional: auto-log a few obvious habits from the selected drivers (reduces extra data entry)
-    try {
-      const dateForHabits = sleepStartDate;
-      const driverText = `${primaryDriver ?? ""} | ${secondaryDriver ?? ""}`.toLowerCase();
-
-      const autoHabits: Record<string, boolean> = {};
-      if (driverText.includes("screen")) autoHabits.screens_last_hour = true;
-      if (driverText.includes("caffeine")) autoHabits.caffeine_after_2pm = true;
-      if (driverText.includes("alcohol")) autoHabits.alcohol = true;
-      if (driverText.includes("exercise")) autoHabits.exercise = true;
-
-      if (Object.keys(autoHabits).length > 0) {
-        await supabase
-          .from("daily_habits")
-          .upsert(
-            {
-              user_id: userId,
-              date: dateForHabits,
-              ...autoHabits,
-            },
-            { onConflict: "user_id,date" }
-          );
-      }
-    } catch (e) {
-      // Ignore auto-habits errors (sleep log is the primary action)
-      console.warn("Auto-habits failed", e);
-    }
-
         return;
       }
 
@@ -247,13 +218,33 @@ setRrsmInsight(data?.insights?.[0] ?? null);
 
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "24px 18px" }}>
+      {/*
+        Mobile layout fixes:
+        - Collapse 2-col grids into 1-col on small screens
+        - Ensure react-datepicker wrappers don't create horizontal overflow / right-shift
+      */}
+      <style jsx global>{`
+        .react-datepicker-wrapper,
+        .react-datepicker__input-container {
+          width: 100%;
+        }
+        .sf-input-box {
+          width: 100%;
+          min-width: 0;
+        }
+        .sf-datetime-input {
+          width: 100%;
+          box-sizing: border-box;
+        }
+      `}</style>
+
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18 }}>Sleep</h1>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep Start</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sf-input-box">
               <DatePicker
                 selected={startDateObj}
@@ -272,7 +263,7 @@ setRrsmInsight(data?.insights?.[0] ?? null);
         <div>
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep End</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sf-input-box">
               <DatePicker
                 selected={endDateObj}
