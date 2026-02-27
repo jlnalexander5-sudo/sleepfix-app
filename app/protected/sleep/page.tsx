@@ -257,11 +257,20 @@ export default function SleepPage() {
     const start = parseLocalDateTime(sleepStartDate, sleepStartTime);
     const end = parseLocalDateTime(sleepEndDate, sleepEndTime);
 
-    // minimal validation (don’t block, but nudge)
-    if (!sleepQuality || !sleepLatencyChoice || !wakeUpsChoice) {
-      alert("Please select Sleep Quality, Sleep Latency, and Wake Ups (these power insights).");
-      return;
-    }
+    
+// Required fields (we don't unlock analysis unless these exist)
+const missing: string[] = [];
+if (!sleepQuality) missing.push("Sleep Quality");
+if (!sleepLatencyChoice) missing.push("Sleep Latency");
+if (!wakeUpsChoice) missing.push("Wake Ups");
+if (!mindTags || mindTags.length === 0) missing.push("Mind tag");
+if (!environmentTags || environmentTags.length === 0) missing.push("Environment tag");
+if (!bodyTags || bodyTags.length === 0) missing.push("Body tag");
+
+if (missing.length) {
+  alert(`Please complete: ${missing.join(", ")}.`);
+  return;
+}
 
     const { data: inserted, error } = await supabase
       .from("sleep_nights")
@@ -325,7 +334,18 @@ export default function SleepPage() {
   const startDateObj = sleepStartDate ? new Date(`${sleepStartDate}T00:00:00`) : new Date();
   const endDateObj = sleepEndDate ? new Date(`${sleepEndDate}T00:00:00`) : new Date();
 
-  const userInput: RRSMUserInput = {
+  
+
+const missingRequired: string[] = [];
+if (!sleepQuality) missingRequired.push("Sleep Quality");
+if (!sleepLatencyChoice) missingRequired.push("Sleep Latency");
+if (!wakeUpsChoice) missingRequired.push("Wake Ups");
+if (!mindTags || mindTags.length === 0) missingRequired.push("Mind tag");
+if (!environmentTags || environmentTags.length === 0) missingRequired.push("Environment tag");
+if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body tag");
+const canSaveNight = missingRequired.length === 0;
+
+const userInput: RRSMUserInput = {
     primaryDriver,
     secondaryDriver,
     notes: userNotes,
@@ -560,19 +580,25 @@ export default function SleepPage() {
         </div>
 
         <button
-          onClick={saveNight}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            background: "white",
-            color: "black",
-            fontWeight: 800,
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          Save night
-        </button>
+  onClick={saveNight}
+  disabled={!canSaveNight}
+  style={{
+    padding: "10px 14px",
+    borderRadius: 10,
+    background: canSaveNight ? "white" : "rgba(255,255,255,0.35)",
+    color: "black",
+    fontWeight: 800,
+    border: "none",
+    cursor: canSaveNight ? "pointer" : "not-allowed",
+  }}
+>
+  Save night
+</button>
+{!canSaveNight ? (
+  <div style={{ marginTop: 10, opacity: 0.85, fontSize: 14 }}>
+    Complete: {missingRequired.join(", ")}
+  </div>
+) : null}
       </div>
 
       {/* Insight card */}
