@@ -314,15 +314,12 @@ const nightsRecorded = rows.length;
         <QualityDistribution rows={rows} loading={loading} />
       </div>
 
-      {/* Latest night explanation panel */}
-      <div
-        style={{
-          marginTop: 18,
-          display: "grid",
-          gridTemplateColumns: "1.1fr 0.9fr",
-          gap: 12,
-        }}
-      >
+      {/*
+        Latest night + RRSM panel
+        Mobile: 1 column (prevents squashed text)
+        Desktop: 2 columns
+      */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start" style={{ marginTop: 18 }}>
         <div
           style={{
             border: "1px solid rgba(0,0,0,0.08)",
