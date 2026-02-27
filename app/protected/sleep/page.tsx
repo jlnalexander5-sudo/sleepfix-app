@@ -1,12 +1,9 @@
 "use client";
-
 /* eslint-disable react/no-unescaped-entities */
-
 import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import RRSMInsightCard, { RRSMInsight } from "@/components/RRSMInsightCard";
+import RRSMInsightCard, { RRSMInsight, RRSMUserInput } from "@/components/RRSMInsightCard";
 
 const DatePicker = dynamic(
   () => import("react-datepicker").then((m) => m.default as any),
@@ -28,23 +25,99 @@ function toIsoLocalDate(d: Date) {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
-
 function toLocalTimeHHMM(d: Date) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
 }
-
 function parseLocalDateTime(dateStr: string, timeStr: string) {
-  // dateStr: "YYYY-MM-DD", timeStr: "HH:MM"
   const [y, m, d] = dateStr.split("-").map(Number);
   const [hh, mm] = timeStr.split(":").map(Number);
   return new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0, 0, 0);
 }
 
+const LATENCY_CHOICES = ["5", "10", "20", "30", "60+"] as const;
+const WAKE_CHOICES = ["0", "1", "2", "3", "4", "5+"] as const;
+const QUALITY_CHOICES = Array.from({ length: 10 }, (_, i) => String(i + 1));
+
+const MIND_TAGS = [
+  "Overstimulated",
+  "anxious",
+  "calm",
+  "racing thoughts",
+  "flat",
+  "depressed",
+  "focused",
+  "Wired",
+  "foggy",
+  "clear",
+] as const;
+
+const ENV_TAGS = ["Hot", "cold", "noisy", "Quiet", "Bright", "Dark", "Humid", "Dry"] as const;
+
+const BODY_TAGS = [
+  "Pain",
+  "Restless",
+  "Heavy fatigue",
+  "Light fatigue",
+  "Inflamed -inflammation",
+  "Tense",
+  "Relaxed",
+] as const;
+
+const PROTOCOLS = [
+  "DOMS compression Protocol",
+  "Cooling Discharge Protocol",
+  "Mental Discharge Protocol",
+  "No suggestion",
+] as const;
+
+function toggleTag(list: string[], tag: string) {
+  return list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag];
+}
+
+function TagPills(props: {
+  title: string;
+  tags: readonly string[];
+  selected: string[];
+  setSelected: (v: string[]) => void;
+}) {
+  const { title, tags, selected, setSelected } = props;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontWeight: 800, marginBottom: 6 }}>{title}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {tags.map((t) => {
+          const on = selected.includes(t);
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setSelected(toggleTag(selected, t))}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: on ? "white" : "rgba(255,255,255,0.06)",
+                color: on ? "black" : "white",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              {t}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
+        Optional. Improves accuracy of protocol suggestions.
+      </div>
+    </div>
+  );
+}
+
 export default function SleepPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
-
   const [userId, setUserId] = useState<string | null>(null);
 
   // Night form inputs
@@ -52,8 +125,16 @@ export default function SleepPage() {
   const [sleepStartTime, setSleepStartTime] = useState<string>("");
   const [sleepEndDate, setSleepEndDate] = useState<string>("");
   const [sleepEndTime, setSleepEndTime] = useState<string>("");
-
   const [mounted, setMounted] = useState(false);
+
+  // Airtable-style scales (robust inputs)
+  const [sleepQuality, setSleepQuality] = useState<string>(""); // "1".."10"
+  const [sleepLatencyChoice, setSleepLatencyChoice] = useState<string>(""); // "5"|"10"|"20"|"30"|"60+"
+  const [wakeUpsChoice, setWakeUpsChoice] = useState<string>(""); // "0"|"1".."4"|"5+"
+  const [mindTags, setMindTags] = useState<string[]>([]);
+  const [environmentTags, setEnvironmentTags] = useState<string[]>([]);
+  const [bodyTags, setBodyTags] = useState<string[]>([]);
+  const [protocolUsedName, setProtocolUsedName] = useState<string>("");
 
   // Latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
@@ -64,29 +145,34 @@ export default function SleepPage() {
   const [rrsmInsightLoading, setRrsmInsightLoading] = useState(true);
   const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
 
-  // Driver confirmation (simple fields for now)
+  // Driver confirmation (simple fields)
   const [primaryDriver, setPrimaryDriver] = useState<string>("Nothing / no clear driver");
   const [secondaryDriver, setSecondaryDriver] = useState<string>("Nothing / no clear driver");
   const [userNotes, setUserNotes] = useState<string>("");
 
-  // Avoid prerender issues (DatePicker uses Date in props)
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => setMounted(true), []);
 
   // Default datetime-local values on client
   useEffect(() => {
     const start = new Date();
     start.setHours(23, 30, 0, 0);
-
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
-    end.setHours(20, 30, 0, 0);
+    end.setHours(7, 30, 0, 0);
 
     setSleepStartDate(toIsoLocalDate(start));
     setSleepStartTime(toLocalTimeHHMM(start));
     setSleepEndDate(toIsoLocalDate(end));
     setSleepEndTime(toLocalTimeHHMM(end));
+
+    // sensible defaults for new inputs
+    setSleepQuality("");
+    setSleepLatencyChoice("");
+    setWakeUpsChoice("");
+    setMindTags([]);
+    setEnvironmentTags([]);
+    setBodyTags([]);
+    setProtocolUsedName("");
   }, []);
 
   // Get user
@@ -100,9 +186,7 @@ export default function SleepPage() {
   // Load latest night + metrics
   useEffect(() => {
     if (!userId) return;
-
     (async () => {
-      // Latest night id
       const { data: nightRows, error: nightErr } = await supabase
         .from("sleep_nights")
         .select("id, created_at")
@@ -134,36 +218,30 @@ export default function SleepPage() {
         setMetrics([]);
         return;
       }
-
       setMetrics((metricRows ?? []) as NightMetricsRow[]);
     })();
   }, [supabase, userId]);
 
-  // Fetch RRSM insight from API (POST only)
+  // Fetch RRSM insight (POST only)
   useEffect(() => {
     if (!userId) return;
-
     (async () => {
       setRrsmInsightLoading(true);
       setRrsmInsightError(null);
-
       try {
-   const res = await fetch("/api/rrsm/analyze", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    days: 7,
-    includeDrivers: true,
-  }),
-});
+        const res = await fetch("/api/rrsm/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days: 7, includeDrivers: true }),
+        });
 
-if (!res.ok) {
-  const t = await res.text();
-  throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
-}
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
+        }
 
-const data = (await res.json()) as { insights?: RRSMInsight[] };
-setRrsmInsight(data?.insights?.[0] ?? null);
+        const data = (await res.json()) as { insights?: RRSMInsight[] };
+        setRrsmInsight(data?.insights?.[0] ?? null);
       } catch (e: any) {
         setRrsmInsight(null);
         setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
@@ -179,6 +257,12 @@ setRrsmInsight(data?.insights?.[0] ?? null);
     const start = parseLocalDateTime(sleepStartDate, sleepStartTime);
     const end = parseLocalDateTime(sleepEndDate, sleepEndTime);
 
+    // minimal validation (don’t block, but nudge)
+    if (!sleepQuality || !sleepLatencyChoice || !wakeUpsChoice) {
+      alert("Please select Sleep Quality, Sleep Latency, and Wake Ups (these power insights).");
+      return;
+    }
+
     const { data: inserted, error } = await supabase
       .from("sleep_nights")
       .insert({
@@ -188,6 +272,15 @@ setRrsmInsight(data?.insights?.[0] ?? null);
         primary_driver: primaryDriver,
         secondary_driver: secondaryDriver,
         notes: userNotes,
+
+        // Airtable-style inputs
+        sleep_quality: Number(sleepQuality),
+        sleep_latency_choice: sleepLatencyChoice,
+        wake_ups_choice: wakeUpsChoice,
+        mind_tags: mindTags,
+        environment_tags: environmentTags,
+        body_tags: bodyTags,
+        protocol_used_name: protocolUsedName || null,
       })
       .select("id")
       .single();
@@ -197,17 +290,33 @@ setRrsmInsight(data?.insights?.[0] ?? null);
       return;
     }
 
-    // reload latest night + metrics
     const newId = inserted?.id ?? null;
     setLatestNightId(newId);
+
     if (newId) {
       const { data: metricRows } = await supabase
         .from("v_sleep_night_metrics")
         .select("*")
         .eq("night_id", newId)
         .order("created_at", { ascending: false });
-
       setMetrics((metricRows ?? []) as NightMetricsRow[]);
+    }
+
+    // re-run analyze after save
+    try {
+      setRrsmInsightLoading(true);
+      const res = await fetch("/api/rrsm/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: 7, includeDrivers: true }),
+      });
+      const data = (await res.json()) as { insights?: RRSMInsight[] };
+      setRrsmInsight(data?.insights?.[0] ?? null);
+      setRrsmInsightError(null);
+    } catch (e: any) {
+      setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
+    } finally {
+      setRrsmInsightLoading(false);
     }
   }
 
@@ -216,13 +325,14 @@ setRrsmInsight(data?.insights?.[0] ?? null);
   const startDateObj = sleepStartDate ? new Date(`${sleepStartDate}T00:00:00`) : new Date();
   const endDateObj = sleepEndDate ? new Date(`${sleepEndDate}T00:00:00`) : new Date();
 
+  const userInput: RRSMUserInput = {
+    primaryDriver,
+    secondaryDriver,
+    notes: userNotes,
+  };
+
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "24px 18px" }}>
-      {/*
-        Mobile layout fixes:
-        - Collapse 2-col grids into 1-col on small screens
-        - Ensure react-datepicker wrappers don't create horizontal overflow / right-shift
-      */}
       <style jsx global>{`
         .react-datepicker-wrapper,
         .react-datepicker__input-container {
@@ -235,15 +345,28 @@ setRrsmInsight(data?.insights?.[0] ?? null);
         .sf-datetime-input {
           width: 100%;
           box-sizing: border-box;
+          padding: var(--sf-input-pad);
+          border-radius: 10px;
+          background: #2b2b2b;
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .sf-select {
+          width: 100%;
+          padding: var(--sf-input-pad);
+          border-radius: 10px;
+          background: #2b2b2b;
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 0.12);
         }
       `}</style>
 
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18 }}>Sleep</h1>
 
+      {/* Sleep window */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep Start</div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sf-input-box">
               <DatePicker
@@ -253,16 +376,19 @@ setRrsmInsight(data?.insights?.[0] ?? null);
                 className="sf-datetime-input"
               />
             </div>
-
             <div className="sf-input-box">
-              <input type="time" value={sleepStartTime} onChange={(e) => setSleepStartTime(e.target.value)} className="sf-datetime-input" />
+              <input
+                type="time"
+                value={sleepStartTime}
+                onChange={(e) => setSleepStartTime(e.target.value)}
+                className="sf-datetime-input"
+              />
             </div>
           </div>
         </div>
 
         <div>
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep End</div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sf-input-box">
               <DatePicker
@@ -272,9 +398,13 @@ setRrsmInsight(data?.insights?.[0] ?? null);
                 className="sf-datetime-input"
               />
             </div>
-
             <div className="sf-input-box">
-              <input type="time" value={sleepEndTime} onChange={(e) => setSleepEndTime(e.target.value)} className="sf-datetime-input" />
+              <input
+                type="time"
+                value={sleepEndTime}
+                onChange={(e) => setSleepEndTime(e.target.value)}
+                className="sf-datetime-input"
+              />
             </div>
           </div>
         </div>
@@ -282,25 +412,83 @@ setRrsmInsight(data?.insights?.[0] ?? null);
 
       <hr style={{ margin: "18px 0", opacity: 0.3 }} />
 
-      <div style={{ marginTop: 8 }}>
+      {/* Airtable-style scales */}
+      <div style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
+          Quick check-in (powers insights)
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Sleep quality (1–10)</div>
+            <select className="sf-select" value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)}>
+              <option value="">Select…</option>
+              {QUALITY_CHOICES.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Sleep latency</div>
+            <select className="sf-select" value={sleepLatencyChoice} onChange={(e) => setSleepLatencyChoice(e.target.value)}>
+              <option value="">Select…</option>
+              {LATENCY_CHOICES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "60+" ? "60+ mins" : `${v} mins`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Wake ups</div>
+            <select className="sf-select" value={wakeUpsChoice} onChange={(e) => setWakeUpsChoice(e.target.value)}>
+              <option value="">Select…</option>
+              {WAKE_CHOICES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "5+" ? "5+" : v}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <TagPills title="Mind State (tags)" tags={MIND_TAGS} selected={mindTags} setSelected={setMindTags} />
+          <TagPills title="Environment (tags)" tags={ENV_TAGS} selected={environmentTags} setSelected={setEnvironmentTags} />
+          <TagPills title="Body State (tags)" tags={BODY_TAGS} selected={bodyTags} setSelected={setBodyTags} />
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Protocol used (optional)</div>
+            <select className="sf-select" value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
+              <option value="">(none)</option>
+              {PROTOCOLS.filter((p) => p !== "No suggestion").map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
+              If you used a protocol, selecting it lets the app detect mismatches.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr style={{ margin: "18px 0", opacity: 0.3 }} />
+
+      {/* User drivers */}
+      <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
           What do YOU think affected tonight?
         </div>
 
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontWeight: 800, marginBottom: 6 }}>Primary driver</div>
-          <select
-            value={primaryDriver}
-            onChange={(e) => setPrimaryDriver(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "var(--sf-input-pad)",
-              borderRadius: 10,
-              background: "#2b2b2b",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
+          <select className="sf-select" value={primaryDriver} onChange={(e) => setPrimaryDriver(e.target.value)}>
             <option>Nothing / no clear driver</option>
             <option>Stress / worry</option>
             <option>Late caffeine</option>
@@ -327,18 +515,7 @@ setRrsmInsight(data?.insights?.[0] ?? null);
 
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontWeight: 800, marginBottom: 6 }}>Secondary driver</div>
-          <select
-            value={secondaryDriver}
-            onChange={(e) => setSecondaryDriver(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "var(--sf-input-pad)",
-              borderRadius: 10,
-              background: "#2b2b2b",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
+          <select className="sf-select" value={secondaryDriver} onChange={(e) => setSecondaryDriver(e.target.value)}>
             <option>Nothing / no clear driver</option>
             <option>Stress / worry</option>
             <option>Late caffeine</option>
@@ -377,6 +554,7 @@ setRrsmInsight(data?.insights?.[0] ?? null);
               background: "#2b2b2b",
               color: "white",
               border: "1px solid rgba(255,255,255,0.12)",
+              boxSizing: "border-box",
             }}
           />
         </div>
@@ -397,57 +575,23 @@ setRrsmInsight(data?.insights?.[0] ?? null);
         </button>
       </div>
 
+      {/* Insight card */}
       <div style={{ marginTop: 18 }}>
-  {rrsmInsightLoading ? (
-    <div style={{ opacity: 0.85 }}>Analyzing last 7 days...</div>
-  ) : rrsmInsightError ? (
-    <div style={{ color: "tomato", fontWeight: 700 }}>{rrsmInsightError}</div>
-  ) : rrsmInsight ? (
-    <div style={{ display: "grid", gap: 12 }}>
-      <RRSMInsightCard insight={rrsmInsight} />
-
-      <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 12, padding: 12 }}>
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>Your input (tonight)</div>
-
-        <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
-          <div>
-            <span style={{ opacity: 0.7 }}>Primary:</span>{" "}
-            <span style={{ fontWeight: 700 }}>{primaryDriver || "(none)"}</span>
-          </div>
-          <div>
-            <span style={{ opacity: 0.7 }}>Secondary:</span>{" "}
-            <span style={{ fontWeight: 700 }}>{secondaryDriver || "(none)"}</span>
-          </div>
-          <div>
-            <span style={{ opacity: 0.7 }}>Notes:</span>{" "}
-            <span style={{ fontWeight: 700 }}>{userNotes?.trim() ? userNotes : "(none)"}</span>
-          </div>
-        </div>
+        <RRSMInsightCard insight={rrsmInsight} loading={rrsmInsightLoading} error={rrsmInsightError} userInput={userInput} />
       </div>
-    </div>
-  ) : (
-    <div style={{ opacity: 0.85 }}>No RRSM insight yet.</div>
-  )}
-</div>
 
-
+      {/* Keep debug for now (you said we remove at end) */}
       <details style={{ marginTop: 14, opacity: 0.9 }}>
         <summary style={{ cursor: "pointer", fontWeight: 800 }}>Debug (show raw sleep metrics)</summary>
-
         <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 13 }}>
           <div style={{ opacity: 0.9 }}>latestNightId: {latestNightId ?? "(none)"}</div>
           <div style={{ marginTop: 10 }}>
-            {metrics.length === 0 ? (
-              <div>No rows yet.</div>
-            ) : (
-              <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(metrics, null, 2)}</pre>
-            )}
+            {metrics.length === 0 ? <div>No rows yet.</div> : <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(metrics, null, 2)}</pre>}
           </div>
         </div>
       </details>
 
       <style jsx global>{`
-        /* Bigger DatePicker popup (calendar) */
         .react-datepicker {
           font-size: 1rem;
         }
