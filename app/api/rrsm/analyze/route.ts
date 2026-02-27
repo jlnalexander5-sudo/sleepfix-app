@@ -179,7 +179,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { days?: number; includeDrivers?: boolean };
   const days = typeof body.days === "number" ? body.days : 7;
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
