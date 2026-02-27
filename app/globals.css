@@ -1,4 +1,14 @@
 @tailwind base;
+@layer base {
+  html {
+    font-size: 110%;  /* ~17–18px depending on browser */
+  }
+
+  @media (max-width: 768px) {
+    html {
+      font-size: 112.5%;  /* slightly larger on mobile */
+    }
+  }
 @tailwind components;
 @tailwind utilities;
 
