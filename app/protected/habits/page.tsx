@@ -174,7 +174,7 @@ export default function HabitsPage() {
         <div className="flex-1">
           <div className="font-medium">{props.label}</div>
           {savingKey === `${props.date}:${String(props.field)}` ? (
-            <div className="text-xs text-neutral-500">Saving…</div>
+            <div className="text-base text-neutral-500">Saving…</div>
           ) : null}
         </div>
       </label>
@@ -182,16 +182,16 @@ export default function HabitsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
+    <main className="mx-auto max-w-3xl px-4 py-8 text-base">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Habits</h1>
-        <p className="text-sm text-neutral-600 mt-1">
+        <p className="text-base text-neutral-600 mt-2">
           Simple daily checkboxes. This is just “what happened today”, saved per date.
         </p>
       </div>
 
       {error ? (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-base text-red-700">
           {error}
         </div>
       ) : null}
@@ -199,7 +199,7 @@ export default function HabitsPage() {
       <section className="rounded-xl border p-4">
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold">Today ({todayYMD})</h2>
-          {loading ? <span className="text-sm text-neutral-500">Loading…</span> : null}
+          {loading ? <span className="text-base text-neutral-500">Loading…</span> : null}
         </div>
 
         <div className="mt-4 grid gap-3">
@@ -209,14 +209,14 @@ export default function HabitsPage() {
           <HabitCheckbox date={todayYMD} field="screens_last_hour" label="Screens in last hour" />
         </div>
 
-        <p className="text-xs text-neutral-500 mt-4">
+        <p className="text-base text-neutral-500 mt-4">
           Tip: These are “binary” signals used for pattern detection later. You don’t need to overthink them.
         </p>
       </section>
 
       <section className="mt-6 rounded-xl border p-4">
         <h2 className="text-lg font-semibold">Last 7 days</h2>
-        <p className="text-sm text-neutral-600 mt-1">
+        <p className="text-base text-neutral-600 mt-2">
           Shows what you ticked on each day (not asking you to remember anything).
         </p>
 
@@ -231,7 +231,7 @@ export default function HabitsPage() {
             return (
               <div key={d} className="flex items-center justify-between rounded-lg border p-3">
                 <div className="font-medium">{d}</div>
-                <div className="text-sm text-neutral-600">
+                <div className="text-base text-neutral-600">
                   ticks: <span className="font-semibold">{score}</span>/4
                 </div>
               </div>
