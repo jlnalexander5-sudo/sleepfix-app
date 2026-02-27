@@ -1,16 +1,19 @@
 @tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global font scaling (percentage-based, not px) */
 @layer base {
   html {
-    font-size: 110%;  /* ~17–18px depending on browser */
+    font-size: 110%; /* ~17–18px depending on browser default */
   }
 
   @media (max-width: 768px) {
     html {
-      font-size: 112.5%;  /* slightly larger on mobile */
+      font-size: 112.5%; /* slightly larger on mobile */
     }
   }
-@tailwind components;
-@tailwind utilities;
+}
 
 @layer base {
   :root {
