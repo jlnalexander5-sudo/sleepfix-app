@@ -76,41 +76,62 @@ function toggleTag(list: string[], tag: string) {
   return list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag];
 }
 
-function TagPills(props: {
+function MultiSelect({
+  title,
+  options,
+  value,
+  onChange,
+  required,
+  help,
+}: {
   title: string;
-  tags: readonly string[];
-  selected: string[];
-  setSelected: (v: string[]) => void;
+  options: string[];
+  value: string[];
+  onChange: (next: string[]) => void;
+  required?: boolean;
+  help?: string;
 }) {
-  const { title, tags, selected, setSelected } = props;
+  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+
+    // "Not sure / none" is mutually exclusive with other tags
+    const NONE = "Not sure / none";
+    const hasNone = selected.includes(NONE);
+    const others = selected.filter((v) => v !== NONE);
+
+    if (hasNone && others.length > 0) {
+      // If user selected NONE plus others, keep the most recent intent:
+      // prefer "others" and drop NONE.
+      onChange(others);
+      return;
+    }
+
+    onChange(selected);
+  }
+
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontWeight: 800, marginBottom: 6 }}>{title}</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {tags.map((t) => {
-          const on = selected.includes(t);
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setSelected(toggleTag(selected, t))}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: on ? "white" : "rgba(255,255,255,0.06)",
-                color: on ? "black" : "white",
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              {t}
-            </button>
-          );
-        })}
+    <div style={{ marginBottom: 16 }}>
+      <div className="sf-field-label">
+        {title}
+        {required ? <span className="sf-req">*</span> : null}
       </div>
-      <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
-        Optional. Improves accuracy of protocol suggestions.
+      {help ? <div className="sf-help">{help}</div> : null}
+      <select
+        className="sf-select sf-select-multi"
+        multiple
+        value={value}
+        onChange={handleChange}
+        aria-label={title}
+      >
+        {options.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+      <div className="sf-help" style={{ marginTop: 6 }}>
+        Tip: Hold <b>Ctrl</b> (Windows) / <b>Cmd</b> (Mac) to select multiple items.
+        On mobile, just tap multiple items.
       </div>
     </div>
   );
@@ -437,10 +458,11 @@ const userInput: RRSMUserInput = {
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
           Quick check-in (powers insights)
         </div>
+        <div className="sf-help">Required fields are marked with <span className="sf-req">*</span>.</div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Sleep quality (1–10)</div>
+            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div><div className="sf-help">How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
             <select className="sf-select" value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)}>
               <option value="">Select…</option>
               {QUALITY_CHOICES.map((v) => (
@@ -452,7 +474,7 @@ const userInput: RRSMUserInput = {
           </div>
 
           <div>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Sleep latency</div>
+            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div><div className="sf-help">How long did it take to fall asleep?</div>
             <select className="sf-select" value={sleepLatencyChoice} onChange={(e) => setSleepLatencyChoice(e.target.value)}>
               <option value="">Select…</option>
               {LATENCY_CHOICES.map((v) => (
@@ -464,7 +486,7 @@ const userInput: RRSMUserInput = {
           </div>
 
           <div>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Wake ups</div>
+            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div><div className="sf-help">How many times did you wake up?</div>
             <select className="sf-select" value={wakeUpsChoice} onChange={(e) => setWakeUpsChoice(e.target.value)}>
               <option value="">Select…</option>
               {WAKE_CHOICES.map((v) => (
@@ -477,12 +499,12 @@ const userInput: RRSMUserInput = {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <TagPills title="Mind State (tags)" tags={MIND_TAGS} selected={mindTags} setSelected={setMindTags} />
-          <TagPills title="Environment (tags)" tags={ENV_TAGS} selected={environmentTags} setSelected={setEnvironmentTags} />
-          <TagPills title="Body State (tags)" tags={BODY_TAGS} selected={bodyTags} setSelected={setBodyTags} />
+          <MultiSelect title="Mind State (tags)" options={["Not sure / none", ...MIND_TAGS]} value={mindTags} onChange={setMindTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
+          <MultiSelect title="Environment (tags)" options={["Not sure / none", ...ENV_TAGS]} value={environmentTags} onChange={setEnvironmentTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
+          <MultiSelect title="Body State (tags)" options={["Not sure / none", ...BODY_TAGS]} value={bodyTags} onChange={setBodyTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
 
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Protocol used (optional)</div>
+            <div className="sf-field-label">Protocol used (optional)</div><div className="sf-help">If you used a protocol, select it. Otherwise leave “(none)”. (You’ll see protocol explanations in Recommendations.)</div>
             <select className="sf-select" value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
               <option value="">(none)</option>
               {PROTOCOLS.filter((p) => p !== "No suggestion").map((p) => (
@@ -561,7 +583,7 @@ const userInput: RRSMUserInput = {
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Notes (optional)</div>
+          <div className="sf-field-label">Notes (optional)</div><div className="sf-help">Anything else that mattered tonight? This helps our analysis.</div>
           <textarea
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
