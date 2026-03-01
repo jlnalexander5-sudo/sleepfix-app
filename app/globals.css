@@ -130,24 +130,73 @@
 }
 
 /* SleepFix form helpers */
+.sf-select,
+.sf-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--sf-input-pad);
+  font-size: var(--sf-input-font);
+  border-radius: 10px;
+  background: #2b2b2b;
+  color: white;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.sf-select:focus,
+.sf-textarea:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.22);
+}
+
+.sf-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+/* Small UI blocks used on Sleep page */
+.sf-card {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 12px 12px;
+  background: rgba(255,255,255,0.03);
+  margin-bottom: 10px;
+}
+
+.sf-card-title {
+  font-weight: 800;
+  margin-bottom: 4px;
+  font-size: 1.02rem;
+}
+
+.sf-bullets {
+  margin: 8px 0 0 18px;
+}
+
+.sf-bullets li {
+  margin-bottom: 6px;
+}
+
 .sf-field-label {
   font-weight: 800;
   margin-bottom: 6px;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
 }
 
 .sf-req {
   margin-left: 4px;
+  color: #ff5a5f;
+  font-weight: 900;
 }
 
 .sf-help {
-  font-size: 0.95rem;
-  opacity: 0.8;
+  font-size: 1rem;
+  opacity: 0.82;
   margin-bottom: 8px;
-  line-height: 1.35;
+  line-height: 1.45;
 }
 
 .sf-select-multi {
+  font-size: var(--sf-input-font);
   width: 100%;
   min-height: 120px;
   padding: var(--sf-input-pad);
