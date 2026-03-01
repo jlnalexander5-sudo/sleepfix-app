@@ -520,7 +520,48 @@ const userInput: RRSMUserInput = {
         </div>
       </div>
 
-      <hr style={{ margin: "18px 0", opacity: 0.3 }} />
+      
+      {/* Recommendations */}
+      <div style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
+          Recommendations: RRSM Protocols (quick guide)
+        </div>
+        <div className="sf-help" style={{ marginBottom: 10 }}>
+          This section explains the protocols you may see in your RRSM recommendations. If you used one, select it above so the app can learn what helped.
+        </div>
+
+        <div className="sf-card">
+          <div className="sf-card-title">DOMS Compression Protocol</div>
+          <div className="sf-help">Best for: body heaviness, soreness, “wired but tired”, muscular tension.</div>
+          <ul className="sf-bullets">
+            <li>Light compression (socks/leggings) or gentle body pressure</li>
+            <li>Slow nasal breathing for 3–5 minutes</li>
+            <li>Low light + minimal stimulation</li>
+          </ul>
+        </div>
+
+        <div className="sf-card">
+          <div className="sf-card-title">Cooling Discharge Protocol</div>
+          <div className="sf-help">Best for: heat, sweating, hot room, inflammation.</div>
+          <ul className="sf-bullets">
+            <li>Cool shower or cool pack (not ice) for 2–5 minutes</li>
+            <li>Lower room temp / lighter bedding</li>
+            <li>Hydrate lightly (small sips)</li>
+          </ul>
+        </div>
+
+        <div className="sf-card">
+          <div className="sf-card-title">Mental Discharge Protocol</div>
+          <div className="sf-help">Best for: racing thoughts, anxiety, overstimulation.</div>
+          <ul className="sf-bullets">
+            <li>2-minute brain dump (write thoughts/tasks)</li>
+            <li>10 slow breaths with longer exhale</li>
+            <li>Short, calming audio or silence</li>
+          </ul>
+        </div>
+      </div>
+
+<hr style={{ margin: "18px 0", opacity: 0.3 }} />
 
       {/* User drivers */}
       <div style={{ marginTop: 6 }}>
@@ -529,7 +570,7 @@ const userInput: RRSMUserInput = {
         </div>
 
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Primary driver</div>
+          <div className="sf-field-label">Primary driver (optional)</div>
           <select className="sf-select" value={primaryDriver} onChange={(e) => setPrimaryDriver(e.target.value)}>
             <option>Nothing / no clear driver</option>
             <option>Stress / worry</option>
@@ -556,7 +597,7 @@ const userInput: RRSMUserInput = {
         </div>
 
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Secondary driver</div>
+          <div className="sf-field-label">Secondary driver (optional)</div>
           <select className="sf-select" value={secondaryDriver} onChange={(e) => setSecondaryDriver(e.target.value)}>
             <option>Nothing / no clear driver</option>
             <option>Stress / worry</option>
@@ -583,22 +624,13 @@ const userInput: RRSMUserInput = {
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div className="sf-field-label">Notes (optional)</div><div className="sf-help">Anything else that mattered tonight? This helps our analysis.</div>
+          <div className="sf-field-label">Notes (optional)</div><div className="sf-help">The information you provide also goes into our analysis and gives us more information to work with.</div>
           <textarea
+            className="sf-textarea"
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
             placeholder="e.g., neighbor noise until midnight, but slept well after"
-            style={{
-              width: "100%",
-              minHeight: 90,
-              padding: "var(--sf-input-pad)",
-              borderRadius: 10,
-              background: "#2b2b2b",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.12)",
-              boxSizing: "border-box",
-            }}
-          />
+            />
         </div>
 
         <button
