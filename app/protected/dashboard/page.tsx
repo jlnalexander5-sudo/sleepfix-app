@@ -55,6 +55,84 @@ function round1(n: number) {
 function riskFromScore(score: number | null) {
   // Simple placeholder until RRSM risk scoring is formalized.
   if (score === null) return { level: "—", label: "No data" };
+
+function buildLocalInsight(rows: NightRow[]): RRSMInsight {
+  const valid = rows.filter(
+    (r) =>
+      r.quality_num !== null &&
+      r.quality_num !== undefined &&
+      r.latency_min !== null &&
+      r.latency_min !== undefined &&
+      r.wakeups_count !== null &&
+      r.wakeups_count !== undefined
+  );
+
+  const used = valid.length;
+  const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / Math.max(1, arr.length);
+
+  const avgQuality = avg(valid.map((r) => r.quality_num as number));
+  const avgLatency = avg(valid.map((r) => r.latency_min as number));
+  const avgWakeups = avg(valid.map((r) => r.wakeups_count as number));
+
+  // Simple driver tally (optional fields)
+  const driverCounts = new Map<string, number>();
+  for (const r of valid) {
+    const d = (r.primary_driver || "").trim();
+    if (!d) continue;
+    driverCounts.set(d, (driverCounts.get(d) || 0) + 1);
+  }
+  const topDriver =
+    [...driverCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+  let headline = "Baseline building";
+  let summary =
+    "Keep logging for a few more nights so SleepFix can detect patterns and generate more confident RRSM insights.";
+
+  // Heuristics
+  if (avgQuality < 6) {
+    headline = "Sleep quality trending low";
+    summary =
+      "Your recent entries suggest sleep quality is below your likely baseline. Focus on the biggest, most repeatable levers first.";
+  } else if (avgLatency > 30) {
+    headline = "Sleep onset may be the main bottleneck";
+    summary =
+      "It looks like falling asleep is taking longer than ideal. Prioritise wind‑down and stimulant timing before chasing other tweaks.";
+  } else if (avgWakeups >= 2) {
+    headline = "Sleep continuity may be the main bottleneck";
+    summary =
+      "Your recent entries suggest multiple wake‑ups on average. Environment and body-state levers are often the fastest wins here.";
+  } else {
+    headline = "Sleep signals look stable so far";
+    summary =
+      "Your recent entries look reasonably steady. Keep logging to unlock deeper RRSM pattern detection (drivers + protocol mismatches).";
+  }
+
+  const confidence: RRSMInsight["confidence"] =
+    used >= 7 ? "high" : used >= 5 ? "medium" : "low";
+
+  const actions: string[] = [];
+  if (avgLatency > 30) actions.push("Earlier wind‑down (30–60m), reduce screens late, and move caffeine earlier.");
+  if (avgWakeups >= 2) actions.push("Check environment: temperature, noise, light; try one change at a time.");
+  if (avgQuality < 6) actions.push("Pick one repeatable lever and run it for 3 nights (protocol), then compare.");
+  if (!actions.length) actions.push("Keep logging nightly so SleepFix can detect drivers and mismatches.");
+
+  const why: string[] = [
+    `Nights used: ${used}/${rows.length} in your current window.`,
+    `Avg quality: ${avgQuality.toFixed(1)} / 10.`,
+    `Avg latency: ${Math.round(avgLatency)} min.`,
+    `Avg wake‑ups: ${avgWakeups.toFixed(1)}.`,
+  ];
+  if (topDriver) why.push(`Most common driver: ${topDriver}.`);
+
+  return {
+    headline,
+    summary,
+    confidence,
+    why,
+    actions,
+  };
+}
+
   if (score >= 80) return { level: "Low", label: "Stable" };
   if (score >= 60) return { level: "Moderate", label: "Watch" };
   return { level: "High", label: "At risk" };
@@ -127,55 +205,42 @@ export default function DashboardPage() {
   // Fetch RRSM insight for the same 7-night window
   useEffect(() => {
     if (!userId) return;
-    (async () => {
-      setInsightLoading(true);
+    if (!rows || rows.length === 0) {
+      setInsight(null);
       setInsightErr(null);
-      try {
-        const res = await fetch("/api/rrsm/analyze", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ days: 7, includeDrivers: true }),
-        });
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j?.error ?? `RRSM analyze failed (${res.status})`);
-        }
-        const j = (await res.json()) as { insights?: RRSMInsight[] };
-        setInsight(j?.insights?.[0] ?? null);
-      } catch (e: any) {
-        setInsight(null);
-        setInsightErr(e?.message ?? "Failed to load RRSM insight");
-      } finally {
-        setInsightLoading(false);
-      }
-    })();
-  }, [userId]);
+      setInsightLoading(false);
+      return;
+    }
 
-  const [today, setToday] = useState<string>("");
+    const validCount = rows.filter(
+      (r) =>
+        r.quality_num !== null &&
+        r.quality_num !== undefined &&
+        r.latency_min !== null &&
+        r.latency_min !== undefined &&
+        r.wakeups_count !== null &&
+        r.wakeups_count !== undefined
+    ).length;
 
-  useEffect(() => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    setToday(`${yyyy}-${mm}-${dd}`);
-  }, []);
+    if (validCount < 3) {
+      setInsight(null);
+      setInsightErr(null);
+      setInsightLoading(false);
+      return;
+    }
 
-const nightsRecorded = rows.length;
-  const avgQuality = safeAvg(rows.map((r) => r.quality_num));
-  const avgDuration = safeAvg(rows.map((r) => r.duration_min));
-  const avgLatency = safeAvg(rows.map((r) => r.latency_min));
-  const avgWakeups = safeAvg(rows.map((r) => r.wakeups_count));
-
-  // "Sleep Success" placeholder: % nights with quality >= 4
-  const successScore = useMemo(() => {
-    const qs = rows.map((r) => r.quality_num).filter((n): n is number => typeof n === "number");
-    if (!qs.length) return null;
-    const good = qs.filter((q) => q >= 4).length;
-    return Math.round((good / qs.length) * 100);
-  }, [rows]);
-
-  const risk = useMemo(() => riskFromScore(successScore), [successScore]);
+    setInsightLoading(true);
+    setInsightErr(null);
+    try {
+      setInsight(buildLocalInsight(rows));
+    } catch (e: any) {
+      setInsight(null);
+      setInsightErr(e?.message || "Failed to build RRSM insight");
+    } finally {
+      setInsightLoading(false);
+    }
+  }, [userId, rows]);
+const risk = useMemo(() => riskFromScore(successScore), [successScore]);
 
   const qualitySeries = useMemo(() => {
     // oldest -> newest for sparkline
