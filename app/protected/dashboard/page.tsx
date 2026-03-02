@@ -13,19 +13,10 @@ type NightRow = {
   latency_min: number | null;
   wakeups_count: number | null;
   quality_num: number | null;
-};
-
-type NightMeta = {
-  id: string;
-  local_date: string | null;
-  created_at: string | null;
-  primary_driver: string | null;
-  secondary_driver: string | null;
-  notes: string | null;
-  user_rating: number | null;
-  sleep_latency_choice: string | null;
-  wake_ups_choice: string | null;
-  perceived_issue: string | null;
+  // These are merged in from sleep_nights (not present on v_sleep_night_metrics)
+  primary_driver?: string | null;
+  secondary_driver?: string | null;
+  notes?: string | null;
 };
 
 type RRSMInsight = {
@@ -180,9 +171,7 @@ export default function DashboardPage() {
 
       const { data, error } = await supabase
         .from("v_sleep_night_metrics")
-        .select(
-          "night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num,primary_driver,secondary_driver,notes"
-        )
+        .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
         .eq("user_id", uid)
         .order("created_at", { ascending: false })
         .limit(7);
@@ -194,32 +183,40 @@ export default function DashboardPage() {
         return;
       }
 
-      const nextRows = (data ?? []) as NightRow[];
-      setRows(nextRows);
+      let nextRows = (data ?? []) as NightRow[];
 
+      // v_sleep_night_metrics does not include driver columns; merge them from sleep_nights
       const nightIds = nextRows.map((r) => r.night_id).filter(Boolean);
-      const nightsById = new Map<string, NightMeta>();
-
       if (nightIds.length) {
-        const { data: nightRows, error: nightErr } = await supabase
+        const { data: nights, error: nightsErr } = await supabase
           .from("sleep_nights")
-          .select(
-            "id, local_date, created_at, primary_driver, secondary_driver, notes, user_rating, sleep_latency_choice, wake_ups_choice, perceived_issue"
-          )
+          .select("id,primary_driver,secondary_driver,notes")
           .in("id", nightIds);
 
-        if (nightErr) {
-          console.error("sleep_nights fetch error", nightErr);
-        } else {
-          for (const n of nightRows ?? []) nightsById.set(n.id, n as any);
+        if (!nightsErr && nights) {
+          const byId = new Map<
+            string,
+            { primary_driver: string | null; secondary_driver: string | null; notes: string | null }
+          >();
+          for (const n of nights as any[]) {
+            byId.set(n.id, {
+              primary_driver: n.primary_driver ?? null,
+              secondary_driver: n.secondary_driver ?? null,
+              notes: n.notes ?? null,
+            });
+          }
+
+          nextRows = nextRows.map((r) => ({ ...r, ...(byId.get(r.night_id) ?? {}) }));
         }
       }
+
+      setRows(nextRows);
       setLoading(false);
 
       // Local RRSM preview until the full engine is wired.
       setInsightErr(null);
       try {
-        setInsight(buildLocalInsight(nextRows, nightsById));
+        setInsight(buildLocalInsight(nextRows));
       } catch (e: any) {
         setInsight(null);
         setInsightErr(e?.message ?? "Failed to build RRSM insight");
