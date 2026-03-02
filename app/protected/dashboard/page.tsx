@@ -14,8 +14,8 @@ type NightRow = {
   wakeups_count: number | null;
   quality_num: number | null;
   // These are merged in from sleep_nights (not present on v_sleep_night_metrics)
-  primary_driver?: string | null;
-  secondary_driver?: string | null;
+  primary_driver: string | null;
+  secondary_driver: string | null;
   notes?: string | null;
 };
 
@@ -121,7 +121,7 @@ function buildLocalInsight(rows: NightRow[]): RRSMInsight {
   const avgQ = safeAvg(valid.map((r) => r.quality_num));
   const avgLat = safeAvg(valid.map((r) => r.latency_min));
   const avgW = safeAvg(valid.map((r) => r.wakeups_count));
-  const topDriver = mostCommon(valid.map((r) => r.primary_driver)) ?? "(no driver logged)";
+  const topDriver = mostCommon(valid.map((r) => r.primary_driver).filter((v): v is string => !!v)) ?? "(no driver logged)";
 
   const why: string[] = [];
   if (avgQ !== null) why.push(`Avg sleep quality (last ${validCount} valid nights): ${round1(avgQ)}/10.`);
@@ -206,7 +206,15 @@ export default function DashboardPage() {
             });
           }
 
-          nextRows = nextRows.map((r) => ({ ...r, ...(byId.get(r.night_id) ?? {}) }));
+          nextRows = nextRows.map((r) => {
+            const m = byId.get(r.night_id);
+            return {
+              ...r,
+              ...(m ?? {}),
+              primary_driver: m?.primary_driver ?? null,
+              secondary_driver: m?.secondary_driver ?? null,
+            };
+          });
         }
       }
 
