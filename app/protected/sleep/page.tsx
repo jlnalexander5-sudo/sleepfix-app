@@ -167,8 +167,7 @@ export default function SleepPage() {
   const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
 
   // Driver confirmation (simple fields)
-  const [primaryDriver, setPrimaryDriver] = useState<string>("Nothing / no clear driver");
-  const [secondaryDriver, setSecondaryDriver] = useState<string>("Nothing / no clear driver");
+  const [drivers, setDrivers] = useState<string[]>(["Nothing / no clear driver"]);
   const [userNotes, setUserNotes] = useState<string>("");
 
   useEffect(() => setMounted(true), []);
@@ -299,8 +298,8 @@ if (missing.length) {
         user_id: userId,
         sleep_start: start.toISOString(),
         sleep_end: end.toISOString(),
-        primary_driver: primaryDriver,
-        secondary_driver: secondaryDriver,
+        primary_driver: drivers.join(", "),
+        secondary_driver: null,
         notes: userNotes,
 
         // Airtable-style inputs
@@ -367,8 +366,8 @@ if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body tag");
 const canSaveNight = missingRequired.length === 0;
 
 const userInput: RRSMUserInput = {
-    primaryDriver,
-    secondaryDriver,
+    primaryDriver: drivers.join(", "),
+    secondaryDriver: "",
     notes: userNotes,
   };
 
@@ -394,6 +393,7 @@ const userInput: RRSMUserInput = {
         }
         .sf-select {
           width: 100%;
+          min-height: 44px;
           padding: var(--sf-input-pad);
           border-radius: 10px;
           background: #2b2b2b;
@@ -462,7 +462,7 @@ const userInput: RRSMUserInput = {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div><div className="sf-help">How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
+            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div><div className="sf-help sf-help-fixed">How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
             <select className="sf-select" value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)}>
               <option value="">Select…</option>
               {QUALITY_CHOICES.map((v) => (
@@ -474,7 +474,7 @@ const userInput: RRSMUserInput = {
           </div>
 
           <div>
-            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div><div className="sf-help">How long did it take to fall asleep?</div>
+            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div><div className="sf-help sf-help-fixed">How long did it take to fall asleep?</div>
             <select className="sf-select" value={sleepLatencyChoice} onChange={(e) => setSleepLatencyChoice(e.target.value)}>
               <option value="">Select…</option>
               {LATENCY_CHOICES.map((v) => (
@@ -486,7 +486,7 @@ const userInput: RRSMUserInput = {
           </div>
 
           <div>
-            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div><div className="sf-help">How many times did you wake up?</div>
+            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div><div className="sf-help sf-help-fixed">How many times did you wake up?</div>
             <select className="sf-select" value={wakeUpsChoice} onChange={(e) => setWakeUpsChoice(e.target.value)}>
               <option value="">Select…</option>
               {WAKE_CHOICES.map((v) => (
@@ -499,9 +499,9 @@ const userInput: RRSMUserInput = {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <MultiSelect title="Mind State (tags)" options={["Not sure / none", ...MIND_TAGS]} value={mindTags} onChange={setMindTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
-          <MultiSelect title="Environment (tags)" options={["Not sure / none", ...ENV_TAGS]} value={environmentTags} onChange={setEnvironmentTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
-          <MultiSelect title="Body State (tags)" options={["Not sure / none", ...BODY_TAGS]} value={bodyTags} onChange={setBodyTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
+          <MultiSelect title="Mind State" options={["Not sure / none", ...MIND_TAGS]} value={mindTags} onChange={setMindTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
+          <MultiSelect title="Environment" options={["Not sure / none", ...ENV_TAGS]} value={environmentTags} onChange={setEnvironmentTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
+          <MultiSelect title="Body State" options={["Not sure / none", ...BODY_TAGS]} value={bodyTags} onChange={setBodyTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
 
           <div style={{ marginBottom: 14 }}>
             <div className="sf-field-label">Protocol used (optional)</div><div className="sf-help">If you used a protocol, select it. Otherwise leave “(none)”. (You’ll see protocol explanations in Recommendations.)</div>
@@ -517,114 +517,69 @@ const userInput: RRSMUserInput = {
               If you used a protocol, selecting it lets the app detect mismatches.
             </div>
           </div>
+
+            <a className="sf-link" href="/protected/protocols">View RRSM protocol explanations</a>
         </div>
       </div>
 
-      
-      {/* Recommendations */}
-      <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
-          Recommendations: RRSM Protocols (quick guide)
-        </div>
-        <div className="sf-help" style={{ marginBottom: 10 }}>
-          This section explains the protocols you may see in your RRSM recommendations. If you used one, select it above so the app can learn what helped.
-        </div>
-
-        <div className="sf-card">
-          <div className="sf-card-title">DOMS Compression Protocol</div>
-          <div className="sf-help">Best for: body heaviness, soreness, “wired but tired”, muscular tension.</div>
-          <ul className="sf-bullets">
-            <li>Light compression (socks/leggings) or gentle body pressure</li>
-            <li>Slow nasal breathing for 3–5 minutes</li>
-            <li>Low light + minimal stimulation</li>
-          </ul>
-        </div>
-
-        <div className="sf-card">
-          <div className="sf-card-title">Cooling Discharge Protocol</div>
-          <div className="sf-help">Best for: heat, sweating, hot room, inflammation.</div>
-          <ul className="sf-bullets">
-            <li>Cool shower or cool pack (not ice) for 2–5 minutes</li>
-            <li>Lower room temp / lighter bedding</li>
-            <li>Hydrate lightly (small sips)</li>
-          </ul>
-        </div>
-
-        <div className="sf-card">
-          <div className="sf-card-title">Mental Discharge Protocol</div>
-          <div className="sf-help">Best for: racing thoughts, anxiety, overstimulation.</div>
-          <ul className="sf-bullets">
-            <li>2-minute brain dump (write thoughts/tasks)</li>
-            <li>10 slow breaths with longer exhale</li>
-            <li>Short, calming audio or silence</li>
-          </ul>
-        </div>
-      </div>
-
-<hr style={{ margin: "18px 0", opacity: 0.3 }} />
+      <hr style={{ margin: "18px 0", opacity: 0.3 }} />
 
       {/* User drivers */}
+      <div style={{ marginTop: 6 }}>
+        <div style={{ fontS{/* User drivers */}
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
           What do YOU think affected tonight?
         </div>
 
-        <div style={{ marginBottom: 10 }}>
-          <div className="sf-field-label">Primary driver (optional)</div>
-          <select className="sf-select" value={primaryDriver} onChange={(e) => setPrimaryDriver(e.target.value)}>
-            <option>Nothing / no clear driver</option>
-            <option>Stress / worry</option>
-            <option>Late caffeine</option>
-            <option>Late meal</option>
-            <option>Alcohol</option>
-            <option>Too much screen time</option>
-            <option>Exercise timing</option>
-            <option>Temperature / environment</option>
-            <option>Noise</option>
-            <option>Light / bright room</option>
-            <option>Irregular schedule</option>
-            <option>Late work / mental stimulation</option>
-            <option>Daytime nap too late</option>
-            <option>Pain / discomfort</option>
-            <option>Illness / congestion</option>
-            <option>Medication / supplement</option>
-            <option>Nicotine</option>
-            <option>Travel / jet lag</option>
-            <option>Partner disturbance</option>
-            <option>Nightmares / vivid dreams</option>
-            <option>Other (use Notes)</option>
-          </select>
-        </div>
-
-        <div style={{ marginBottom: 10 }}>
-          <div className="sf-field-label">Secondary driver (optional)</div>
-          <select className="sf-select" value={secondaryDriver} onChange={(e) => setSecondaryDriver(e.target.value)}>
-            <option>Nothing / no clear driver</option>
-            <option>Stress / worry</option>
-            <option>Late caffeine</option>
-            <option>Late meal</option>
-            <option>Alcohol</option>
-            <option>Too much screen time</option>
-            <option>Exercise timing</option>
-            <option>Temperature / environment</option>
-            <option>Noise</option>
-            <option>Light / bright room</option>
-            <option>Irregular schedule</option>
-            <option>Late work / mental stimulation</option>
-            <option>Daytime nap too late</option>
-            <option>Pain / discomfort</option>
-            <option>Illness / congestion</option>
-            <option>Medication / supplement</option>
-            <option>Nicotine</option>
-            <option>Travel / jet lag</option>
-            <option>Partner disturbance</option>
-            <option>Nightmares / vivid dreams</option>
-            <option>Other (use Notes)</option>
-          </select>
-        </div>
-
         <div style={{ marginBottom: 14 }}>
-          <div className="sf-field-label">Notes (optional)</div><div className="sf-help">The information you provide also goes into our analysis and gives us more information to work with.</div>
+          <div className="sf-field-label">Driver (optional)</div>
+          <div className="sf-help">Select one or more. If nothing stands out, choose “Nothing / no clear driver”.</div>
+
+          <select
+            className="sf-select sf-select-multi"
+            multiple
+            value={drivers}
+            onChange={(e) => {
+              const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+              const NONE = "Nothing / no clear driver";
+              const hasNone = selected.includes(NONE);
+              const others = selected.filter((v) => v !== NONE);
+              if (hasNone && others.length > 0) {
+                setDrivers(others);
+                return;
+              }
+              setDrivers(selected.length ? selected : [NONE]);
+            }}
+            aria-label="Driver"
+          >
+            {[
+              "Nothing / no clear driver",
+              "Stress / worry",
+              "Late caffeine",
+              "Alcohol",
+              "Late meal",
+              "Screen time",
+              "Noise",
+              "Too hot",
+              "Too cold",
+              "Pain / discomfort",
+              "Exercise late",
+              "Other",
+            ].map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+
+          <div className="sf-help" style={{ marginTop: 6 }}>
+            Tip: Hold <b>Ctrl</b> (Windows) / <b>Cmd</b> (Mac) to select multiple items. On mobile, just tap multiple items.
+          </div>
+        </div>
+      </div>
+
+ptional)</div><div className="sf-help">The information you provide also goes into our analysis and gives us more information to work with.</div>
           <textarea
             className="sf-textarea"
             value={userNotes}
@@ -633,23 +588,11 @@ const userInput: RRSMUserInput = {
             />
         </div>
 
-        <button
-  onClick={saveNight}
-  disabled={!canSaveNight}
-  style={{
-    padding: "10px 14px",
-    borderRadius: 10,
-    background: canSaveNight ? "white" : "rgba(255,255,255,0.35)",
-    color: "black",
-    fontWeight: 800,
-    border: "none",
-    cursor: canSaveNight ? "pointer" : "not-allowed",
-  }}
->
+        <button onClick={saveNight} disabled={!canSaveNight} className="sf-button">
   Save night
 </button>
 {!canSaveNight ? (
-  <div style={{ marginTop: 10, opacity: 0.85, fontSize: 14 }}>
+  <div className="sf-help" style={{ marginTop: 10 }}>
     Complete: {missingRequired.join(", ")}
   </div>
 ) : null}
