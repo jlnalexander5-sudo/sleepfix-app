@@ -185,7 +185,6 @@ export default function SleepPage() {
 
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
-  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -312,6 +311,7 @@ if (missing.length) {
 }
 
     setIsSavingNight(true);
+    setSaveNotice(null);
 
     try {
       const { data: inserted, error } = await supabase
@@ -338,19 +338,18 @@ if (missing.length) {
       .single();
 
     if (error) {
-      alert(error.message);
+      setSaveNotice(error.message);
       return;
     }
 
     const newId = inserted?.id ?? null;
     setLatestNightId(newId);
 
-    setJustSaved(true);
+    // UX: clear acknowledgement that persists briefly
     setSaveNotice("Saved");
-    window.setTimeout(() => {
-      setJustSaved(false);
-      setSaveNotice(null);
-    }, 1800);
+    setTimeout(() => {
+      setSaveNotice((curr) => (curr === "Saved" ? null : curr));
+    }, 1500);
 
     if (newId) {
       const { data: metricRows } = await supabase
@@ -601,19 +600,9 @@ const userInput: RRSMUserInput = {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={saveNight}
-          disabled={!canSaveNight || isSavingNight || justSaved}
-          className="sf-button"
-        >
-          {isSavingNight ? "Saving..." : justSaved ? "Saved" : "Save night"}
+        <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
+          {isSavingNight ? "Saving…" : saveNotice === "Saved" ? "Saved" : "Save night"}
         </button>
-        {saveNotice ? (
-          <div className="sf-notice" role="status" aria-live="polite">
-            {saveNotice}
-          </div>
-        ) : null}
       {saveNotice && (
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#000080" }}>{saveNotice}</div>
       )}
