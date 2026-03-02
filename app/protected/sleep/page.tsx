@@ -526,8 +526,8 @@ const userInput: RRSMUserInput = {
 
       {/* User drivers */}
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontS{/* User drivers */}
-      <div style={{ marginTop: 6 }}>
+        {/* User drivers */}
+        <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
           What do YOU think affected tonight?
         </div>
