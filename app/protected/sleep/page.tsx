@@ -186,6 +186,30 @@ export default function SleepPage() {
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
+  function resetNightForm() {
+    // Reset *all* user-entered fields so it’s obvious the night was saved
+    setSleepQuality("");
+    setSleepLatencyChoice("");
+    setWakeUpsChoice("");
+    setMindTags([]);
+    setEnvironmentTags([]);
+    setBodyTags([]);
+    setProtocolUsedName("");
+    setDrivers(["Nothing / no clear driver"]);
+    setUserNotes("");
+
+    // Put dates back to a sensible “tonight” default
+    const start = new Date();
+    start.setHours(23, 30, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    end.setHours(7, 30, 0, 0);
+    setSleepStartDate(toIsoLocalDate(start));
+    setSleepStartTime(toLocalTimeHHMM(start));
+    setSleepEndDate(toIsoLocalDate(end));
+    setSleepEndTime(toLocalTimeHHMM(end));
+  }
+
   useEffect(() => setMounted(true), []);
 
   // Default datetime-local values on client
@@ -345,10 +369,11 @@ if (missing.length) {
     const newId = inserted?.id ?? null;
     setLatestNightId(newId);
 
-    // UX: clear acknowledgement that persists briefly
+    // UX: clear acknowledgement that persists briefly, then reset the form
     setSaveNotice("Saved");
-    setTimeout(() => {
+    window.setTimeout(() => {
       setSaveNotice((curr) => (curr === "Saved" ? null : curr));
+      resetNightForm();
     }, 1500);
 
     if (newId) {
@@ -491,10 +516,11 @@ const userInput: RRSMUserInput = {
         <div className="sf-section-title">Quick check-in (powers insights)</div>
         <div className="sf-help">Required fields are marked with <span className="sf-req">*</span>.</div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 64 }}>How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
-            <select className="sf-select" value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div>
+            <div className="sf-help" style={{ minHeight: 64 }}>How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
+            <select className="sf-select" style={{ marginTop: "auto" }} value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)}>
               <option value="">Select…</option>
               {QUALITY_CHOICES.map((v) => (
                 <option key={v} value={v}>
@@ -504,9 +530,10 @@ const userInput: RRSMUserInput = {
             </select>
           </div>
 
-          <div>
-            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 64 }}>How long did it take to fall asleep?</div>
-            <select className="sf-select" value={sleepLatencyChoice} onChange={(e) => setSleepLatencyChoice(e.target.value)}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div>
+            <div className="sf-help" style={{ minHeight: 64 }}>How long did it take to fall asleep?</div>
+            <select className="sf-select" style={{ marginTop: "auto" }} value={sleepLatencyChoice} onChange={(e) => setSleepLatencyChoice(e.target.value)}>
               <option value="">Select…</option>
               {LATENCY_CHOICES.map((v) => (
                 <option key={v} value={v}>
@@ -516,9 +543,10 @@ const userInput: RRSMUserInput = {
             </select>
           </div>
 
-          <div>
-            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 64 }}>How many times did you wake up?</div>
-            <select className="sf-select" value={wakeUpsChoice} onChange={(e) => setWakeUpsChoice(e.target.value)}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div>
+            <div className="sf-help" style={{ minHeight: 64 }}>How many times did you wake up?</div>
+            <select className="sf-select" style={{ marginTop: "auto" }} value={wakeUpsChoice} onChange={(e) => setWakeUpsChoice(e.target.value)}>
               <option value="">Select…</option>
               {WAKE_CHOICES.map((v) => (
                 <option key={v} value={v}>
