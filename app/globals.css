@@ -195,6 +195,34 @@
   line-height: 1.45;
 }
 
+.sf-help-fixed{
+  min-height: 44px;
+}
+
+.sf-button{
+  display: inline-block;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-weight: 900;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #111;
+  color: white;
+  cursor: pointer;
+}
+
+.sf-button:disabled{
+  background: rgba(0,0,0,0.35);
+  color: rgba(255,255,255,0.85);
+  cursor: not-allowed;
+}
+
+.sf-link{
+  display: inline-block;
+  margin-top: 6px;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
 .sf-select-multi {
   font-size: var(--sf-input-font);
   width: 100%;
