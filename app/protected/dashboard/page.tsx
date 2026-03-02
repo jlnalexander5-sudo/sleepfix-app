@@ -13,9 +13,19 @@ type NightRow = {
   latency_min: number | null;
   wakeups_count: number | null;
   quality_num: number | null;
-  primary_driver?: string | null;
-  secondary_driver?: string | null;
-  notes?: string | null;
+};
+
+type NightMeta = {
+  id: string;
+  local_date: string | null;
+  created_at: string | null;
+  primary_driver: string | null;
+  secondary_driver: string | null;
+  notes: string | null;
+  user_rating: number | null;
+  sleep_latency_choice: string | null;
+  wake_ups_choice: string | null;
+  perceived_issue: string | null;
 };
 
 type RRSMInsight = {
@@ -186,12 +196,30 @@ export default function DashboardPage() {
 
       const nextRows = (data ?? []) as NightRow[];
       setRows(nextRows);
+
+      const nightIds = nextRows.map((r) => r.night_id).filter(Boolean);
+      const nightsById = new Map<string, NightMeta>();
+
+      if (nightIds.length) {
+        const { data: nightRows, error: nightErr } = await supabase
+          .from("sleep_nights")
+          .select(
+            "id, local_date, created_at, primary_driver, secondary_driver, notes, user_rating, sleep_latency_choice, wake_ups_choice, perceived_issue"
+          )
+          .in("id", nightIds);
+
+        if (nightErr) {
+          console.error("sleep_nights fetch error", nightErr);
+        } else {
+          for (const n of nightRows ?? []) nightsById.set(n.id, n as any);
+        }
+      }
       setLoading(false);
 
       // Local RRSM preview until the full engine is wired.
       setInsightErr(null);
       try {
-        setInsight(buildLocalInsight(nextRows));
+        setInsight(buildLocalInsight(nextRows, nightsById));
       } catch (e: any) {
         setInsight(null);
         setInsightErr(e?.message ?? "Failed to build RRSM insight");
