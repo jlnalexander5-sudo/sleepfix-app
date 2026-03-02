@@ -125,10 +125,9 @@ function buildLocalInsight(rows: NightRow[]): RRSMInsight {
   if (topDriver) why.push(`Most common driver: ${topDriver}.`);
 
   return {
-    headline,
-    summary,
+    title: headline,
     confidence,
-    why,
+    why: [summary, ...why],
     actions,
   };
 }
