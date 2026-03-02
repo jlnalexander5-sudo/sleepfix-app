@@ -537,17 +537,13 @@ const userInput: RRSMUserInput = {
 
       <hr style={{ margin: "18px 0", opacity: 0.3 }} />
 
-      {/* User drivers */}
+      {/* What do YOU think affected tonight? */}
       <div style={{ marginTop: 6 }}>
-        {/* User drivers */}
-        <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
           What do YOU think affected tonight?
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div className="sf-help">Select one or more. If nothing stands out, choose “Nothing / no clear driver”.</div>
-
           <MultiCheckGroup
             title=""
             options={[
@@ -569,25 +565,29 @@ const userInput: RRSMUserInput = {
             help="Select one or more. If nothing stands out, choose “Nothing / no clear driver”."
           />
         </div>
-      </div>
 
-ptional)</div><div className="sf-help">The information you provide also goes into our analysis and gives us more information to work with.</div>
+        <div style={{ marginBottom: 14 }}>
+          <div className="sf-field-label">Notes (optional)</div>
+          <div className="sf-help">
+            The information you provide also goes into our analysis and gives us more information to work with.
+          </div>
           <textarea
             className="sf-textarea"
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
             placeholder="e.g., neighbor noise until midnight, but slept well after"
-            />
+          />
         </div>
 
-        <button onClick={saveNight} disabled={!canSaveNight} className="sf-button">
-  Save night
-</button>
-{!canSaveNight ? (
-  <div className="sf-help" style={{ marginTop: 10 }}>
-    Complete: {missingRequired.join(", ")}
-  </div>
-) : null}
+        <button type="button" onClick={saveNight} disabled={!canSaveNight} className="sf-button">
+          Save night
+        </button>
+
+        {!canSaveNight && (
+          <div className="sf-help" style={{ marginTop: 10 }}>
+            Complete: {missingRequired.join(", ")}
+          </div>
+        )}
       </div>
 
       {/* Insight card */}
