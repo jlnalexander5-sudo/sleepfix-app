@@ -309,6 +309,7 @@ if (missing.length) {
       .from("sleep_nights")
       .insert({
         user_id: userId,
+        local_date: sleepStartDate,
         sleep_start: start.toISOString(),
         sleep_end: end.toISOString(),
         primary_driver: drivers.join(", "),
