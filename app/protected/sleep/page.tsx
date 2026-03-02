@@ -468,14 +468,12 @@ const userInput: RRSMUserInput = {
 
       {/* Airtable-style scales */}
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
-          Quick check-in (powers insights)
-        </div>
+        <div className="sf-section-title">Quick check-in (powers insights)</div>
         <div className="sf-help">Required fields are marked with <span className="sf-req">*</span>.</div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 44 }}>How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
+            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 64 }}>How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
             <select className="sf-select" value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)}>
               <option value="">Select…</option>
               {QUALITY_CHOICES.map((v) => (
@@ -487,7 +485,7 @@ const userInput: RRSMUserInput = {
           </div>
 
           <div>
-            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 44 }}>How long did it take to fall asleep?</div>
+            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 64 }}>How long did it take to fall asleep?</div>
             <select className="sf-select" value={sleepLatencyChoice} onChange={(e) => setSleepLatencyChoice(e.target.value)}>
               <option value="">Select…</option>
               {LATENCY_CHOICES.map((v) => (
@@ -499,7 +497,7 @@ const userInput: RRSMUserInput = {
           </div>
 
           <div>
-            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 44 }}>How many times did you wake up?</div>
+            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div><div className="sf-help" style={{ minHeight: 64 }}>How many times did you wake up?</div>
             <select className="sf-select" value={wakeUpsChoice} onChange={(e) => setWakeUpsChoice(e.target.value)}>
               <option value="">Select…</option>
               {WAKE_CHOICES.map((v) => (
@@ -517,7 +515,11 @@ const userInput: RRSMUserInput = {
           <MultiCheckGroup title="Body State" options={["Not sure / none", ...BODY_TAGS]} value={bodyTags} onChange={setBodyTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
 
           <div style={{ marginBottom: 14 }}>
-            <div className="sf-field-label">Protocol used (optional)</div><div className="sf-help">If you used a protocol, select it. Otherwise leave “(none)”. (You’ll see protocol explanations in Recommendations.)</div>
+            <div className="sf-field-label">Protocol used (optional)</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
+              <a className="sf-link" href="/protected/protocols">View RRSM protocol explanations</a>
+            </div>
+            <div className="sf-help">If you used a protocol, select it. Otherwise leave “(none)”.</div>
             <select className="sf-select" value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
               <option value="">(none)</option>
               {PROTOCOLS.filter((p) => p !== "No suggestion").map((p) => (
@@ -531,7 +533,6 @@ const userInput: RRSMUserInput = {
             </div>
           </div>
 
-            <a className="sf-link" href="/protected/protocols">View RRSM protocol explanations</a>
         </div>
       </div>
 
