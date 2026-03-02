@@ -233,3 +233,60 @@
   color: white;
   border: 1px solid rgba(255,255,255,0.12);
 }
+/* Brand */
+:root{
+  --sf-brand: #000080; /* navy */
+  --sf-font: Verdana, sans-serif;
+}
+
+/* Checkbox multi-select list */
+.sf-checklist{
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 12px;
+  background: #2b2b2b;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.sf-checkitem{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sf-checkitem input{
+  width: 18px;
+  height: 18px;
+}
+
+.sf-checkitem.is-checked{
+  border-color: var(--sf-brand);
+}
+
+/* Save button branding */
+.sf-button{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 18px;
+  border-radius: 14px;
+  font-weight: 900;
+  background: var(--sf-brand);
+  color: #fff;
+  border: 1px solid rgba(0,0,0,0.25);
+  font-family: var(--sf-font);
+  font-size: 18px;
+}
+
+.sf-button:disabled{
+  opacity: 0.55;
+  cursor: not-allowed;
+}
