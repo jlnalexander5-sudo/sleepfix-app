@@ -241,6 +241,7 @@
 
 /* Checkbox multi-select list */
 .sf-checklist{
+  color: #fff;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 14px;
   padding: 12px;
@@ -251,6 +252,7 @@
 }
 
 .sf-checkitem{
+  color: #fff;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -289,4 +291,29 @@
 .sf-button:disabled{
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* --- SleepFix brand helpers --- */
+.sf-page-title{
+  font-family: var(--sf-font);
+  color: var(--sf-brand);
+  font-size: 35px;
+  font-weight: 900;
+  margin: 8px 0 10px;
+}
+
+.sf-section-title{
+  font-family: var(--sf-font);
+  color: var(--sf-brand);
+  font-size: 20px;
+  font-weight: 900;
+  margin: 18px 0 8px;
+}
+
+.sf-help-fixed{ min-height: 64px; }
+
+.sf-link{
+  color: var(--sf-brand);
+  font-weight: 900;
+  text-decoration: underline;
 }
