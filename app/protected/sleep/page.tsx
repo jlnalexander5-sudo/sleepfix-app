@@ -183,6 +183,9 @@ export default function SleepPage() {
   const [drivers, setDrivers] = useState<string[]>(["Nothing / no clear driver"]);
   const [userNotes, setUserNotes] = useState<string>("");
 
+  const [isSavingNight, setIsSavingNight] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+
   useEffect(() => setMounted(true), []);
 
   // Default datetime-local values on client
@@ -286,6 +289,8 @@ export default function SleepPage() {
 
   async function saveNight() {
     if (!userId) return;
+    if (isSavingNight) return;
+    setSaveNotice(null);
 
     const start = parseLocalDateTime(sleepStartDate, sleepStartTime);
     const end = parseLocalDateTime(sleepEndDate, sleepEndTime);
@@ -305,13 +310,16 @@ if (missing.length) {
   return;
 }
 
-    const { data: inserted, error } = await supabase
+    setIsSavingNight(true);
+
+    try {
+      const { data: inserted, error } = await supabase
       .from("sleep_nights")
       .insert({
         user_id: userId,
-        local_date: sleepStartDate,
         sleep_start: start.toISOString(),
         sleep_end: end.toISOString(),
+        local_date: toIsoLocalDate(start),
         primary_driver: drivers.join(", "),
         secondary_driver: null,
         notes: userNotes,
@@ -361,7 +369,11 @@ if (missing.length) {
     } finally {
       setRrsmInsightLoading(false);
     }
-  }
+  
+    } finally {
+      setIsSavingNight(false);
+    }
+}
 
   if (!mounted) return null;
 
@@ -581,9 +593,12 @@ const userInput: RRSMUserInput = {
           />
         </div>
 
-        <button type="button" onClick={saveNight} disabled={!canSaveNight} className="sf-button">
+        <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
           Save night
         </button>
+      {saveNotice && (
+        <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#000080" }}>{saveNotice}</div>
+      )}
 
         {!canSaveNight && (
           <div className="sf-help" style={{ marginTop: 10 }}>
