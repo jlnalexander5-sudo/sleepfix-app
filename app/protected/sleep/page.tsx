@@ -524,10 +524,8 @@ const userInput: RRSMUserInput = {
 
       <hr style={{ margin: "18px 0", opacity: 0.3 }} />
 
-      {/* User drivers */}
+      {/* User drivers + notes + save */}
       <div style={{ marginTop: 6 }}>
-        {/* User drivers */}
-        <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
           What do YOU think affected tonight?
         </div>
@@ -577,27 +575,28 @@ const userInput: RRSMUserInput = {
             Tip: Hold <b>Ctrl</b> (Windows) / <b>Cmd</b> (Mac) to select multiple items. On mobile, just tap multiple items.
           </div>
         </div>
-      </div>
 
-ptional)</div><div className="sf-help">The information you provide also goes into our analysis and gives us more information to work with.</div>
+        <div style={{ marginBottom: 14 }}>
+          <div className="sf-field-label">Notes (optional)</div>
+          <div className="sf-help">The information you provide also goes into our analysis and gives us more information to work with.</div>
           <textarea
             className="sf-textarea"
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
             placeholder="e.g., neighbor noise until midnight, but slept well after"
-            />
+          />
         </div>
 
         <button onClick={saveNight} disabled={!canSaveNight} className="sf-button">
-  Save night
-</button>
-{!canSaveNight ? (
-  <div className="sf-help" style={{ marginTop: 10 }}>
-    Complete: {missingRequired.join(", ")}
-  </div>
-) : null}
-      </div>
+          Save night
+        </button>
 
+        {!canSaveNight ? (
+          <div className="sf-help" style={{ marginTop: 10 }}>
+            Complete: {missingRequired.join(", ")}
+          </div>
+        ) : null}
+      </div>
       {/* Insight card */}
       <div style={{ marginTop: 18 }}>
         <RRSMInsightCard insight={rrsmInsight} loading={rrsmInsightLoading} error={rrsmInsightError} userInput={userInput} />
