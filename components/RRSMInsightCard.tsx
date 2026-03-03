@@ -58,13 +58,13 @@ function humanizeWhyLine(line: string): string {
 
   // More human labels
   t = t.replace(/^Latency band:/i, "Time to fall asleep:");
-  t = t.replace(/^Wake band:/i, "Night waking:");
+  t = t.replace(/^Wake band:/i, "Night waking (how often):");
   t = t.replace(/^Dominant factor:/i, "Main factor:");
   t = t.replace(/^Primary driver:/i, "Main pattern:");
   t = t.replace(/^Sleep grade:/i, "Overall sleep:");
   t = t.replace(/^Risk score:/i, "Sleep risk score:");
-  t = t.replace(/^Suggested protocol:/i, "Suggested protocol:");
-  t = t.replace(/^Recommended protocol family:/i, "Recommended protocol family:");
+  t = t.replace(/^Suggested protocol:/i, "Suggested plan:");
+  t = t.replace(/^Recommended protocol family:/i, "Suggested approach:");
 
   // Mismatch wording
   if (/^Mismatch:/i.test(t)) {
@@ -183,9 +183,11 @@ export default function RRSMInsightCard(props: {
       <div className="mt-4">
         <div className="text-base font-semibold text-neutral-900">Why</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-base text-neutral-700">
-          {(insight.why ?? []).map((line, i) => (
-            <li key={i}>{humanizeWhyLine(line)}</li>
-          ))}
+          {(insight.why ?? [])
+                .flatMap(splitCombinedWhyLines)
+                .map((line, i) => (
+                  <li key={i}>{humanizeWhyLine(line)}</li>
+                ))}
         </ul>
       </div>
 
