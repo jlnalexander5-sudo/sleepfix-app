@@ -4,7 +4,19 @@ import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import RRSMInsightCard, { RRSMInsight, RRSMUserInput } from "@/components/RRSMInsightCard";
+function buildNotes(notes: string, affected: string[]) {
+  const parts: string[] = [];
 
+  if (affected && affected.length > 0) {
+    parts.push("Affected tonight: " + affected.join(", "));
+  }
+
+  if (notes && notes.trim() !== "") {
+    parts.push("Notes: " + notes.trim());
+  }
+
+  return parts.join(" | ");
+}
 const DatePicker = dynamic(
   () => import("react-datepicker").then((m) => m.default as any),
   { ssr: false }
