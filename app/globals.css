@@ -241,7 +241,6 @@
 
 /* Checkbox multi-select list */
 .sf-checklist{
-  color: #fff;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 14px;
   padding: 12px;
@@ -252,7 +251,6 @@
 }
 
 .sf-checkitem{
-  color: #fff;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -293,27 +291,42 @@
   cursor: not-allowed;
 }
 
-/* --- SleepFix brand helpers --- */
-.sf-page-title{
-  font-family: var(--sf-font);
-  color: var(--sf-brand);
-  font-size: 35px;
-  font-weight: 900;
-  margin: 8px 0 10px;
+/* Responsive top navigation (logo + menu) */
+.sf-topnav{
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.sf-brand{
+  font-weight: 800;
+  font-size: 32px;
+  line-height: 1;
+}
+.sf-links{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.sf-sep{
+  opacity: 0.35;
 }
 
-.sf-section-title{
-  font-family: var(--sf-font);
-  color: var(--sf-brand);
-  font-size: 20px;
-  font-weight: 900;
-  margin: 18px 0 8px;
-}
-
-.sf-help-fixed{ min-height: 64px; }
-
-.sf-link{
-  color: var(--sf-brand);
-  font-weight: 900;
-  text-decoration: underline;
+@media (max-width: 600px){
+  .sf-topnav{
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .sf-links{
+    width: 100%;
+    justify-content: center;
+    gap: 12px;
+  }
+  .sf-sep{
+    display: none;
+  }
 }
