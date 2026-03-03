@@ -50,7 +50,7 @@ function prettyConfidence(c: string | undefined): string {
   if (v.includes("low")) return "low — early pattern only (log a few more nights)";
   if (v.includes("medium")) return "medium — enough data for a basic pattern";
   if (v.includes("high")) return "high — consistent pattern across nights";
-  return c;
+  return c ?? "";
 }
 
 function humanizeWhyLine(line: string): string {
