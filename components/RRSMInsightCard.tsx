@@ -183,11 +183,9 @@ export default function RRSMInsightCard(props: {
       <div className="mt-4">
         <div className="text-base font-semibold text-neutral-900">Why</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-base text-neutral-700">
-          {(insight.why ?? [])
-                .flatMap(splitCombinedWhyLines)
-                .map((line, i) => (
-                  <li key={i}>{humanizeWhyLine(line)}</li>
-                ))}
+          {splitCombinedWhyLines(insight.why).map((line, i) => (
+            <li key={i}>{humanizeWhyLine(line)}</li>
+          ))}
         </ul>
       </div>
 
