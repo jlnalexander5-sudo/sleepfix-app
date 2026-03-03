@@ -21,42 +21,37 @@ export type RRSMUserInput = {
   notes?: string | null;
 };
 
-function normalizeLine(s: string): string {
-  // Remove accidental duplicated prefixes like "Avoid: Avoid: ..."
-  const dupPrefix = s.match(/^([A-Za-z][A-Za-z\s]+):\s*\1:\s*/);
-  if (dupPrefix) {
-    return s.replace(/^([A-Za-z][A-Za-z\s]+):\s*\1:\s*/i, "$1: ");
+
+function humanizeWhyLine(line: string): string {
+  const s0 = (line ?? "").trim();
+  if (!s0) return s0;
+
+  if (/^Sleep grade\s*:/i.test(s0)) return s0.replace(/^Sleep grade\s*:/i, "Overall sleep:");
+  if (/^Latency band\s*:/i.test(s0)) return s0.replace(/^Latency band\s*:/i, "Falling asleep:");
+  if (/^Wake band\s*:/i.test(s0)) return s0.replace(/^Wake band\s*:/i, "Waking during night:");
+  if (/^Risk score\s*:/i.test(s0)) return s0.replace(/^Risk score\s*:/i, "Sleep risk score:");
+  if (/^Primary driver\s*:/i.test(s0)) return s0.replace(/^Primary driver\s*:/i, "Main pattern:");
+  if (/^Dominant factor\s*:/i.test(s0)) return s0.replace(/^Dominant factor\s*:/i, "Main factor:");
+  if (/^Suggested protocol\s*:/i.test(s0)) return s0.replace(/^Suggested protocol\s*:/i, "Suggested protocol:");
+  if (/^Recommended protocol family\s*:/i.test(s0))
+    return s0.replace(/^Recommended protocol family\s*:/i, "Suggested approach:");
+
+  if (/^Mismatch\s*:/i.test(s0)) {
+    const nMatch = s0.match(/Mismatch\s*:\s*(\d+)/i);
+    const n = nMatch ? Number(nMatch[1]) : null;
+    if (n === 0) return "Protocol match: On track (no mismatch).";
+    if (typeof n === "number")
+      return `Protocol match: ${n} mismatch${n === 1 ? "" : "es"} (what you used didn't match the recommendation).`;
+    return "Protocol match: (see details).";
   }
-  return s;
+
+  return s0;
 }
 
-function explodeLines(lines?: string[] | null): string[] {
-  if (!lines || lines.length === 0) return [];
-  const out: string[] = [];
-  for (const raw of lines) {
-    const line = normalizeLine(String(raw)).trim();
-    if (!line) continue;
-
-    // Split a few common “two facts in one bullet” patterns.
-    if (line.includes("Latency band:") && line.includes("Wake band:")) {
-      const parts = line.split(/\s*(?=Wake band:)/);
-      out.push(...parts.map((p) => p.trim()).filter(Boolean));
-      continue;
-    }
-    if (line.includes("Suggested protocol:") && line.includes("Mismatch:")) {
-      const parts = line.split(/\s*(?=Mismatch:)/);
-      out.push(...parts.map((p) => p.trim()).filter(Boolean));
-      continue;
-    }
-    if (line.includes("Dominant factor:") && line.includes("Recommended protocol family:")) {
-      const parts = line.split(/\s*(?=Recommended protocol family:)/);
-      out.push(...parts.map((p) => p.trim()).filter(Boolean));
-      continue;
-    }
-
-    out.push(line);
-  }
-  return out;
+function tidyActionLine(line: string): string {
+  const s0 = (line ?? "").trim();
+  if (!s0) return s0;
+  return s0.replace(/^Avoid:\s*Avoid:/i, "Avoid:");
 }
 
 export default function RRSMInsightCard(props: {
@@ -104,9 +99,6 @@ export default function RRSMInsightCard(props: {
       !!userInput.notes
     );
 
-  const whyLines = explodeLines(insight.why);
-  const actionLines = explodeLines(insight.actions);
-
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5">
       <div className="text-sm font-semibold text-neutral-600">
@@ -146,8 +138,8 @@ export default function RRSMInsightCard(props: {
       <div className="mt-4">
         <div className="text-base font-semibold text-neutral-900">Why</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-base text-neutral-700">
-          {whyLines.map((line, i) => (
-            <li key={i}>{line}</li>
+          {(insight.why ?? []).map((line, i) => (
+            <li key={i}>{humanizeWhyLine(line)}</li>
           ))}
         </ul>
       </div>
@@ -155,28 +147,15 @@ export default function RRSMInsightCard(props: {
       <div className="mt-4">
         <div className="text-base font-semibold text-neutral-900">Actions</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-base text-neutral-700">
-          {actionLines.map((line, i) => (
-            <li key={i}>{line}</li>
+          {(insight.actions ?? []).map((line, i) => (
+            <li key={i}>{tidyActionLine(line)}</li>
           ))}
         </ul>
-
-        {actionLines.some((l) => /^encouragement:/i.test(l)) ? (
-          <div className="mt-2 text-sm text-neutral-600">
-            “Encouragement” is just supportive context—your actual to-do items are the other bullets.
-          </div>
-        ) : null}
       </div>
 
       {insight.confidence ? (
         <div className="mt-4 text-base text-neutral-700">
           Confidence: <span className="font-semibold">{insight.confidence}</span>
-          <div className="mt-1 text-sm text-neutral-600">
-            {String(insight.confidence).toLowerCase() === "low"
-              ? "Low = limited signal (often because you only have a few valid nights). As you log more consistent nights, confidence should rise."
-              : String(insight.confidence).toLowerCase() === "medium"
-                ? "Medium = enough signal for a solid first recommendation, but patterns may still change."
-                : "High = strong, consistent signal across your recent window."}
-          </div>
         </div>
       ) : null}
     </div>
