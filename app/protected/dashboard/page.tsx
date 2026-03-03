@@ -253,14 +253,6 @@ export default function DashboardPage() {
             Last 7 nights snapshot + RRSM preview (baseline unlock at 3 valid nights).
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <Link href="/protected/sleep" className="sf-button" style={{ textDecoration: "none" }}>
-            Log sleep
-          </Link>
-          <Link href="/protected/habits" className="sf-button" style={{ textDecoration: "none" }}>
-            Habits
-          </Link>
-        </div>
       </div>
 
       {loading ? (
