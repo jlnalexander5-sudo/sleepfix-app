@@ -182,6 +182,8 @@ export default function SleepPage() {
   // Driver confirmation (simple fields)
   const [drivers, setDrivers] = useState<string[]>(["Nothing / no clear driver"]);
   const [userNotes, setUserNotes] = useState<string>("");
+  const [affectedTonight, setAffectedTonight] = useState<string[]>([]);
+
 
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
@@ -197,6 +199,7 @@ export default function SleepPage() {
     setProtocolUsedName("");
     setDrivers(["Nothing / no clear driver"]);
     setUserNotes("");
+      setAffectedTonight([]);
 
     // Put dates back to a sensible “tonight” default
     const start = new Date();
@@ -347,7 +350,7 @@ if (missing.length) {
         local_date: toIsoLocalDate(start),
         primary_driver: drivers.join(", "),
         secondary_driver: null,
-        notes: userNotes,
+        notes: buildNotes(userNotes, affectedTonight),
 
         // Airtable-style inputs
         sleep_quality: Number(sleepQuality),
@@ -426,7 +429,7 @@ const canSaveNight = missingRequired.length === 0;
 const userInput: RRSMUserInput = {
     primaryDriver: drivers.join(", "),
     secondaryDriver: "",
-    notes: userNotes,
+    notes: buildNotes(userNotes, affectedTonight),
   };
 
   return (
@@ -683,4 +686,14 @@ const userInput: RRSMUserInput = {
       `}</style>
     </div>
   );
+
+        <h3 className="mt-6 text-lg font-semibold">What affected tonight (optional)</h3>
+        <p className="text-sm text-neutral-600">
+          Pick any that apply. This helps RRSM spot patterns later.
+        </p>
+        <MultiCheckGroup
+          options={WHAT_AFFECTED_TONIGHT_OPTIONS}
+          selected={affectedTonight}
+          onChange={setAffectedTonight}
+        />
 }
