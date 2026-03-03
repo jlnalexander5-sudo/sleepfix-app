@@ -7,41 +7,35 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   return (
-   <div style={{ minHeight: "100vh", fontSize: "18px", lineHeight: 1.6, fontFamily: "Verdana, sans-serif" }}>
+   <div style={{ minHeight: "100vh", fontSize: "18px", lineHeight: 1.6 }}>
       {/* Top Nav */}
       <header
         style={{
-          borderBottom: "1px solid rgba(0,0,0,0.12)",
+          borderBottom: "1px solid rgba(255,255,255,0.12)",
           padding: "14px 16px",
         }}
       >
-        <nav
-          style={{
-            maxWidth: 980,
-            margin: "0 auto",
-            display: "flex",
-            gap: 14,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <Link href="/protected/dashboard" style={{ textDecoration: "none", fontFamily: "Verdana, sans-serif", color: "#000080", fontSize: 35, fontWeight: 900, marginRight: 10 }}>SleepFix</Link>
+        <nav className="sf-topnav">
+          <span className="sf-brand">SleepFix</span>
 
-          <Link href="/protected/dashboard" style={{ textDecoration: "none", fontFamily: "Verdana, sans-serif", color: "#000080", fontWeight: 700 }}>
+          <div className="sf-links">
+
+          <Link href="/protected/dashboard" style={{ textDecoration: "none" }}>
             Dashboard
           </Link>
 
-          <span style={{ opacity: 0.35 }}>|</span>
+          <span className="sf-sep">|</span>
 
-          <Link href="/protected/habits" style={{ textDecoration: "none", fontFamily: "Verdana, sans-serif", color: "#000080", fontWeight: 700 }}>
+          <Link href="/protected/habits" style={{ textDecoration: "none" }}>
             Habits
           </Link>
 
-          <span style={{ opacity: 0.35 }}>|</span>
+          <span className="sf-sep">|</span>
 
-          <Link href="/protected/sleep" style={{ textDecoration: "none", fontFamily: "Verdana, sans-serif", color: "#000080", fontWeight: 700 }}>
+          <Link href="/protected/sleep" style={{ textDecoration: "none" }}>
             Sleep
           </Link>
+          </div>
         </nav>
       </header>
 
