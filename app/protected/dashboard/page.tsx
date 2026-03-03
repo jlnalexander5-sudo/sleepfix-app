@@ -248,7 +248,7 @@ export default function DashboardPage() {
     <div style={{ maxWidth: 980, margin: "0 auto", padding: "28px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 30, fontWeight: 800 }}>Dashboard</div>
+          <div style={{ fontSize: 30, fontWeight: 800 , color: 'var(--sf-brand)'}}>Dashboard</div>
           <div style={{ marginTop: 6, color: "#444" }}>
             Last 7 nights snapshot + RRSM preview (baseline unlock at 3 valid nights).
           </div>
