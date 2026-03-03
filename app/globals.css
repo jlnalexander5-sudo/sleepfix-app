@@ -300,11 +300,16 @@
   gap: 0.35rem;
   padding: 1rem 1rem 0.5rem;
 }
-.sf-brand{
+.sf-brand {
+  color: var(--sf-brand);
+  text-decoration: none;
   font-weight: 800;
-  font-size: 32px;
-  line-height: 1;
+  letter-spacing: 0.2px;
 }
+
+.sf-brand:visited { color: var(--sf-brand); }
+.sf-brand:hover { text-decoration: underline; }
+
 .sf-links {
   display: flex;
   gap: 0.9rem;
@@ -329,3 +334,7 @@
 h1, h2 {
   color: var(--sf-brand);
 }
+
+
+.sf-topnav a { color: inherit; text-decoration: none; }
+.sf-topnav a:hover { text-decoration: underline; }
