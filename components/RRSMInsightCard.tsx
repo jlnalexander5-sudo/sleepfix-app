@@ -99,12 +99,6 @@ function tidyActionLine(line: string): string {
   return t;
 }
 
-function tidyActionLine(line: string): string {
-  const s0 = (line ?? "").trim();
-  if (!s0) return s0;
-  return s0.replace(/^Avoid:\s*Avoid:/i, "Avoid:");
-}
-
 export default function RRSMInsightCard(props: {
   insight: RRSMInsight | null;
   loading?: boolean;
