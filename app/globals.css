@@ -235,7 +235,7 @@
 }
 /* Brand */
 :root{
-  --sf-brand: #000080; /* navy */
+  --sf-brand: #0b3d91; /* navy */
   --sf-font: Verdana, sans-serif;
 }
 
@@ -258,13 +258,20 @@
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.03);
+  color: #fff;
   cursor: pointer;
   user-select: none;
+}
+
+.sf-checkitem span,
+.sf-checkitem label{
+  color: #fff;
 }
 
 .sf-checkitem input{
   width: 18px;
   height: 18px;
+  accent-color: var(--sf-brand);
 }
 
 .sf-checkitem.is-checked{
