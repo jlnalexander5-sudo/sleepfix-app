@@ -686,14 +686,4 @@ const userInput: RRSMUserInput = {
       `}</style>
     </div>
   );
-
-        <h3 className="mt-6 text-lg font-semibold">What affected tonight (optional)</h3>
-        <p className="text-sm text-neutral-600">
-          Pick any that apply. This helps RRSM spot patterns later.
-        </p>
-        <MultiCheckGroup
-          options={WHAT_AFFECTED_TONIGHT_OPTIONS}
-          selected={affectedTonight}
-          onChange={setAffectedTonight}
-        />
 }
