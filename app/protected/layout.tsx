@@ -16,7 +16,7 @@ export default function ProtectedLayout({
         }}
       >
         <nav className="sf-topnav">
-          <span className="sf-brand">SleepFix</span>
+          <a href="/protected/dashboard" className="sf-brand" aria-label="SleepFix home">SleepFix</a>
 
           <div className="sf-links">
 
