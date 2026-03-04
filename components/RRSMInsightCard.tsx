@@ -1,6 +1,8 @@
 // components/RRSMInsightCard.tsx
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 export type RRSMInsight = {
   domain?: string;        // optional domain label
   code?: string;          // e.g. "RB2 / DN2"
@@ -99,6 +101,86 @@ function tidyActionLine(line: string): string {
   return t;
 }
 
+
+function ProtocolFeedback({ insightTitle }: { insightTitle: string }) {
+  const storageKey = useMemo(() => "sleepfix_protocol_used_latest", []);
+  const [protocolUsed, setProtocolUsed] = useState<null | boolean>(null);
+  const [savedTick, setSavedTick] = useState(false);
+
+  // Only show on "Tonight plan" insights (keeps UI clean during baseline messages)
+  const shouldShow = useMemo(() => {
+    const t = (insightTitle ?? "").toLowerCase();
+    return t.includes("tonight plan") || t.includes("rrsm");
+  }, [insightTitle]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw === "true") setProtocolUsed(true);
+      if (raw === "false") setProtocolUsed(false);
+    } catch {}
+  }, [storageKey]);
+
+  function handle(used: boolean) {
+    setProtocolUsed(used);
+    setSavedTick(true);
+    try {
+      window.localStorage.setItem(storageKey, String(used));
+    } catch {}
+    window.setTimeout(() => setSavedTick(false), 1200);
+  }
+
+  if (!shouldShow) return null;
+
+  return (
+    <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+      <div className="text-base font-semibold text-neutral-900">Protocol check</div>
+      <div className="mt-1 text-base text-neutral-700">
+        Did you use the suggested protocol last night?
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => handle(true)}
+          className={
+            "rounded-md border px-3 py-2 text-base font-semibold transition " +
+            (protocolUsed === true
+              ? "border-blue-600 bg-blue-600 text-white"
+              : "border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100")
+          }
+          aria-pressed={protocolUsed === true}
+        >
+          ✔ Used protocol
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handle(false)}
+          className={
+            "rounded-md border px-3 py-2 text-base font-semibold transition " +
+            (protocolUsed === false
+              ? "border-neutral-900 bg-neutral-900 text-white"
+              : "border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100")
+          }
+          aria-pressed={protocolUsed === false}
+        >
+          ✖ Did not use
+        </button>
+
+        {savedTick ? (
+          <span className="self-center text-base font-semibold text-green-700">
+            Saved
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-2 text-sm text-neutral-600">
+        This helps SleepFix learn what works for you.
+      </div>
+    </div>
+  );
+}
 export default function RRSMInsightCard(props: {
   insight: RRSMInsight | null;
   loading?: boolean;
@@ -203,6 +285,9 @@ export default function RRSMInsightCard(props: {
           Confidence: <span className="font-semibold">{prettyConfidence(insight.confidence)}</span>
         </div>
       ) : null}
+
+      {/* Protocol feedback */}
+      <ProtocolFeedback insightTitle={insight.title} />
     </div>
   );
 }
