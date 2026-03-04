@@ -25,31 +25,55 @@ export type RRSMOutput = {
 }
 
 function confidenceMeaning(level: "low" | "medium" | "high") {
-  if (level === "low") return "low — early signal, more nights needed"
-  if (level === "medium") return "medium — enough nights to see a pattern"
-  return "high — consistent pattern across nights"
+  if (level === "low") return "low — early signal"
+  if (level === "medium") return "medium — pattern emerging"
+  return "high — consistent pattern"
 }
 
-function qualityPoor(q: number) {
-  return q <= 4
-}
+function scoreTags(tags: string[]) {
+  let stimulation = 0
+  let fragmentation = 0
+  let physiology = 0
 
-function latencyHigh(m: number) {
-  return m >= 45
-}
+  tags.forEach(tag => {
+    const t = tag.toLowerCase()
 
-function wakeHigh(w: number) {
-  return w >= 3
+    if (["stress","anxiety","screens","caffeine","late caffeine"].includes(t))
+      stimulation++
+
+    if (["noise","light","temperature","hot room"].includes(t))
+      fragmentation++
+
+    if (["pain","sickness","exercise late","body discomfort"].includes(t))
+      physiology++
+  })
+
+  return { stimulation, fragmentation, physiology }
 }
 
 export function runRRSM(input: RRSMInput): RRSMOutput {
 
-  const { sleepQuality, latencyMinutes, wakeUps, affectedTonight } = input
+  const tags = [
+    ...(input.mindTags ?? []),
+    ...(input.envTags ?? []),
+    ...(input.bodyTags ?? []),
+    ...(input.affectedTonight ?? [])
+  ]
+
+  const tagScore = scoreTags(tags)
 
   let driver = "Optimization"
-  if (qualityPoor(sleepQuality)) driver = "Recovery"
-  else if (latencyHigh(latencyMinutes)) driver = "Pre-Sleep Discharge"
-  else if (wakeHigh(wakeUps)) driver = "Stabilization"
+
+  if (input.sleepQuality <= 4) driver = "Recovery"
+
+  else if (input.latencyMinutes >= 45 || tagScore.stimulation >= 2)
+    driver = "Pre-Sleep Discharge"
+
+  else if (input.wakeUps >= 3 || tagScore.fragmentation >= 2)
+    driver = "Stabilization"
+
+  else if (tagScore.physiology >= 2)
+    driver = "Physiology Reset"
 
   const why: string[] = []
   const actions: string[] = []
@@ -62,55 +86,67 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     headline = "Tonight plan: Recovery sleep"
     primaryDriver = "Sleep quality is low"
 
-    why.push(`Sleep quality was ${sleepQuality}/10.`)
+    why.push(`Sleep quality was ${input.sleepQuality}/10.`)
 
-    actions.push("Reduce stimulation after dinner.")
-    actions.push("Keep lights dim and routine simple.")
+    actions.push("Reduce stimulation tonight.")
+    actions.push("Keep lighting low and environment calm.")
 
-    avoid.push("Late meals, alcohol, overheating the room.")
+    avoid.push("Late meals, alcohol, heavy stimulation.")
   }
 
   else if (driver === "Pre-Sleep Discharge") {
     headline = "Tonight plan: Faster sleep onset"
-    primaryDriver = "Falling asleep is taking too long"
+    primaryDriver = "Overstimulated before bed"
 
-    why.push(`Time to fall asleep was about ${latencyMinutes} minutes.`)
+    why.push(`Sleep latency was about ${input.latencyMinutes} minutes.`)
 
-    actions.push("Do a 15–30 minute steady walk before bed.")
-    actions.push("Dim lights and remove screens for 10 minutes.")
+    actions.push("20–30 minute discharge walk.")
+    actions.push("10 minutes dim-light decompression.")
 
-    avoid.push("Scrolling or stimulating content late.")
+    avoid.push("Screens and stimulating activity late.")
   }
 
   else if (driver === "Stabilization") {
-    headline = "Tonight plan: Fewer wake-ups"
+    headline = "Tonight plan: Reduce wake-ups"
     primaryDriver = "Sleep fragmentation"
 
-    why.push(`You woke up ${wakeUps} times.`)
+    why.push(`Wake-ups recorded: ${input.wakeUps}.`)
 
-    actions.push("Keep the room cool and dark.")
-    actions.push("If you wake up, keep lights low and avoid the phone.")
+    actions.push("Keep bedroom cool and dark.")
+    actions.push("Avoid checking phone during wake-ups.")
 
-    avoid.push("Clock checking and late fluids.")
+    avoid.push("Late fluids, overheating room.")
+  }
+
+  else if (driver === "Physiology Reset") {
+    headline = "Tonight plan: Physical reset"
+    primaryDriver = "Body discomfort signals"
+
+    why.push("Body-related signals detected.")
+
+    actions.push("Gentle stretching before bed.")
+    actions.push("Ensure comfortable sleep environment.")
+
+    avoid.push("Late intense exercise.")
   }
 
   else {
     headline = "Tonight plan: Maintain good sleep"
-    primaryDriver = "Core sleep metrics look stable"
+    primaryDriver = "Sleep metrics look stable"
 
-    why.push("Sleep quality, latency, and wake-ups look acceptable.")
+    why.push("Quality, latency, and wake-ups are within good range.")
 
-    actions.push("Maintain the same routine.")
-    actions.push("Improve one small factor from tags or notes.")
+    actions.push("Keep the same sleep routine.")
 
-    avoid.push("Changing multiple habits at once.")
+    avoid.push("Changing too many habits at once.")
   }
 
-  if (affectedTonight?.length) {
-    why.push(`Possible contributors: ${affectedTonight.join(", ")}`)
+  if (tags.length) {
+    why.push(`Possible contributors: ${tags.join(", ")}`)
   }
 
-  const confidenceLevel: "low" | "medium" | "high" = "medium"
+  const confidenceLevel: "low" | "medium" | "high" =
+    tags.length >= 3 ? "high" : tags.length >= 1 ? "medium" : "low"
 
   return {
     headline,
