@@ -19,6 +19,7 @@ export type RRSMOutput = {
   headline: string
   primaryDriver: string
   protocolFamily: string
+  suggestedProtocol: string
   why: string[]
   actions: string[]
   avoid: string[]
@@ -31,7 +32,7 @@ export type RRSMOutput = {
 function confidenceMeaning(level: "low" | "medium" | "high") {
   if (level === "low") return "low — early signal"
   if (level === "medium") return "medium — pattern emerging"
-  return "high — consistent pattern across nights"
+  return "high — consistent pattern"
 }
 
 function avg(arr: number[]) {
@@ -40,6 +41,40 @@ function avg(arr: number[]) {
 
 function count(condition: boolean[]) {
   return condition.filter(Boolean).length
+}
+
+function collectTags(nights: RRSMNight[]) {
+  const tags: string[] = []
+
+  nights.forEach(n => {
+    tags.push(...(n.mindTags ?? []))
+    tags.push(...(n.envTags ?? []))
+    tags.push(...(n.bodyTags ?? []))
+    tags.push(...(n.affectedTonight ?? []))
+  })
+
+  return tags
+}
+
+function topTag(tags: string[]) {
+  const map: Record<string, number> = {}
+
+  tags.forEach(t => {
+    const key = t.toLowerCase()
+    map[key] = (map[key] || 0) + 1
+  })
+
+  let top = ""
+  let count = 0
+
+  Object.entries(map).forEach(([k, v]) => {
+    if (v > count) {
+      count = v
+      top = k
+    }
+  })
+
+  return { tag: top, count }
 }
 
 export function runRRSM(input: RRSMInput): RRSMOutput {
@@ -60,6 +95,8 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   const avgWake = avg(nights.map(n => n.wakeUps))
   const avgQuality = avg(nights.map(n => n.sleepQuality))
 
+  const tagData = topTag(collectTags(nights))
+
   let driver = "Optimization"
 
   if (qualityPattern >= 3 || tonight.sleepQuality <= 4)
@@ -70,6 +107,20 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
 
   else if (wakePattern >= 3 || tonight.wakeUps >= 3)
     driver = "Stabilization"
+
+  let suggestedProtocol = ""
+
+  if (driver === "Pre-Sleep Discharge")
+    suggestedProtocol = "RB2 Deceleration"
+
+  else if (driver === "Stabilization")
+    suggestedProtocol = "Sleep Continuity Reset"
+
+  else if (driver === "Recovery")
+    suggestedProtocol = "Low-Stimulation Recovery Night"
+
+  else
+    suggestedProtocol = "Maintain Routine"
 
   const why: string[] = []
   const actions: string[] = []
@@ -83,13 +134,8 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     headline = "Tonight plan: Recovery sleep"
     primaryDriver = "Low sleep quality pattern"
 
-    why.push(`Average sleep quality (7 nights): ${avgQuality.toFixed(1)}/10`)
+    why.push(`Average sleep quality: ${avgQuality.toFixed(1)}/10`)
     why.push(`${qualityPattern} of the last 7 nights had poor sleep quality.`)
-
-    actions.push("Reduce stimulation after dinner.")
-    actions.push("Keep lighting dim before bed.")
-
-    avoid.push("Late meals and alcohol.")
   }
 
   else if (driver === "Pre-Sleep Discharge") {
@@ -97,13 +143,8 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     headline = "Tonight plan: Faster sleep onset"
     primaryDriver = "Sleep onset delay pattern"
 
-    why.push(`Average sleep latency: ${avgLatency.toFixed(0)} minutes`)
+    why.push(`Average latency: ${avgLatency.toFixed(0)} minutes`)
     why.push(`${latencyPattern} of the last 7 nights had long sleep latency.`)
-
-    actions.push("20 minute discharge walk before bed.")
-    actions.push("Dim light decompression period.")
-
-    avoid.push("Screens late at night.")
   }
 
   else if (driver === "Stabilization") {
@@ -111,13 +152,8 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     headline = "Tonight plan: Reduce wake-ups"
     primaryDriver = "Sleep fragmentation pattern"
 
-    why.push(`Average wake-ups: ${avgWake.toFixed(1)} per night`)
-    why.push(`${wakePattern} of the last 7 nights had multiple wake-ups.`)
-
-    actions.push("Cool and dark bedroom environment.")
-    actions.push("Avoid checking phone if waking.")
-
-    avoid.push("Late fluids and overheating the room.")
+    why.push(`Average wake-ups: ${avgWake.toFixed(1)}`)
+    why.push(`${wakePattern} of the last 7 nights had frequent wake-ups.`)
   }
 
   else {
@@ -125,12 +161,17 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     headline = "Tonight plan: Maintain good sleep"
     primaryDriver = "Stable sleep pattern"
 
-    why.push("Sleep quality, latency, and wake-ups are stable across recent nights.")
-
-    actions.push("Maintain current sleep routine.")
-
-    avoid.push("Large routine changes.")
+    why.push("Sleep metrics are stable across recent nights.")
   }
+
+  if (tagData.tag && tagData.count >= 2) {
+    why.push(`Common contributing factor: ${tagData.tag}`)
+  }
+
+  actions.push("Follow the suggested protocol tonight.")
+  actions.push("Keep sleep environment stable and predictable.")
+
+  avoid.push("Late stimulation, late meals, and large routine changes.")
 
   let confidence: "low" | "medium" | "high" = "low"
 
@@ -143,6 +184,7 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     headline,
     primaryDriver,
     protocolFamily: driver,
+    suggestedProtocol,
     why,
     actions,
     avoid,
