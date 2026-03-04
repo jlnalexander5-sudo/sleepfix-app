@@ -169,82 +169,50 @@ function buildLocalInsight(rows: NightRow[]): RRSMInsight {
     actions.push(`Focus one change around “${topDriver}” for 2–3 nights and compare.`);
   }
   actions.push(`Keep logging at least 3 nights/week to strengthen the pattern.`);
-  actions.push(`After 7 valid nights, we’ll generate a stronger RRSM insight.`);
+    const { data, error } = await supabase
+      .from("v_sleep_night_metrics")
+      .select(
+        "night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num,sleep_latency_choice,wake_ups_choice,sleep_quality"
+      )
+      .eq("user_id", uid)
+      .order("created_at", { ascending: false })
+      .limit(7);
 
-  return {
-    title: "RRSM preview (early signal)",
-    why,
-    actions,
-    confidence: "medium",
-  };
-}
+    if (error) {
+      setErr(error.message);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
 
-export default function DashboardPage() {
-  const supabase = useMemo(() => createClient(), []);
+    let nextRows = (data ?? []) as NightRow[];
 
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [rows, setRows] = useState<NightRow[]>([]);
-
-  const [insight, setInsight] = useState<RRSMInsight | null>(null);
-  const [insightErr, setInsightErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setErr(null);
-
-      const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id ?? null;
-      setUserId(uid);
-      if (!uid) {
-        setRows([]);
-        setLoading(false);
-        return;
-      }
-
-      // Pull directly from sleep_nights.
-      // (The v_sleep_night_metrics view can return nulls if it falls behind schema/choice changes.)
-      const { data, error } = await supabase
+    // v_sleep_night_metrics does not include driver columns; merge them from sleep_nights
+    const nightIds = nextRows.map((r) => r.night_id).filter(Boolean);
+    if (nightIds.length) {
+      const { data: nights, error: nightsErr } = await supabase
         .from("sleep_nights")
-        .select(
-          "id,user_id,created_at,local_date,start_time,end_time,sleep_quality,sleep_latency_choice,wake_ups_choice,primary_driver,secondary_driver,notes"
-        )
-        .eq("user_id", uid)
-        .order("created_at", { ascending: false })
-        .limit(7);
+        .select("id,primary_driver,secondary_driver,notes")
+        .in("id", nightIds);
 
-      if (error) {
-        setErr(error.message);
-        setRows([]);
-        setLoading(false);
-        return;
+      if (!nightsErr && nights?.length) {
+        const map = new Map(
+          nights.map((n) => [
+            n.id,
+            {
+              primary_driver: n.primary_driver ?? null,
+              secondary_driver: n.secondary_driver ?? null,
+              notes: n.notes ?? null,
+            },
+          ])
+        );
+        nextRows = nextRows.map((r) => {
+          const merged = map.get(r.night_id);
+          return merged ? { ...r, ...merged } : r;
+        });
       }
+    }
 
-      const nextRows: NightRow[] = (data ?? []).map((n: any) => {
-        const createdAt = n.created_at ?? n.local_date ?? new Date().toISOString();
-        const duration = minutesBetween(n.start_time, n.end_time);
-        const latency = latencyChoiceToMinutes(n.sleep_latency_choice);
-        const wakes = wakeupsChoiceToCount(n.wake_ups_choice);
-        const quality = typeof n.sleep_quality === "number" ? n.sleep_quality : null;
-
-        return {
-          night_id: n.id,
-          user_id: n.user_id,
-          created_at: createdAt,
-          duration_min: duration,
-          latency_min: latency,
-          wakeups_count: wakes,
-          quality_num: quality,
-          sleep_quality: quality,
-          sleep_latency_choice: n.sleep_latency_choice ?? null,
-          wake_ups_choice: n.wake_ups_choice ?? null,
-          primary_driver: n.primary_driver ?? null,
-          secondary_driver: n.secondary_driver ?? null,
-          notes: n.notes ?? null,
-        };
-      });
 
       setRows(nextRows);
       setLoading(false);
