@@ -86,6 +86,14 @@ function humanizeWhyLine(line: string): string {
   return t;
 }
 
+function extractSuggestedPlan(whyLines: string[] | undefined): string {
+  if (!whyLines?.length) return "";
+  // We look for the already-humanized label used in the UI.
+  const line = whyLines.find((l) => /^Suggested plan:/i.test(l)) ?? whyLines.find((l) => /^Suggested protocol:/i.test(l));
+  if (!line) return "";
+  return line.replace(/^Suggested (plan|protocol):\s*/i, "").trim();
+}
+
 function tidyActionLine(line: string): string {
   let t = line.trim();
 
