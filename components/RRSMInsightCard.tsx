@@ -302,7 +302,26 @@ export default function RRSMInsightCard(props: {
       ) : null}
 
       {/* RRSMInsight doesn't guarantee a separate "headline" field; title is the stable label. */}
-      <ProtocolFeedback insightTitle={insight.title} suggestedPlan={suggestedPlan} />
+   // Clean the suggested plan so Protocol check only shows the protocol name
+const cleanSuggestedProtocol = (raw?: string) => {
+  if (!raw) return "";
+
+  // Remove mismatch fragment if it exists
+  let s = raw.replace(/Mismatch:\s*-?\d+(\.\d+)?\.?/i, "").trim();
+
+  // If it's "No suggestion", treat as empty
+  if (/^no suggestion\.?$/i.test(s)) return "";
+
+  // If it still has multiple sentences, keep the first meaningful part only
+  // e.g. "RB2 Deceleration. ..." -> "RB2 Deceleration"
+  s = s.split(".")[0].trim();
+
+  return s;
+};
+
+const suggestedProtocolForCheck = cleanSuggestedProtocol(suggestedPlan);
+      <ProtocolFeedback insightTitle="Protocol check" suggestedPlan={suggestedProtocolForCheck}
+/>
     </div>
   );
 }
