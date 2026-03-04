@@ -1,6 +1,6 @@
 // lib/rrsm/engine.ts
 
-export type RRSMInput = {
+export type RRSMNight = {
   sleepQuality: number
   latencyMinutes: number
   wakeUps: number
@@ -8,7 +8,11 @@ export type RRSMInput = {
   envTags?: string[]
   bodyTags?: string[]
   affectedTonight?: string[]
-  notes?: string
+}
+
+export type RRSMInput = {
+  tonight: RRSMNight
+  last7: RRSMNight[]
 }
 
 export type RRSMOutput = {
@@ -27,53 +31,45 @@ export type RRSMOutput = {
 function confidenceMeaning(level: "low" | "medium" | "high") {
   if (level === "low") return "low — early signal"
   if (level === "medium") return "medium — pattern emerging"
-  return "high — consistent pattern"
+  return "high — consistent pattern across nights"
 }
 
-function scoreTags(tags: string[]) {
-  let stimulation = 0
-  let fragmentation = 0
-  let physiology = 0
+function avg(arr: number[]) {
+  return arr.reduce((a, b) => a + b, 0) / arr.length
+}
 
-  tags.forEach(tag => {
-    const t = tag.toLowerCase()
-
-    if (["stress","anxiety","screens","caffeine","late caffeine"].includes(t))
-      stimulation++
-
-    if (["noise","light","temperature","hot room"].includes(t))
-      fragmentation++
-
-    if (["pain","sickness","exercise late","body discomfort"].includes(t))
-      physiology++
-  })
-
-  return { stimulation, fragmentation, physiology }
+function count(condition: boolean[]) {
+  return condition.filter(Boolean).length
 }
 
 export function runRRSM(input: RRSMInput): RRSMOutput {
 
-  const tags = [
-    ...(input.mindTags ?? []),
-    ...(input.envTags ?? []),
-    ...(input.bodyTags ?? []),
-    ...(input.affectedTonight ?? [])
-  ]
+  const nights = input.last7
+  const tonight = input.tonight
 
-  const tagScore = scoreTags(tags)
+  const latencyPattern =
+    count(nights.map(n => n.latencyMinutes >= 45))
+
+  const wakePattern =
+    count(nights.map(n => n.wakeUps >= 3))
+
+  const qualityPattern =
+    count(nights.map(n => n.sleepQuality <= 4))
+
+  const avgLatency = avg(nights.map(n => n.latencyMinutes))
+  const avgWake = avg(nights.map(n => n.wakeUps))
+  const avgQuality = avg(nights.map(n => n.sleepQuality))
 
   let driver = "Optimization"
 
-  if (input.sleepQuality <= 4) driver = "Recovery"
+  if (qualityPattern >= 3 || tonight.sleepQuality <= 4)
+    driver = "Recovery"
 
-  else if (input.latencyMinutes >= 45 || tagScore.stimulation >= 2)
+  else if (latencyPattern >= 3 || tonight.latencyMinutes >= 45)
     driver = "Pre-Sleep Discharge"
 
-  else if (input.wakeUps >= 3 || tagScore.fragmentation >= 2)
+  else if (wakePattern >= 3 || tonight.wakeUps >= 3)
     driver = "Stabilization"
-
-  else if (tagScore.physiology >= 2)
-    driver = "Physiology Reset"
 
   const why: string[] = []
   const actions: string[] = []
@@ -83,70 +79,65 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   let primaryDriver = ""
 
   if (driver === "Recovery") {
+
     headline = "Tonight plan: Recovery sleep"
-    primaryDriver = "Sleep quality is low"
+    primaryDriver = "Low sleep quality pattern"
 
-    why.push(`Sleep quality was ${input.sleepQuality}/10.`)
+    why.push(`Average sleep quality (7 nights): ${avgQuality.toFixed(1)}/10`)
+    why.push(`${qualityPattern} of the last 7 nights had poor sleep quality.`)
 
-    actions.push("Reduce stimulation tonight.")
-    actions.push("Keep lighting low and environment calm.")
+    actions.push("Reduce stimulation after dinner.")
+    actions.push("Keep lighting dim before bed.")
 
-    avoid.push("Late meals, alcohol, heavy stimulation.")
+    avoid.push("Late meals and alcohol.")
   }
 
   else if (driver === "Pre-Sleep Discharge") {
+
     headline = "Tonight plan: Faster sleep onset"
-    primaryDriver = "Overstimulated before bed"
+    primaryDriver = "Sleep onset delay pattern"
 
-    why.push(`Sleep latency was about ${input.latencyMinutes} minutes.`)
+    why.push(`Average sleep latency: ${avgLatency.toFixed(0)} minutes`)
+    why.push(`${latencyPattern} of the last 7 nights had long sleep latency.`)
 
-    actions.push("20–30 minute discharge walk.")
-    actions.push("10 minutes dim-light decompression.")
+    actions.push("20 minute discharge walk before bed.")
+    actions.push("Dim light decompression period.")
 
-    avoid.push("Screens and stimulating activity late.")
+    avoid.push("Screens late at night.")
   }
 
   else if (driver === "Stabilization") {
+
     headline = "Tonight plan: Reduce wake-ups"
-    primaryDriver = "Sleep fragmentation"
+    primaryDriver = "Sleep fragmentation pattern"
 
-    why.push(`Wake-ups recorded: ${input.wakeUps}.`)
+    why.push(`Average wake-ups: ${avgWake.toFixed(1)} per night`)
+    why.push(`${wakePattern} of the last 7 nights had multiple wake-ups.`)
 
-    actions.push("Keep bedroom cool and dark.")
-    actions.push("Avoid checking phone during wake-ups.")
+    actions.push("Cool and dark bedroom environment.")
+    actions.push("Avoid checking phone if waking.")
 
-    avoid.push("Late fluids, overheating room.")
-  }
-
-  else if (driver === "Physiology Reset") {
-    headline = "Tonight plan: Physical reset"
-    primaryDriver = "Body discomfort signals"
-
-    why.push("Body-related signals detected.")
-
-    actions.push("Gentle stretching before bed.")
-    actions.push("Ensure comfortable sleep environment.")
-
-    avoid.push("Late intense exercise.")
+    avoid.push("Late fluids and overheating the room.")
   }
 
   else {
+
     headline = "Tonight plan: Maintain good sleep"
-    primaryDriver = "Sleep metrics look stable"
+    primaryDriver = "Stable sleep pattern"
 
-    why.push("Quality, latency, and wake-ups are within good range.")
+    why.push("Sleep quality, latency, and wake-ups are stable across recent nights.")
 
-    actions.push("Keep the same sleep routine.")
+    actions.push("Maintain current sleep routine.")
 
-    avoid.push("Changing too many habits at once.")
+    avoid.push("Large routine changes.")
   }
 
-  if (tags.length) {
-    why.push(`Possible contributors: ${tags.join(", ")}`)
-  }
+  let confidence: "low" | "medium" | "high" = "low"
 
-  const confidenceLevel: "low" | "medium" | "high" =
-    tags.length >= 3 ? "high" : tags.length >= 1 ? "medium" : "low"
+  const strongestPattern = Math.max(latencyPattern, wakePattern, qualityPattern)
+
+  if (strongestPattern >= 4) confidence = "high"
+  else if (strongestPattern >= 2) confidence = "medium"
 
   return {
     headline,
@@ -156,8 +147,8 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     actions,
     avoid,
     confidence: {
-      level: confidenceLevel,
-      meaning: confidenceMeaning(confidenceLevel)
+      level: confidence,
+      meaning: confidenceMeaning(confidence)
     }
   }
 }
