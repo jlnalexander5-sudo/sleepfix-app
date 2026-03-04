@@ -13,6 +13,7 @@ export type RRSMNight = {
 export type RRSMInput = {
   tonight: RRSMNight
   last7: RRSMNight[]
+  last30?: RRSMNight[]
 }
 
 export type RRSMOutput = {
@@ -36,6 +37,7 @@ function confidenceMeaning(level: "low" | "medium" | "high") {
 }
 
 function avg(arr: number[]) {
+  if (!arr.length) return 0
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
 
@@ -79,33 +81,42 @@ function topTag(tags: string[]) {
 
 export function runRRSM(input: RRSMInput): RRSMOutput {
 
-  const nights = input.last7
+  const nights7 = input.last7
+  const nights30 = input.last30 ?? []
   const tonight = input.tonight
 
+  const avgLatency7 = avg(nights7.map(n => n.latencyMinutes))
+  const avgWake7 = avg(nights7.map(n => n.wakeUps))
+  const avgQuality7 = avg(nights7.map(n => n.sleepQuality))
+
+  const baselineLatency = nights30.length ? avg(nights30.map(n => n.latencyMinutes)) : avgLatency7
+  const baselineWake = nights30.length ? avg(nights30.map(n => n.wakeUps)) : avgWake7
+  const baselineQuality = nights30.length ? avg(nights30.map(n => n.sleepQuality)) : avgQuality7
+
+  const latencyThreshold = baselineLatency + 15
+  const wakeThreshold = baselineWake + 1
+  const qualityThreshold = baselineQuality - 2
+
   const latencyPattern =
-    count(nights.map(n => n.latencyMinutes >= 45))
+    count(nights7.map(n => n.latencyMinutes >= latencyThreshold))
 
   const wakePattern =
-    count(nights.map(n => n.wakeUps >= 3))
+    count(nights7.map(n => n.wakeUps >= wakeThreshold))
 
   const qualityPattern =
-    count(nights.map(n => n.sleepQuality <= 4))
+    count(nights7.map(n => n.sleepQuality <= qualityThreshold))
 
-  const avgLatency = avg(nights.map(n => n.latencyMinutes))
-  const avgWake = avg(nights.map(n => n.wakeUps))
-  const avgQuality = avg(nights.map(n => n.sleepQuality))
-
-  const tagData = topTag(collectTags(nights))
+  const tagData = topTag(collectTags(nights7))
 
   let driver = "Optimization"
 
-  if (qualityPattern >= 3 || tonight.sleepQuality <= 4)
+  if (qualityPattern >= 3 || tonight.sleepQuality <= qualityThreshold)
     driver = "Recovery"
 
-  else if (latencyPattern >= 3 || tonight.latencyMinutes >= 45)
+  else if (latencyPattern >= 3 || tonight.latencyMinutes >= latencyThreshold)
     driver = "Pre-Sleep Discharge"
 
-  else if (wakePattern >= 3 || tonight.wakeUps >= 3)
+  else if (wakePattern >= 3 || tonight.wakeUps >= wakeThreshold)
     driver = "Stabilization"
 
   let suggestedProtocol = ""
@@ -132,50 +143,50 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   if (driver === "Recovery") {
 
     headline = "Tonight plan: Recovery sleep"
-    primaryDriver = "Low sleep quality pattern"
+    primaryDriver = "Sleep quality below personal baseline"
 
-    why.push(`Average sleep quality: ${avgQuality.toFixed(1)}/10`)
-    why.push(`${qualityPattern} of the last 7 nights had poor sleep quality.`)
+    why.push(`Your baseline sleep quality: ${baselineQuality.toFixed(1)}/10`)
+    why.push(`Recent average: ${avgQuality7.toFixed(1)}/10`)
   }
 
   else if (driver === "Pre-Sleep Discharge") {
 
     headline = "Tonight plan: Faster sleep onset"
-    primaryDriver = "Sleep onset delay pattern"
+    primaryDriver = "Sleep latency above baseline"
 
-    why.push(`Average latency: ${avgLatency.toFixed(0)} minutes`)
-    why.push(`${latencyPattern} of the last 7 nights had long sleep latency.`)
+    why.push(`Baseline latency: ${baselineLatency.toFixed(0)} minutes`)
+    why.push(`Recent latency: ${avgLatency7.toFixed(0)} minutes`)
   }
 
   else if (driver === "Stabilization") {
 
     headline = "Tonight plan: Reduce wake-ups"
-    primaryDriver = "Sleep fragmentation pattern"
+    primaryDriver = "Wake-ups above baseline"
 
-    why.push(`Average wake-ups: ${avgWake.toFixed(1)}`)
-    why.push(`${wakePattern} of the last 7 nights had frequent wake-ups.`)
+    why.push(`Baseline wake-ups: ${baselineWake.toFixed(1)}`)
+    why.push(`Recent wake-ups: ${avgWake7.toFixed(1)}`)
   }
 
   else {
 
     headline = "Tonight plan: Maintain good sleep"
-    primaryDriver = "Stable sleep pattern"
+    primaryDriver = "Sleep pattern stable"
 
-    why.push("Sleep metrics are stable across recent nights.")
+    why.push("Recent sleep metrics match your normal baseline.")
   }
 
   if (tagData.tag && tagData.count >= 2) {
-    why.push(`Common contributing factor: ${tagData.tag}`)
+    why.push(`Frequent contributing factor: ${tagData.tag}`)
   }
 
   actions.push("Follow the suggested protocol tonight.")
-  actions.push("Keep sleep environment stable and predictable.")
+  actions.push("Keep sleep timing and environment consistent.")
 
-  avoid.push("Late stimulation, late meals, and large routine changes.")
-
-  let confidence: "low" | "medium" | "high" = "low"
+  avoid.push("Late stimulation, late meals, and sudden routine changes.")
 
   const strongestPattern = Math.max(latencyPattern, wakePattern, qualityPattern)
+
+  let confidence: "low" | "medium" | "high" = "low"
 
   if (strongestPattern >= 4) confidence = "high"
   else if (strongestPattern >= 2) confidence = "medium"
