@@ -9,6 +9,7 @@ type NightRow = {
   night_id: string;
   user_id: string;
   created_at: string;
+  local_date: string | null;
   duration_min: number | null;
   latency_min: number | null;
   wakeups_count: number | null;
@@ -36,6 +37,16 @@ function fmtDate(iso: string) {
   } catch {
     return iso;
   }
+}
+
+
+function parseChoiceToNumber(choice: string | null | undefined): number | null {
+  if (!choice) return null;
+  const s = String(choice).trim();
+  if (!s) return null;
+  // supports "60+", "5", "10", etc.
+  const n = parseInt(s.replace("+", ""), 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 function safeAvg(nums: Array<number | null | undefined>) {
@@ -170,10 +181,10 @@ export default function DashboardPage() {
       }
 
       const { data, error } = await supabase
-        .from("v_sleep_night_metrics")
+        .from("sleep_nights")
         .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
         .eq("user_id", uid)
-        .order("created_at", { ascending: false })
+        .order("local_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false })
         .limit(7);
 
       if (error) {
@@ -183,55 +194,20 @@ export default function DashboardPage() {
         return;
       }
 
-      let nextRows = (data ?? []) as NightRow[];
-
-    // De-dupe by night_id (views can return multiple rows per night)
-    const seen = new Set<string>();
-    nextRows = nextRows.filter((r) => {
-      const id = String(r.night_id ?? "");
-      if (!id) return false;
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
-
-    // Keep only the most recent 7 unique nights
-    nextRows = nextRows.slice(0, 7);
-
-      // v_sleep_night_metrics does not include driver columns; merge them from sleep_nights
-      const nightIds = nextRows.map((r) => r.night_id).filter(Boolean);
-      if (nightIds.length) {
-        const { data: nights, error: nightsErr } = await supabase
-          .from("sleep_nights")
-          .select("id,primary_driver,secondary_driver,notes")
-          .in("id", nightIds);
-
-        if (!nightsErr && nights) {
-          const byId = new Map<
-            string,
-            { primary_driver: string | null; secondary_driver: string | null; notes: string | null }
-          >();
-          for (const n of nights as any[]) {
-            byId.set(n.id, {
-              primary_driver: n.primary_driver ?? null,
-              secondary_driver: n.secondary_driver ?? null,
-              notes: n.notes ?? null,
-            });
-          }
-
-          nextRows = nextRows.map((r) => {
-            const m = byId.get(r.night_id);
-            return {
-              ...r,
-              ...(m ?? {}),
-              primary_driver: m?.primary_driver ?? null,
-              secondary_driver: m?.secondary_driver ?? null,
-            };
-          });
-        }
-      }
-
-      setRows(nextRows);
+      const nextRows: NightRow[] = (data ?? []).map((r: any) => ({
+      night_id: r.id,
+      user_id: r.user_id,
+      created_at: r.created_at,
+      local_date: r.local_date ?? null,
+      duration_min: null,
+      latency_min: parseChoiceToNumber(r.sleep_latency_choice),
+      wakeups_count: parseChoiceToNumber(r.wake_ups_choice),
+      quality_num: typeof r.sleep_quality === "number" ? r.sleep_quality : null,
+      primary_driver: r.primary_driver ?? null,
+      secondary_driver: r.secondary_driver ?? null,
+      notes: r.notes ?? null,
+    }));
+setRows(nextRows);
       setLoading(false);
 
       // Local RRSM preview until the full engine is wired.
@@ -346,7 +322,7 @@ export default function DashboardPage() {
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.night_id} style={{ borderTop: "1px solid #eee" }}>
-                      <td style={{ padding: "10px 12px" }}>{fmtDate(r.created_at)}</td>
+                      <td style={{ padding: "10px 12px" }}>{fmtDate(r.local_date ?? r.created_at)}</td>
                       <td style={{ padding: "10px 12px" }}>{r.quality_num ?? "—"}</td>
                       <td style={{ padding: "10px 12px" }}>{r.latency_min ?? "—"}</td>
                       <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? "—"}</td>
