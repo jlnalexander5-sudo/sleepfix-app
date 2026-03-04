@@ -110,7 +110,7 @@ function tidyActionLine(line: string): string {
 }
 
 
-function ProtocolFeedback({ insightTitle }: { insightTitle: string }) {
+function ProtocolFeedback({ insightTitle, suggestedPlan }: { insightTitle: string; suggestedPlan: string }) {
   const storageKey = useMemo(() => "sleepfix_protocol_used_latest", []);
   const [protocolUsed, setProtocolUsed] = useState<null | boolean>(null);
   const [savedTick, setSavedTick] = useState(false);
@@ -118,8 +118,8 @@ function ProtocolFeedback({ insightTitle }: { insightTitle: string }) {
   // Only show on "Tonight plan" insights (keeps UI clean during baseline messages)
   const shouldShow = useMemo(() => {
     const t = (insightTitle ?? "").toLowerCase();
-    return t.includes("tonight plan") || t.includes("rrsm");
-  }, [insightTitle]);
+    return (t.includes("tonight plan") || t.includes("rrsm")) && (suggestedPlan ?? "").trim().length > 0;
+  }, [insightTitle, suggestedPlan]);
 
   useEffect(() => {
     try {
@@ -196,6 +196,7 @@ export default function RRSMInsightCard(props: {
   userInput?: RRSMUserInput;
 }) {
   const { insight, loading, error, userInput } = props;
+  const suggestedPlan = extractSuggestedPlan(insight?.why);
 
   if (loading) {
     return (
@@ -294,8 +295,7 @@ export default function RRSMInsightCard(props: {
         </div>
       ) : null}
 
-      {/* Protocol feedback */}
-      <ProtocolFeedback insightTitle={insight.title} />
+      <ProtocolFeedback insightTitle={insight.headline} suggestedPlan={suggestedPlan} />
     </div>
   );
 }
