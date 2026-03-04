@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getProtocolByName } from "@/lib/rrsm/protocols";
 
 export type RRSMInsight = {
   domain?: string;        // optional domain label
@@ -86,25 +87,24 @@ function humanizeWhyLine(line: string): string {
   return t;
 }
 
-function extractSuggestedPlan(whyLines: string[] | undefined): string {
-  if (!whyLines?.length) return "";
-  const raw = whyLines.find(line => /^Suggested (protocol|plan):/i.test(line));
-  if (!raw) return "";
+function extractSuggestedPlan(why?: string[] | null): string {
+  if (!why?.length) return "";
+  const line =
+    why.find(l => /^Suggested\s+(plan|protocol)\s*:/i.test(l)) ?? "";
+  if (!line) return "";
 
-  // Strip the label and any extra fragments like "Mismatch: 0." so we only keep the protocol name.
-  let v = raw.replace(/^Suggested (protocol|plan):/i, "").trim();
-  v = v.replace(/Mismatch:\s*-?\d+(?:\.\d+)?\.?/gi, "").trim();
-  v = v.replace(/\s+/g, " ").trim();
+  // Strip label and common suffixes like "Mismatch: 0."
+  let s = line.replace(/^Suggested\s+(plan|protocol)\s*:\s*/i, "").trim();
+  s = s.replace(/\s*Mismatch:\s*-?\d+(\.\d+)?\.?/i, "").trim();
 
-  // Treat "No suggestion" / "none" as empty (so the Protocol check block won't show).
-  if (!v) return "";
-  if (/^no suggestion\b/i.test(v)) return "";
-  if (/^(none|n\/a|na)\b/i.test(v)) return "";
+  // "No suggestion" should behave like empty
+  if (/^no\s+suggestion\.?$/i.test(s)) return "";
 
-  // Keep the first meaningful sentence only.
-  v = v.split(".")[0].trim();
-  return v;
+  // If the engine ever returns multiple sentences, keep the first meaningful chunk
+  s = s.split(".")[0].trim();
+  return s;
 }
+
 
 function tidyActionLine(line: string): string {
   let t = line.trim();
@@ -202,6 +202,97 @@ function ProtocolFeedback({ insightTitle, suggestedPlan }: { insightTitle: strin
     </div>
   );
 }
+
+function ProtocolDetails({ protocolName }: { protocolName: string }) {
+  const protocol = useMemo(() => getProtocolByName(protocolName), [protocolName]);
+
+  const [open, setOpen] = useState(false);
+  const [choice, setChoice] = useState<"used" | "not_used" | null>(null);
+
+  if (!protocol) return null;
+
+  return (
+    <div className="mt-5 rounded-xl border border-neutral-200 bg-white p-5">
+      <div className="text-base font-semibold text-neutral-900">Suggested protocol</div>
+      <div className="mt-1 text-sm text-neutral-700">
+        <span className="font-medium">{protocol.name}</span> — {protocol.oneLine}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-50"
+        >
+          {open ? "Hide steps" : "View steps"}
+        </button>
+
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setChoice("used")}
+            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
+              choice === "used"
+                ? "border-neutral-900 bg-neutral-900 text-white"
+                : "border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-50"
+            }`}
+          >
+            ✓ Used protocol
+          </button>
+          <button
+            type="button"
+            onClick={() => setChoice("not_used")}
+            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
+              choice === "not_used"
+                ? "border-neutral-900 bg-neutral-900 text-white"
+                : "border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-50"
+            }`}
+          >
+            ✕ Did not use
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-2 text-xs text-neutral-600">
+        {choice ? "Saved for learning (local only for now)." : "This helps SleepFix learn what works for you."}
+      </div>
+
+      {open ? (
+        <div className="mt-4">
+          <div className="text-sm font-semibold text-neutral-900">Tonight steps</div>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-700">
+            {protocol.steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+
+          {protocol.avoid?.length ? (
+            <>
+              <div className="mt-4 text-sm font-semibold text-neutral-900">Avoid tonight</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-700">
+                {protocol.avoid.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+
+          {protocol.notes?.length ? (
+            <>
+              <div className="mt-4 text-sm font-semibold text-neutral-900">Notes</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-700">
+                {protocol.notes.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function RRSMInsightCard(props: {
   insight: RRSMInsight | null;
   loading?: boolean;
@@ -308,9 +399,7 @@ export default function RRSMInsightCard(props: {
         </div>
       ) : null}
 
-    {suggestedPlan ? (
-      <ProtocolFeedback insightTitle="Protocol check" suggestedPlan={suggestedPlan} />
-    ) : null}
+    {suggestedPlan ? <ProtocolDetails protocolName={suggestedPlan} /> : null}
     </div>
   );
 }
