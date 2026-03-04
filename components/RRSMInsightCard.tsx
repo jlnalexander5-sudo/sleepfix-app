@@ -91,7 +91,12 @@ function extractSuggestedPlan(whyLines: string[] | undefined): string {
   // We look for the already-humanized label used in the UI.
   const line = whyLines.find((l) => /^Suggested plan:/i.test(l)) ?? whyLines.find((l) => /^Suggested protocol:/i.test(l));
   if (!line) return "";
-  return line.replace(/^Suggested (plan|protocol):\s*/i, "").trim();
+  const v = line.replace(/^Suggested (plan|protocol):\s*/i, "").trim();
+  // Treat placeholders as "no real protocol" so we don't show the protocol-check UI.
+  if (!v) return "";
+  if (/^no suggestion\.?$/i.test(v)) return "";
+  if (/^(none|n\/a|na)\.?$/i.test(v)) return "";
+  return v;
 }
 
 function tidyActionLine(line: string): string {
@@ -144,7 +149,8 @@ function ProtocolFeedback({ insightTitle, suggestedPlan }: { insightTitle: strin
     <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
       <div className="text-base font-semibold text-neutral-900">Protocol check</div>
       <div className="mt-1 text-base text-neutral-700">
-        Did you use the suggested protocol last night?
+        Suggested protocol: <span className="font-semibold">{suggestedPlan}</span>
+        <div className="mt-1">Did you use it last night?</div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -295,7 +301,8 @@ export default function RRSMInsightCard(props: {
         </div>
       ) : null}
 
-    <ProtocolFeedback insightTitle={insight.primaryDriver} suggestedPlan={suggestedPlan} />
+      {/* RRSMInsight doesn't guarantee a separate "headline" field; title is the stable label. */}
+      <ProtocolFeedback insightTitle={insight.title} suggestedPlan={suggestedPlan} />
     </div>
   );
 }
