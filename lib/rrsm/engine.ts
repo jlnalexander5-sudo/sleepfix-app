@@ -1,4 +1,14 @@
 // lib/rrsm/engine.ts
+//
+// RRSM Engine v7
+// - Hard-locked priority order: Quality → Latency → Wake-ups → Optimization
+// - Personal baseline (30-night preferred), adaptive thresholds
+// - 7-night pattern detection
+// - Trigger correlation
+// - Protocol effectiveness learning (if you store protocolUsed + protocolName on nights)
+//
+// NOTE: For protocol learning to work, your stored nights must be in chronological order
+// (oldest → newest) so we can evaluate "next night outcome" after a protocol was used.
 
 export type RRSMNight = {
   sleepQuality: number
@@ -9,8 +19,9 @@ export type RRSMNight = {
   bodyTags?: string[]
   affectedTonight?: string[]
 
-  // Optional hook for future success tracking (won’t break callers)
-  protocolUsed?: string
+  // Learning hooks (optional; engine works without them)
+  protocolName?: string            // name of protocol the user used
+  protocolUsed?: boolean           // true/false if they used it
 }
 
 export type RRSMInput = {
@@ -76,18 +87,9 @@ function computeTagImpacts(nights: RRSMNight[]) {
     { withN: number; withoutN: number; dLatency: number; dWake: number; dQuality: number }
   > = {}
 
-  const latAll = nights.map(n => n.latencyMinutes)
-  const wakeAll = nights.map(n => n.wakeUps)
-  const qualAll = nights.map(n => n.sleepQuality)
-
-  const baseLatency = avg(latAll)
-  const baseWake = avg(wakeAll)
-  const baseQuality = avg(qualAll)
-
   for (const tag of allTags) {
     const withTag = nights.filter(n => nightTags(n).includes(tag))
     const withoutTag = nights.filter(n => !nightTags(n).includes(tag))
-
     if (withTag.length < 2 || withoutTag.length < 2) continue
 
     const withLatency = avg(withTag.map(n => n.latencyMinutes))
@@ -98,7 +100,6 @@ function computeTagImpacts(nights: RRSMNight[]) {
     const withoutWake = avg(withoutTag.map(n => n.wakeUps))
     const withoutQuality = avg(withoutTag.map(n => n.sleepQuality))
 
-    // delta = worse when positive for latency/wake; worse when negative for quality
     impacts[tag] = {
       withN: withTag.length,
       withoutN: withoutTag.length,
@@ -108,8 +109,7 @@ function computeTagImpacts(nights: RRSMNight[]) {
     }
   }
 
-  // baseline fallbacks (in case impacts empty)
-  return { impacts, baseLatency, baseWake, baseQuality }
+  return { impacts }
 }
 
 function pickTopImpactTag(
@@ -139,7 +139,7 @@ function pickTopImpactTag(
   return { tag: bestTag, score: bestScore }
 }
 
-// Tag category helpers (used to choose the right protocol *within* the correct priority bucket)
+// Tag category helpers (used to choose the right protocol variant inside the correct priority bucket)
 const STIMULATION_TAGS = [
   "caffeine",
   "late caffeine",
@@ -171,24 +171,125 @@ function hasAnyTag(tags: string[], group: string[]) {
   return group.some(g => set.has(g))
 }
 
+type Driver = "Recovery" | "Pre-Sleep Discharge" | "Stabilization" | "Optimization"
+
+type ProtocolTarget = "quality" | "latency" | "wake"
+
+function driverTarget(driver: Driver): ProtocolTarget {
+  if (driver === "Recovery") return "quality"
+  if (driver === "Pre-Sleep Discharge") return "latency"
+  if (driver === "Stabilization") return "wake"
+  return "quality"
+}
+
+function protocolTargetFromName(name: string): ProtocolTarget {
+  const n = name.toLowerCase()
+  if (n.includes("rb2") || n.includes("discharge") || n.includes("latency") || n.includes("sleep onset")) return "latency"
+  if (n.includes("continuity") || n.includes("wake") || n.includes("fragment")) return "wake"
+  if (n.includes("recovery") || n.includes("low-stimulation") || n.includes("quality")) return "quality"
+  // default
+  return "quality"
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+/**
+ * Protocol learning:
+ * If a night has protocolUsed=true and protocolName, we measure next-night outcome delta.
+ * - latency: improvement = previous latency - next latency (bigger is better)
+ * - wake: improvement = previous wakeUps - next wakeUps
+ * - quality: improvement = next quality - previous quality
+ */
+function learnProtocolEffects(nightsChronological: RRSMNight[]) {
+  const stats: Record<string, { uses: number; sum: number; target: ProtocolTarget }> = {}
+
+  for (let i = 0; i < nightsChronological.length - 1; i++) {
+    const n = nightsChronological[i]
+    const next = nightsChronological[i + 1]
+    if (!n.protocolUsed || !n.protocolName) continue
+
+    const proto = n.protocolName.trim()
+    if (!proto) continue
+
+    const target = protocolTargetFromName(proto)
+
+    let improvement = 0
+    if (target === "latency") improvement = (n.latencyMinutes ?? 0) - (next.latencyMinutes ?? 0)
+    else if (target === "wake") improvement = (n.wakeUps ?? 0) - (next.wakeUps ?? 0)
+    else improvement = (next.sleepQuality ?? 0) - (n.sleepQuality ?? 0)
+
+    // Keep extreme outliers from dominating learning
+    const capped = clamp(improvement, -120, 120)
+
+    stats[proto] = stats[proto] ?? { uses: 0, sum: 0, target }
+    stats[proto].uses += 1
+    stats[proto].sum += capped
+  }
+
+  // Convert to averages
+  const avgs: Record<string, { uses: number; avg: number; target: ProtocolTarget }> = {}
+  for (const [proto, s] of Object.entries(stats)) {
+    avgs[proto] = { uses: s.uses, avg: s.sum / s.uses, target: s.target }
+  }
+
+  return avgs
+}
+
+function pickBestProtocolForTarget(
+  learned: Record<string, { uses: number; avg: number; target: ProtocolTarget }>,
+  target: ProtocolTarget,
+  candidates: string[]
+) {
+  // Prefer learned best among candidates with enough samples
+  let best = ""
+  let bestAvg = 0
+  let bestUses = 0
+
+  for (const c of candidates) {
+    const s = learned[c]
+    if (!s) continue
+    if (s.target !== target) continue
+    if (s.uses < 2) continue // minimum evidence
+    if (s.avg > bestAvg) {
+      best = c
+      bestAvg = s.avg
+      bestUses = s.uses
+    }
+  }
+
+  return { best, bestAvg, bestUses }
+}
+
+function dedupe(arr: string[]) {
+  const seen = new Set<string>()
+  return arr.filter(s => {
+    const k = s.toLowerCase()
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+}
+
 export function runRRSM(input: RRSMInput): RRSMOutput {
   const nights7 = input.last7
   const nights30 = input.last30 ?? []
   const tonight = input.tonight
 
-  // Use 30 nights for baseline if present; else 7 nights.
+  // Baseline: 30 nights if we have enough; else 7
   const baselineNights = nights30.length >= 10 ? nights30 : nights7
 
   const baselineLatency = avg(baselineNights.map(n => n.latencyMinutes))
   const baselineWake = avg(baselineNights.map(n => n.wakeUps))
   const baselineQuality = avg(baselineNights.map(n => n.sleepQuality))
 
-  // Adaptive thresholds (still simple but now personal)
+  // Adaptive thresholds (personal)
   const latencyThreshold = baselineLatency + 15
   const wakeThreshold = baselineWake + 1
   const qualityThreshold = baselineQuality - 2
 
-  // 7-night patterns (your “what’s going on” window)
+  // 7-night patterns
   const latencyPattern = count(nights7.map(n => n.latencyMinutes >= latencyThreshold))
   const wakePattern = count(nights7.map(n => n.wakeUps >= wakeThreshold))
   const qualityPattern = count(nights7.map(n => n.sleepQuality <= qualityThreshold))
@@ -197,32 +298,60 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   const avgWake7 = avg(nights7.map(n => n.wakeUps))
   const avgQuality7 = avg(nights7.map(n => n.sleepQuality))
 
-  // Build tag impact model (prefer 30 nights for correlation; else 7)
+  // Trigger correlation (prefer 30; else 7)
   const correlationNights = nights30.length >= 10 ? nights30 : nights7
   const { impacts } = computeTagImpacts(correlationNights)
 
   // HARD-LOCKED PRIORITY ORDER (no exceptions)
-  // 1) Sleep quality
-  // 2) Sleep latency
-  // 3) Wake ups
-  // 4) Optimization
-  let driver: "Recovery" | "Pre-Sleep Discharge" | "Stabilization" | "Optimization" = "Optimization"
-
+  let driver: Driver = "Optimization"
   if (qualityPattern >= 3 || tonight.sleepQuality <= qualityThreshold) driver = "Recovery"
   else if (latencyPattern >= 3 || tonight.latencyMinutes >= latencyThreshold) driver = "Pre-Sleep Discharge"
   else if (wakePattern >= 3 || tonight.wakeUps >= wakeThreshold) driver = "Stabilization"
   else driver = "Optimization"
 
-  // Select top trigger *within the active driver* (so we don’t guess wrong protocol)
-  const focus: "quality" | "latency" | "wake" =
-    driver === "Recovery" ? "quality" : driver === "Pre-Sleep Discharge" ? "latency" : "wake"
+  const focus: ProtocolTarget = driverTarget(driver)
+  const topTrigger = pickTopImpactTag(impacts, focus === "wake" ? "wake" : focus === "latency" ? "latency" : "quality")
 
-  const topTrigger = pickTopImpactTag(impacts, focus)
-
-  // Tonight tag set (used for selecting the right protocol variant inside the driver bucket)
   const tonightTags = nightTags(tonight)
 
-  // OUTPUT
+  // Protocol learning (uses last30 if available; else last7)
+  const learningNights = nights30.length >= 10 ? nights30 : nights7
+  const learned = learnProtocolEffects(learningNights)
+
+  // Candidate protocols (within each family)
+  const latencyCandidates = [
+    "Pre-Sleep Discharge Protocol",
+    "Pre-Sleep Discharge + RB2 Deceleration",
+    "RB2 Deceleration + Heat Management (No Cold Shocks)",
+  ]
+  const wakeCandidates = [
+    "Sleep Continuity Reset + Night-Awake Reset",
+    "Night-Awake Reset (Mechanical)",
+  ]
+  const qualityCandidates = [
+    "Low-Stimulation Recovery Night",
+    "Recovery Night + Discharge Walk",
+  ]
+  const optCandidates = ["Maintain Routine (One-Lever Test)"]
+
+  // Confidence from pattern strength + learning evidence (if available)
+  const strongestPattern = Math.max(latencyPattern, wakePattern, qualityPattern)
+  let confidence: "low" | "medium" | "high" = "low"
+  if (strongestPattern >= 4) confidence = "high"
+  else if (strongestPattern >= 2) confidence = "medium"
+
+  // If we have protocol learning with at least 3 uses in the active target, bump confidence one level.
+  const learnedEvidence = Object.values(learned).some(s => s.target === focus && s.uses >= 3)
+  if (learnedEvidence) {
+    if (confidence === "low") confidence = "medium"
+    else if (confidence === "medium") confidence = "high"
+  }
+
+  // Prediction
+  let predictedIssue: string | undefined
+  if (latencyPattern >= 2) predictedIssue = "Sleep onset delay likely"
+  else if (wakePattern >= 2) predictedIssue = "Night awakenings likely"
+
   const why: string[] = []
   const actions: string[] = []
   const avoid: string[] = []
@@ -230,34 +359,38 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   let headline = ""
   let primaryDriver = ""
   let suggestedProtocol = ""
-  let predictedIssue: string | undefined
+  let protocolFamily: string = driver
 
-  // Confidence from pattern strength
-  const strongestPattern = Math.max(latencyPattern, wakePattern, qualityPattern)
-  let confidence: "low" | "medium" | "high" = "low"
-  if (strongestPattern >= 4) confidence = "high"
-  else if (strongestPattern >= 2) confidence = "medium"
-
-  // Prediction: what’s likely next if nothing changes
-  if (latencyPattern >= 2) predictedIssue = "Sleep onset delay likely"
-  else if (wakePattern >= 2) predictedIssue = "Night awakenings likely"
+  // Helper: choose learned-best protocol if available
+  const chooseProtocol = (target: ProtocolTarget, candidates: string[], fallback: string) => {
+    const pick = pickBestProtocolForTarget(learned, target, candidates)
+    if (pick.best) {
+      // show learning fact in "why"
+      const unit = target === "latency" ? "min" : target === "wake" ? "wake-ups" : "quality pts"
+      const sign = pick.bestAvg >= 0 ? "+" : ""
+      why.push(`Based on your history: ${pick.best} is your best performer (${sign}${pick.bestAvg.toFixed(1)} ${unit}, n=${pick.bestUses}).`)
+      return pick.best
+    }
+    return fallback
+  }
 
   // -----------------------------
-  // DRIVER: RECOVERY (QUALITY FIRST)
+  // RECOVERY (QUALITY FIRST)
   // -----------------------------
   if (driver === "Recovery") {
     headline = "Tonight plan: Recovery sleep"
     primaryDriver = "Sleep quality below your baseline"
-    suggestedProtocol = "Low-Stimulation Recovery Night"
+
+    const fallback = "Low-Stimulation Recovery Night"
+    suggestedProtocol = chooseProtocol("quality", qualityCandidates, fallback)
 
     why.push(`Baseline quality: ${baselineQuality.toFixed(1)}/10`)
     why.push(`Recent quality: ${avgQuality7.toFixed(1)}/10`)
     if (qualityPattern) why.push(`${qualityPattern} of the last 7 nights were below baseline quality.`)
 
-    // From your PDF “Top 5 reset sleep levers” + “Sleep correction”
     actions.push("Reduce stimulus rhythm after dinner (low light, low noise, no screens).")
-    actions.push("Add structured discharge if you feel wired: steady walking 20–40 min (not exertion).")
-    actions.push("Use long-exhale breathing (no breath holds).")
+    actions.push("If you feel wired: steady walking 20–40 min (not exertion).")
+    actions.push("Long-exhale breathing (no breath holds).")
     actions.push("Avoid late novelty and complex mental engagement.")
 
     avoid.push("Late stimulants (especially within 10–12 hours if sensitive).")
@@ -265,7 +398,7 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   }
 
   // -----------------------------------
-  // DRIVER: LATENCY (SECOND PRIORITY)
+  // LATENCY (SECOND PRIORITY)
   // -----------------------------------
   else if (driver === "Pre-Sleep Discharge") {
     headline = "Tonight plan: Faster sleep onset"
@@ -275,35 +408,36 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     why.push(`Recent latency: ${avgLatency7.toFixed(0)} min`)
     if (latencyPattern) why.push(`${latencyPattern} of the last 7 nights had long sleep latency.`)
 
-    // Choose protocol variant using your PDF:
-    // - Pre-Sleep Discharge Protocol (mechanical)
-    // - If heat tags present: thermal neutral / heat management + RB2 deceleration (no cold shocks)
     const heatTonight = hasAnyTag(tonightTags, HEAT_TAGS)
     const stimTonight = hasAnyTag(tonightTags, STIMULATION_TAGS)
 
-    if (heatTonight) {
-      suggestedProtocol = "RB2 Deceleration + Heat Management (No Cold Shocks)"
+    const fallback =
+      heatTonight
+        ? "RB2 Deceleration + Heat Management (No Cold Shocks)"
+        : stimTonight
+        ? "Pre-Sleep Discharge + RB2 Deceleration"
+        : "Pre-Sleep Discharge Protocol"
 
-      // From PDF: “WHAT NOT TO DO during heat” + “Emergency Night-Awake Reset” + “RB2 Deceleration”
+    suggestedProtocol = chooseProtocol("latency", latencyCandidates, fallback)
+
+    // Protocol steps (from your PDF framing)
+    if (suggestedProtocol.toLowerCase().includes("heat")) {
       actions.push("Remove rhythmic stimulation: no music, no scrolling, no narrative replay.")
       actions.push("RB2 Deceleration breathing: inhale 4s → pause 2s → exhale 6s → pause 2s (12–15 cycles).")
-      actions.push("Internal cooling (without cold): spread awareness to soles, knees, elbows, palms (no focusing).")
+      actions.push("Internal cooling (without cold): spread awareness to soles/knees/elbows/palms (no focusing).")
       actions.push("Sleep Entry Lock: once sleepy, do not re-engage thought; if clarity spikes, return to breath.")
 
       avoid.push("Cold showers before bed / ice water / cooling shocks.")
       avoid.push("Intense breathing or visualisation.")
-      avoid.push("Hot food/drinks/showers late (keep ≤ warm 2–3).")
+      avoid.push("Hot food/drinks/showers late (keep ≤ warm).")
     } else {
-      suggestedProtocol = stimTonight ? "Pre-Sleep Discharge + RB2 Deceleration" : "Pre-Sleep Discharge Protocol"
-
-      // From PDF: Pre-Sleep Discharge Protocol steps
       actions.push("Step 1: Outbound rhythmic discharge (15–30 min): walking (best) or gentle cycling / slow movement.")
       actions.push("Rule: continuous motion, not exertion.")
       actions.push("Step 2: Sensory smoothing (10 min): dim lighting, no screens, neutral temp, no high-contrast sound.")
       actions.push("Step 3: Breath normalisation (5 min): natural breathing + slightly longer exhale (no holds).")
       actions.push("Step 4: Sleep entry: lie down only after the body quiets; if restlessness returns, repeat Step 1 briefly.")
 
-      if (stimTonight) {
+      if (suggestedProtocol.toLowerCase().includes("rb2")) {
         actions.push("RB2 Deceleration add-on: inhale 4s → pause 2s → exhale 6s → pause 2s (12–15 cycles).")
         avoid.push("Visualisation (it re-engages the mind).")
       }
@@ -314,18 +448,19 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   }
 
   // --------------------------------
-  // DRIVER: WAKE-UPS (THIRD PRIORITY)
+  // WAKE-UPS (THIRD PRIORITY)
   // --------------------------------
   else if (driver === "Stabilization") {
     headline = "Tonight plan: Reduce wake-ups"
     primaryDriver = "Wake-ups above your baseline"
-    suggestedProtocol = "Sleep Continuity Reset + Night-Awake Reset"
+
+    const fallback = "Sleep Continuity Reset + Night-Awake Reset"
+    suggestedProtocol = chooseProtocol("wake", wakeCandidates, fallback)
 
     why.push(`Baseline wake-ups: ${baselineWake.toFixed(1)}`)
     why.push(`Recent wake-ups: ${avgWake7.toFixed(1)}`)
     if (wakePattern) why.push(`${wakePattern} of the last 7 nights had higher wake-ups than baseline.`)
 
-    // Use PDF’s “Emergency Night-Awake Reset” and “what not to do”
     actions.push("If awake >30–40 min: sit up, feet on floor, slow breathing (out longer than in), neutral posture, eyes unfocused.")
     actions.push("Keep wake-ups mechanical: no phone, no mental techniques, no visualisation.")
     actions.push("Stabilise sensory input: low light, low noise, neutral temperature.")
@@ -341,12 +476,13 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
   }
 
   // --------------------------------
-  // DRIVER: OPTIMIZATION (LAST)
+  // OPTIMIZATION (LAST)
   // --------------------------------
   else {
     headline = "Tonight plan: Maintain good sleep"
     primaryDriver = "Core sleep metrics are stable"
-    suggestedProtocol = "Maintain Routine (One-Lever Test)"
+
+    suggestedProtocol = chooseProtocol("quality", optCandidates, "Maintain Routine (One-Lever Test)")
 
     why.push("Quality, latency, and wake-ups are stable relative to your baseline.")
     actions.push("Maintain the same sleep timing and environment.")
@@ -361,21 +497,10 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     avoid.push(`Avoid ${topTrigger.tag} near bedtime (based on your recent pattern).`)
   }
 
-  // De-duplicate avoid/actions
-  const dedupe = (arr: string[]) => {
-    const seen = new Set<string>()
-    return arr.filter(s => {
-      const k = s.toLowerCase()
-      if (seen.has(k)) return false
-      seen.add(k)
-      return true
-    })
-  }
-
   return {
     headline,
     primaryDriver,
-    protocolFamily: driver,
+    protocolFamily,
     suggestedProtocol,
     predictedIssue,
     why: dedupe(why),
