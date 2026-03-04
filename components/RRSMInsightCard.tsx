@@ -88,14 +88,21 @@ function humanizeWhyLine(line: string): string {
 
 function extractSuggestedPlan(whyLines: string[] | undefined): string {
   if (!whyLines?.length) return "";
-  // We look for the already-humanized label used in the UI.
-  const line = whyLines.find((l) => /^Suggested plan:/i.test(l)) ?? whyLines.find((l) => /^Suggested protocol:/i.test(l));
-  if (!line) return "";
-  const v = line.replace(/^Suggested (plan|protocol):\s*/i, "").trim();
-  // Treat placeholders as "no real protocol" so we don't show the protocol-check UI.
+  const raw = whyLines.find(line => /^Suggested (protocol|plan):/i.test(line));
+  if (!raw) return "";
+
+  // Strip the label and any extra fragments like "Mismatch: 0." so we only keep the protocol name.
+  let v = raw.replace(/^Suggested (protocol|plan):/i, "").trim();
+  v = v.replace(/Mismatch:\s*-?\d+(?:\.\d+)?\.?/gi, "").trim();
+  v = v.replace(/\s+/g, " ").trim();
+
+  // Treat "No suggestion" / "none" as empty (so the Protocol check block won't show).
   if (!v) return "";
-  if (/^no suggestion\.?$/i.test(v)) return "";
-  if (/^(none|n\/a|na)\.?$/i.test(v)) return "";
+  if (/^no suggestion\b/i.test(v)) return "";
+  if (/^(none|n\/a|na)\b/i.test(v)) return "";
+
+  // Keep the first meaningful sentence only.
+  v = v.split(".")[0].trim();
   return v;
 }
 
@@ -301,27 +308,9 @@ export default function RRSMInsightCard(props: {
         </div>
       ) : null}
 
-      {/* RRSMInsight doesn't guarantee a separate "headline" field; title is the stable label. */}
-   // Clean the suggested plan so Protocol check only shows the protocol name
-const cleanSuggestedProtocol = (raw?: string) => {
-  if (!raw) return "";
-
-  // Remove mismatch fragment if it exists
-  let s = raw.replace(/Mismatch:\s*-?\d+(\.\d+)?\.?/i, "").trim();
-
-  // If it's "No suggestion", treat as empty
-  if (/^no suggestion\.?$/i.test(s)) return "";
-
-  // If it still has multiple sentences, keep the first meaningful part only
-  // e.g. "RB2 Deceleration. ..." -> "RB2 Deceleration"
-  s = s.split(".")[0].trim();
-
-  return s;
-};
-
-const suggestedProtocolForCheck = cleanSuggestedProtocol(suggestedPlan);
-      <ProtocolFeedback insightTitle="Protocol check" suggestedPlan={suggestedProtocolForCheck}
-/>
+    {suggestedPlan ? (
+      <ProtocolFeedback insightTitle="Protocol check" suggestedPlan={suggestedPlan} />
+    ) : null}
     </div>
   );
 }
