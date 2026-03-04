@@ -13,10 +13,6 @@ type NightRow = {
   latency_min: number | null;
   wakeups_count: number | null;
   quality_num: number | null;
-  // Raw sleep_nights fields (optional, helpful for debugging)
-  sleep_latency_choice?: string | null;
-  wake_ups_choice?: string | null;
-  sleep_quality?: number | null;
   // These are merged in from sleep_nights (not present on v_sleep_night_metrics)
   primary_driver: string | null;
   secondary_driver: string | null;
@@ -40,37 +36,6 @@ function fmtDate(iso: string) {
   } catch {
     return iso;
   }
-}
-
-function latencyChoiceToMinutes(choice?: string | null): number | null {
-  if (!choice) return null;
-  const c = String(choice).trim().toLowerCase();
-  if (c === "0-15" || c === "0–15") return 8;
-  if (c === "15-30" || c === "15–30") return 23;
-  if (c === "30-45" || c === "30–45") return 38;
-  if (c === "45-60" || c === "45–60") return 53;
-  if (c === "60+" || c === "60 +" || c.includes("60")) return 75;
-  return null;
-}
-
-function wakeupsChoiceToCount(choice?: string | null): number | null {
-  if (!choice) return null;
-  const c = String(choice).trim().toLowerCase();
-  if (c === "0") return 0;
-  if (c === "1-2" || c === "1–2") return 2;
-  if (c === "3-4" || c === "3–4") return 4;
-  if (c === "5+" || c === "5 +" || c.includes("5")) return 5;
-  return null;
-}
-
-function minutesBetween(startIso?: string | null, endIso?: string | null): number | null {
-  if (!startIso || !endIso) return null;
-  const s = new Date(startIso).getTime();
-  const e = new Date(endIso).getTime();
-  if (!Number.isFinite(s) || !Number.isFinite(e)) return null;
-  const diff = Math.round((e - s) / 60000);
-  if (!Number.isFinite(diff) || diff <= 0) return null;
-  return diff;
 }
 
 function safeAvg(nums: Array<number | null | undefined>) {
@@ -169,50 +134,102 @@ function buildLocalInsight(rows: NightRow[]): RRSMInsight {
     actions.push(`Focus one change around “${topDriver}” for 2–3 nights and compare.`);
   }
   actions.push(`Keep logging at least 3 nights/week to strengthen the pattern.`);
-    const { data, error } = await supabase
-      .from("v_sleep_night_metrics")
-      .select(
-        "night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num,sleep_latency_choice,wake_ups_choice,sleep_quality"
-      )
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false })
-      .limit(7);
+  actions.push(`After 7 valid nights, we’ll generate a stronger RRSM insight.`);
 
-    if (error) {
-      setErr(error.message);
-      setRows([]);
-      setLoading(false);
-      return;
-    }
+  return {
+    title: "RRSM preview (early signal)",
+    why,
+    actions,
+    confidence: "medium",
+  };
+}
 
-    let nextRows = (data ?? []) as NightRow[];
+export default function DashboardPage() {
+  const supabase = useMemo(() => createClient(), []);
 
-    // v_sleep_night_metrics does not include driver columns; merge them from sleep_nights
-    const nightIds = nextRows.map((r) => r.night_id).filter(Boolean);
-    if (nightIds.length) {
-      const { data: nights, error: nightsErr } = await supabase
-        .from("sleep_nights")
-        .select("id,primary_driver,secondary_driver,notes")
-        .in("id", nightIds);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [rows, setRows] = useState<NightRow[]>([]);
 
-      if (!nightsErr && nights?.length) {
-        const map = new Map(
-          nights.map((n) => [
-            n.id,
-            {
+  const [insight, setInsight] = useState<RRSMInsight | null>(null);
+  const [insightErr, setInsightErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setErr(null);
+
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id ?? null;
+      setUserId(uid);
+      if (!uid) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("v_sleep_night_metrics")
+        .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false })
+        .limit(7);
+
+      if (error) {
+        setErr(error.message);
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      let nextRows = (data ?? []) as NightRow[];
+
+    // De-dupe by night_id (views can return multiple rows per night)
+    const seen = new Set<string>();
+    nextRows = nextRows.filter((r) => {
+      const id = String(r.night_id ?? "");
+      if (!id) return false;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+    // Keep only the most recent 7 unique nights
+    nextRows = nextRows.slice(0, 7);
+
+      // v_sleep_night_metrics does not include driver columns; merge them from sleep_nights
+      const nightIds = nextRows.map((r) => r.night_id).filter(Boolean);
+      if (nightIds.length) {
+        const { data: nights, error: nightsErr } = await supabase
+          .from("sleep_nights")
+          .select("id,primary_driver,secondary_driver,notes")
+          .in("id", nightIds);
+
+        if (!nightsErr && nights) {
+          const byId = new Map<
+            string,
+            { primary_driver: string | null; secondary_driver: string | null; notes: string | null }
+          >();
+          for (const n of nights as any[]) {
+            byId.set(n.id, {
               primary_driver: n.primary_driver ?? null,
               secondary_driver: n.secondary_driver ?? null,
               notes: n.notes ?? null,
-            },
-          ])
-        );
-        nextRows = nextRows.map((r) => {
-          const merged = map.get(r.night_id);
-          return merged ? { ...r, ...merged } : r;
-        });
-      }
-    }
+            });
+          }
 
+          nextRows = nextRows.map((r) => {
+            const m = byId.get(r.night_id);
+            return {
+              ...r,
+              ...(m ?? {}),
+              primary_driver: m?.primary_driver ?? null,
+              secondary_driver: m?.secondary_driver ?? null,
+            };
+          });
+        }
+      }
 
       setRows(nextRows);
       setLoading(false);
@@ -331,8 +348,8 @@ function buildLocalInsight(rows: NightRow[]): RRSMInsight {
                     <tr key={r.night_id} style={{ borderTop: "1px solid #eee" }}>
                       <td style={{ padding: "10px 12px" }}>{fmtDate(r.created_at)}</td>
                       <td style={{ padding: "10px 12px" }}>{r.quality_num ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.latency_min ?? r.sleep_latency_choice ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? r.wake_ups_choice ?? "—"}</td>
+                      <td style={{ padding: "10px 12px" }}>{r.latency_min ?? "—"}</td>
+                      <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
