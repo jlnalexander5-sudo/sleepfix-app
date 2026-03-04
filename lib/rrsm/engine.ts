@@ -388,7 +388,12 @@ export function runRRSM(input: RRSMInput): RRSMOutput {
     why.push(`Recent quality: ${avgQuality7.toFixed(1)}/10`)
     if (qualityPattern) why.push(`${qualityPattern} of the last 7 nights were below baseline quality.`)
 
-    actions.push("Reduce stimulus rhythm after dinner (low light, low noise, no screens).")
+    // Surface the protocol name so the UI can display it cleanly
+  if (suggestedProtocol && suggestedProtocol.toLowerCase() !== "no suggestion") {
+    why.push(`Suggested protocol: ${suggestedProtocol}`)
+  }
+
+  actions.push("Reduce stimulus rhythm after dinner (low light, low noise, no screens).")
     actions.push("If you feel wired: steady walking 20–40 min (not exertion).")
     actions.push("Long-exhale breathing (no breath holds).")
     actions.push("Avoid late novelty and complex mental engagement.")
