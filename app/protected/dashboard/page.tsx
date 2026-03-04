@@ -13,6 +13,10 @@ type NightRow = {
   latency_min: number | null;
   wakeups_count: number | null;
   quality_num: number | null;
+  // Raw sleep_nights fields (optional, helpful for debugging)
+  sleep_latency_choice?: string | null;
+  wake_ups_choice?: string | null;
+  sleep_quality?: number | null;
   // These are merged in from sleep_nights (not present on v_sleep_night_metrics)
   primary_driver: string | null;
   secondary_driver: string | null;
@@ -36,6 +40,37 @@ function fmtDate(iso: string) {
   } catch {
     return iso;
   }
+}
+
+function latencyChoiceToMinutes(choice?: string | null): number | null {
+  if (!choice) return null;
+  const c = String(choice).trim().toLowerCase();
+  if (c === "0-15" || c === "0–15") return 8;
+  if (c === "15-30" || c === "15–30") return 23;
+  if (c === "30-45" || c === "30–45") return 38;
+  if (c === "45-60" || c === "45–60") return 53;
+  if (c === "60+" || c === "60 +" || c.includes("60")) return 75;
+  return null;
+}
+
+function wakeupsChoiceToCount(choice?: string | null): number | null {
+  if (!choice) return null;
+  const c = String(choice).trim().toLowerCase();
+  if (c === "0") return 0;
+  if (c === "1-2" || c === "1–2") return 2;
+  if (c === "3-4" || c === "3–4") return 4;
+  if (c === "5+" || c === "5 +" || c.includes("5")) return 5;
+  return null;
+}
+
+function minutesBetween(startIso?: string | null, endIso?: string | null): number | null {
+  if (!startIso || !endIso) return null;
+  const s = new Date(startIso).getTime();
+  const e = new Date(endIso).getTime();
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return null;
+  const diff = Math.round((e - s) / 60000);
+  if (!Number.isFinite(diff) || diff <= 0) return null;
+  return diff;
 }
 
 function safeAvg(nums: Array<number | null | undefined>) {
@@ -169,9 +204,13 @@ export default function DashboardPage() {
         return;
       }
 
+      // Pull directly from sleep_nights.
+      // (The v_sleep_night_metrics view can return nulls if it falls behind schema/choice changes.)
       const { data, error } = await supabase
-        .from("v_sleep_night_metrics")
-        .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
+        .from("sleep_nights")
+        .select(
+          "id,user_id,created_at,local_date,start_time,end_time,sleep_quality,sleep_latency_choice,wake_ups_choice,primary_driver,secondary_driver,notes"
+        )
         .eq("user_id", uid)
         .order("created_at", { ascending: false })
         .limit(7);
@@ -183,40 +222,29 @@ export default function DashboardPage() {
         return;
       }
 
-      let nextRows = (data ?? []) as NightRow[];
+      const nextRows: NightRow[] = (data ?? []).map((n: any) => {
+        const createdAt = n.created_at ?? n.local_date ?? new Date().toISOString();
+        const duration = minutesBetween(n.start_time, n.end_time);
+        const latency = latencyChoiceToMinutes(n.sleep_latency_choice);
+        const wakes = wakeupsChoiceToCount(n.wake_ups_choice);
+        const quality = typeof n.sleep_quality === "number" ? n.sleep_quality : null;
 
-      // v_sleep_night_metrics does not include driver columns; merge them from sleep_nights
-      const nightIds = nextRows.map((r) => r.night_id).filter(Boolean);
-      if (nightIds.length) {
-        const { data: nights, error: nightsErr } = await supabase
-          .from("sleep_nights")
-          .select("id,primary_driver,secondary_driver,notes")
-          .in("id", nightIds);
-
-        if (!nightsErr && nights) {
-          const byId = new Map<
-            string,
-            { primary_driver: string | null; secondary_driver: string | null; notes: string | null }
-          >();
-          for (const n of nights as any[]) {
-            byId.set(n.id, {
-              primary_driver: n.primary_driver ?? null,
-              secondary_driver: n.secondary_driver ?? null,
-              notes: n.notes ?? null,
-            });
-          }
-
-          nextRows = nextRows.map((r) => {
-            const m = byId.get(r.night_id);
-            return {
-              ...r,
-              ...(m ?? {}),
-              primary_driver: m?.primary_driver ?? null,
-              secondary_driver: m?.secondary_driver ?? null,
-            };
-          });
-        }
-      }
+        return {
+          night_id: n.id,
+          user_id: n.user_id,
+          created_at: createdAt,
+          duration_min: duration,
+          latency_min: latency,
+          wakeups_count: wakes,
+          quality_num: quality,
+          sleep_quality: quality,
+          sleep_latency_choice: n.sleep_latency_choice ?? null,
+          wake_ups_choice: n.wake_ups_choice ?? null,
+          primary_driver: n.primary_driver ?? null,
+          secondary_driver: n.secondary_driver ?? null,
+          notes: n.notes ?? null,
+        };
+      });
 
       setRows(nextRows);
       setLoading(false);
@@ -335,8 +363,8 @@ export default function DashboardPage() {
                     <tr key={r.night_id} style={{ borderTop: "1px solid #eee" }}>
                       <td style={{ padding: "10px 12px" }}>{fmtDate(r.created_at)}</td>
                       <td style={{ padding: "10px 12px" }}>{r.quality_num ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.latency_min ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? "—"}</td>
+                      <td style={{ padding: "10px 12px" }}>{r.latency_min ?? r.sleep_latency_choice ?? "—"}</td>
+                      <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? r.wake_ups_choice ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
