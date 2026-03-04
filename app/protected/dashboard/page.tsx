@@ -181,11 +181,29 @@ export default function DashboardPage() {
       }
 
       const { data, error } = await supabase
-        .from("sleep_nights")
-        .select("night_id,user_id,created_at,duration_min,latency_min,wakeups_count,quality_num")
-        .eq("user_id", uid)
-        .order("local_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false })
-        .limit(7);
+        
+const { data, error } = await supabase
+  .from("sleep_nights")
+  .select([
+    "id",
+    "user_id",
+    "created_at",
+    "local_date",
+    "sleep_quality",
+    "sleep_latency_choice",
+    "wake_ups_choice",
+    "quality_num",
+    "latency_min",
+    "wakeups_count",
+    "primary_driver",
+    "secondary_driver",
+    "notes"
+  ].join(","))
+  .eq("user_id", uid)
+  .order("local_date", { ascending: false, nullsFirst: false })
+  .order("created_at", { ascending: false })
+  .limit(7);
+
 
       if (error) {
         setErr(error.message);
@@ -194,20 +212,41 @@ export default function DashboardPage() {
         return;
       }
 
-      const nextRows: NightRow[] = (data ?? []).map((r: any) => ({
-      night_id: r.id,
-      user_id: r.user_id,
-      created_at: r.created_at,
-      local_date: r.local_date ?? null,
-      duration_min: null,
-      latency_min: parseChoiceToNumber(r.sleep_latency_choice),
-      wakeups_count: parseChoiceToNumber(r.wake_ups_choice),
-      quality_num: typeof r.sleep_quality === "number" ? r.sleep_quality : null,
-      primary_driver: r.primary_driver ?? null,
-      secondary_driver: r.secondary_driver ?? null,
-      notes: r.notes ?? null,
-    }));
+      
+const nextRows: NightRow[] = (data ?? []).map((r: any) => {
+  const quality =
+    typeof r.quality_num === "number"
+      ? r.quality_num
+      : typeof r.sleep_quality === "number"
+      ? r.sleep_quality
+      : null;
+
+  const latency =
+    typeof r.latency_min === "number"
+      ? r.latency_min
+      : parseChoiceToNumber(r.sleep_latency_choice);
+
+  const wakeups =
+    typeof r.wakeups_count === "number"
+      ? r.wakeups_count
+      : parseChoiceToNumber(r.wake_ups_choice);
+
+  return {
+    night_id: r.id,
+    user_id: r.user_id,
+    created_at: r.created_at,
+    local_date: r.local_date ?? null,
+    duration_min: null,
+    latency_min: latency,
+    wakeups_count: wakeups,
+    quality_num: quality,
+    primary_driver: r.primary_driver ?? null,
+    secondary_driver: r.secondary_driver ?? null,
+    notes: r.notes ?? null,
+  };
+});
 setRows(nextRows);
+
       setLoading(false);
 
       // Local RRSM preview until the full engine is wired.
