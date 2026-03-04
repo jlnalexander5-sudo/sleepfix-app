@@ -295,7 +295,7 @@ export default function RRSMInsightCard(props: {
         </div>
       ) : null}
 
-      <ProtocolFeedback insightTitle={insight.headline} suggestedPlan={suggestedPlan} />
+    <ProtocolFeedback insightTitle={insight.primaryDriver} suggestedPlan={suggestedPlan} />
     </div>
   );
 }
