@@ -189,9 +189,15 @@ export default function HabitsPage() {
         <p className="text-base text-neutral-600 mt-2">
           Quick “day factors” log. Tick what actually happened today (objective inputs), saved per date.
         </p>
-        <p className="text-sm text-neutral-500 mt-1">
-          This is different from the Sleep page “drivers” (your best guess about what affected the night). Habits = inputs; Drivers = interpretation.
-        </p>
+        <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
+          <div className="text-sm font-bold text-neutral-900">Habits page = objective daily behaviour</div>
+          <div className="mt-1 text-sm text-neutral-700">
+            Record what actually happened during the day, independent of your sleep perception.
+          </div>
+          <div className="mt-2 text-sm text-neutral-600">
+            This data feeds the RRSM Engine.
+          </div>
+        </div>
       </div>
 
       {error ? (
