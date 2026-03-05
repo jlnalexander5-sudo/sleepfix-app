@@ -49,6 +49,17 @@ function parseLocalDateTime(dateStr: string, timeStr: string) {
 }
 
 const LATENCY_CHOICES = ["5", "10", "20", "30", "60+"] as const;
+
+function parseLatencyToMinutes(choice: string | null): number | null {
+  if (!choice) return null;
+  const raw = choice.replace(/[^0-9+]/g, "");
+  if (!raw) return null;
+  // handles '60+' or '5' etc
+  const num = parseInt(raw.replace("+", ""), 10);
+  if (Number.isNaN(num)) return null;
+  return num;
+}
+
 const WAKE_CHOICES = ["0", "1", "2", "3", "4", "5+"] as const;
 const QUALITY_CHOICES = Array.from({ length: 10 }, (_, i) => String(i + 1));
 
@@ -363,7 +374,7 @@ export default function SleepPage() {
         sleep_start_time: sleepStartTime,
         sleep_end_time: sleepEndTime,
         sleep_quality: Number(sleepQuality),
-        sleep_latency: Number(sleepLatency),
+        sleep_latency: parseLatencyToMinutes(sleepLatencyChoice),
         wake_ups: Number(wakeUps),
         mind_state: mindState,
         environment: environment,
