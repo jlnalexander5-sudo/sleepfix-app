@@ -1,3 +1,4 @@
+"use client";
 
 function parseWakeUpsToNumber(choice: string): number {
   // UI choices like "0", "1", "2", "3", "4", "5+"
@@ -11,7 +12,6 @@ function parseWakeUpsToNumber(choice: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-"use client";
 /* eslint-disable react/no-unescaped-entities */
 import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
