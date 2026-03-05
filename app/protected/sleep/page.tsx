@@ -57,10 +57,10 @@ const MIND_TAGS = [
   "anxious",
   "calm",
   "racing thoughts",
-  "flat",
+  "low / flat",
   "depressed",
   "focused",
-  "Wired",
+  "wired / alert",
   "foggy",
   "clear",
 ] as const;
@@ -324,101 +324,91 @@ export default function SleepPage() {
         setRrsmInsightLoading(false);
       }
     })();
-  }, [userId]);
+  }, async function saveNight() {
+    if (!userId || !canSaveNight) return;
 
-  async function saveNight() {
-    if (!userId) return;
-    if (isSavingNight) return;
     setSaveNotice(null);
-
-    const start = parseLocalDateTime(sleepStartDate, sleepStartTime);
-    const end = parseLocalDateTime(sleepEndDate, sleepEndTime);
-
-    
-// Required fields (we don't unlock analysis unless these exist)
-const missing: string[] = [];
-if (!sleepQuality) missing.push("Sleep Quality");
-if (!sleepLatencyChoice) missing.push("Sleep Latency");
-if (!wakeUpsChoice) missing.push("Wake Ups");
-if (!mindTags || mindTags.length === 0) missing.push("Mind tag");
-if (!environmentTags || environmentTags.length === 0) missing.push("Environment tag");
-if (!bodyTags || bodyTags.length === 0) missing.push("Body tag");
-
-if (missing.length) {
-  alert(`Please complete: ${missing.join(", ")}.`);
-  return;
-}
-
+    setSaveError(null);
     setIsSavingNight(true);
-    setSaveNotice(null);
 
     try {
-      const { data: inserted, error } = await supabase
-      .from("sleep_nights")
-      .insert({
+      const startAt = parseLocalDateTime(sleepStartDate, sleepStartTime);
+
+      // Build end from the start date + wake time; if earlier than start, assume it crossed midnight.
+      let endAt = parseLocalDateTime(sleepStartDate, sleepEndTime);
+      if (endAt.getTime() <= startAt.getTime()) {
+        endAt = new Date(endAt.getTime() + 24 * 60 * 60 * 1000);
+      }
+
+      // Keep UI end-date in sync (helps avoid confusing future edits).
+      const endLocalDate = toIsoLocalDate(endAt);
+      if (sleepEndDate !== endLocalDate) setSleepEndDate(endLocalDate);
+
+      const durationMinutes = Math.round((endAt.getTime() - startAt.getTime()) / 60000);
+
+      // Basic guardrails (prevents DB duration check constraints from firing).
+      if (durationMinutes <= 0 || durationMinutes > 16 * 60) {
+        setSaveError(
+          "Sleep duration looks invalid. Please check your bedtime + wake time (crossing midnight is supported)."
+        );
+        return;
+      }
+
+      const { error } = await supabase.from("sleep_nights").insert({
         user_id: userId,
-        sleep_start: start.toISOString(),
-        sleep_end: end.toISOString(),
-        local_date: toIsoLocalDate(start),
-        primary_driver: drivers.join(", "),
-        secondary_driver: null,
-        notes: buildNotes(userNotes, affectedTonight),
-
-        // Airtable-style inputs
+        sleep_date: sleepStartDate,
+        sleep_start_time: sleepStartTime,
+        sleep_end_time: sleepEndTime,
         sleep_quality: Number(sleepQuality),
-        sleep_latency_choice: sleepLatencyChoice,
-        wake_ups_choice: wakeUpsChoice,
-        mind_tags: mindTags,
-        environment_tags: environmentTags,
-        body_tags: bodyTags,
-        protocol_used_name: protocolUsedName || null,
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      setSaveNotice(error.message);
-      return;
-    }
-
-    const newId = inserted?.id ?? null;
-    setLatestNightId(newId);
-
-    // UX: clear acknowledgement that persists briefly, then reset the form
-    setSaveNotice("Saved");
-    window.setTimeout(() => {
-      setSaveNotice((curr) => (curr === "Saved" ? null : curr));
-      resetNightForm();
-    }, 1500);
-
-    if (newId) {
-      const { data: metricRows } = await supabase
-        .from("v_sleep_night_metrics")
-        .select("*")
-        .eq("night_id", newId)
-        .order("created_at", { ascending: false });
-      setMetrics((metricRows ?? []) as NightMetricsRow[]);
-    }
-
-    // re-run analyze after save
-    try {
-      setRrsmInsightLoading(true);
-      const res = await fetch("/api/rrsm/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 7, includeDrivers: true }),
+        sleep_latency: Number(sleepLatency),
+        wake_ups: Number(wakeUps),
+        mind_state: mindState,
+        environment: environment,
+        body_state: bodyState,
+        protocol_used: protocolUsed === "none" ? null : protocolUsed,
+        affected_tonight: affectedTonight,
+        notes: notes.trim() ? notes.trim() : null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sleep_start_at: startAt.toISOString(),
+        sleep_end_at: endAt.toISOString(),
+        sleep_duration: durationMinutes,
       });
-      const data = (await res.json()) as { insights?: RRSMInsight[] };
-      setRrsmInsight(data?.insights?.[0] ?? null);
-      setRrsmInsightError(null);
-    } catch (e: any) {
-      setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
-    } finally {
-      setRrsmInsightLoading(false);
-    }
-  
+
+      if (error) {
+        setSaveError(error.message || "Failed to save.");
+        return;
+      }
+
+      // Optimistically reset form + refresh list.
+      resetNightForm();
+      await loadRecentNights();
+      setSaveNotice("Saved ✅");
+
+      // Optional: refresh RRSM insight immediately after saving a valid night.
+      setRrsmInsightLoading(true);
+      try {
+        const response = await fetch("/api/rrsm/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId }),
+        });
+
+        if (response.ok) {
+          const json = (await response.json()) as { insight?: unknown };
+          if (json?.insight) setRrsmInsight(json.insight as RRSMV2Insight);
+        }
+      } catch {
+        // ignore; the night still saved
+      } finally {
+        setRrsmInsightLoading(false);
+      }
     } finally {
       setIsSavingNight(false);
+    }
+  }
+
+);
     }
 }
 
@@ -608,7 +598,7 @@ const userInput: RRSMUserInput = {
             Select this only if you actually used a protocol last night. (This is separate from the protocol the app recommends.)
           </div>
           <a className="sf-link" href="/protected/protocols" style={{ display: "inline-block", marginTop: 4 }}>
-            View RRSM protocol steps
+            View protocol steps
           </a>
           <select className="sf-select" style={{ marginTop: 10 }} value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
             <option value="">(none)</option>
