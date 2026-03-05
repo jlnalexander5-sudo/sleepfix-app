@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import RRSMInsightCard from "@/components/RRSMInsightCard";
+import { runRRSMEngineV2 } from "@/lib/rrsm/engine-v2";
 
 type NightRow = {
   night_id: string;
@@ -25,6 +26,11 @@ type RRSMInsight = {
   why: string[];
   actions: string[];
   confidence: "low" | "medium" | "high";
+  // Engine v2 extras (optional)
+  risk?: "low" | "moderate" | "high";
+  primaryIssue?: "recovery" | "onset" | "fragmentation" | "mixed";
+  topDriver?: string;
+  scores?: { recovery: number; onset: number; fragmentation: number; stability: number };
 };
 
 function fmtDate(iso: string) {
@@ -38,7 +44,6 @@ function fmtDate(iso: string) {
     return iso;
   }
 }
-
 
 function parseChoiceToNumber(choice: string | null | undefined): number | null {
   if (!choice) return null;
@@ -57,28 +62,6 @@ function safeAvg(nums: Array<number | null | undefined>) {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
-}
-
-function riskFromScore(score: number | null) {
-  if (score === null) return { level: "—", label: "No data" };
-  if (score >= 80) return { level: "Low", label: "Stable" };
-  if (score >= 60) return { level: "Moderate", label: "Watch" };
-  return { level: "High", label: "At risk" };
-}
-
-function sparkline(values: number[]) {
-  const blocks = "▁▂▃▄▅▆▇█";
-  if (values.length === 0) return "";
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (min === max) return "▅".repeat(values.length);
-  return values
-    .map((v) => {
-      const t = (v - min) / (max - min);
-      const idx = Math.max(0, Math.min(blocks.length - 1, Math.round(t * (blocks.length - 1))));
-      return blocks[idx];
-    })
-    .join("");
 }
 
 function isValidNight(r: NightRow) {
@@ -108,36 +91,8 @@ function mostCommon(values: Array<string | null | undefined>) {
   return best;
 }
 
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function stddev(nums: Array<number | null | undefined>) {
-  const xs = nums.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
-  if (xs.length < 2) return null;
-  const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
-  const v = xs.reduce((acc, x) => acc + (x - mean) ** 2, 0) / (xs.length - 1);
-  return Math.sqrt(v);
-}
-
 // Stability score (0..100): lower variability across the last 7 nights => higher stability.
 // (Dashboard v10 placeholder — can be replaced later by RRSM scoring.)
-function stabilityScore(rows: NightRow[]) {
-  const sdQ = stddev(rows.map((r) => r.quality_num)); // 0..10
-  const sdL = stddev(rows.map((r) => r.latency_min)); // minutes
-  const sdW = stddev(rows.map((r) => r.wakeups_count)); // count
-
-  if (sdQ === null && sdL === null && sdW === null) return null;
-
-  // Normalize into rough “penalties”
-  const pQ = sdQ === null ? 0 : (sdQ / 2.0) * 20; // sd=2 -> 20 penalty
-  const pL = sdL === null ? 0 : (sdL / 20.0) * 20; // sd=20m -> 20 penalty
-  const pW = sdW === null ? 0 : (sdW / 2.0) * 20; // sd=2 -> 20 penalty
-
-  const score = 100 - (pQ + pL + pW);
-  return clamp(Math.round(score), 0, 100);
-}
 
 function driverIndicator(rows: NightRow[]) {
   const drivers = rows
@@ -174,53 +129,6 @@ function MiniLineChart({ values }: { values: number[] }) {
   );
 }
 
-function buildLocalInsight(rows: NightRow[]): RRSMInsight {
-  const valid = rows.filter(isValidNight);
-  const validCount = valid.length;
-
-  if (validCount < 3) {
-    return {
-      title: `Building your baseline (unlock at 3 nights)`,
-      why: [
-        `Logged: ${validCount}/3 valid nights in the last 7 days.`,
-        `We wait for a minimum pattern window to avoid early / inaccurate conclusions.`,
-        `A valid night requires: Sleep Quality (1–10), Latency, Wake Ups.`,
-      ],
-      actions: [
-        `Log tonight’s sleep (start/end).`,
-        `Fill Sleep Quality, Latency, Wake Ups.`,
-        `Add at least 1 tag in Mind + Environment + Body.`,
-      ],
-      confidence: "low",
-    };
-  }
-
-  const avgQ = safeAvg(valid.map((r) => r.quality_num));
-  const avgLat = safeAvg(valid.map((r) => r.latency_min));
-  const avgW = safeAvg(valid.map((r) => r.wakeups_count));
-  const topDriver = mostCommon(valid.map((r) => r.primary_driver).filter((v): v is string => !!v)) ?? "(no driver logged)";
-
-  const why: string[] = [];
-  if (avgQ !== null) why.push(`Avg sleep quality (last ${validCount} valid nights): ${round1(avgQ)}/10.`);
-  if (avgLat !== null) why.push(`Avg sleep latency: ${round1(avgLat)} mins.`);
-  if (avgW !== null) why.push(`Avg wake ups: ${round1(avgW)}.`);
-  why.push(`Most common driver logged: ${topDriver}.`);
-
-  const actions: string[] = [];
-  if (topDriver !== "(no driver logged)") {
-    actions.push(`Focus one change around “${topDriver}” for 2–3 nights and compare.`);
-  }
-  actions.push(`Keep logging at least 3 nights/week to strengthen the pattern.`);
-  actions.push(`After 7 valid nights, we’ll generate a stronger RRSM insight.`);
-
-  return {
-    title: "RRSM preview (early signal)",
-    why,
-    actions,
-    confidence: "medium",
-  };
-}
-
 function dateKey(r: NightRow) {
   // Prefer the stored local_date (YYYY-MM-DD). Fallback: created_at date slice.
   if (r.local_date && String(r.local_date).trim()) return String(r.local_date).slice(0, 10);
@@ -240,7 +148,6 @@ function dedupeByNightDate(rows: NightRow[], maxUnique: number) {
   }
   return out;
 }
-
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -286,7 +193,6 @@ export default function DashboardPage() {
         .order("created_at", { ascending: false })
         .limit(30);
 
-
       if (error) {
         setErr(error.message);
         setRows([]);
@@ -321,10 +227,20 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
 
       setLoading(false);
 
-      // Local RRSM preview until the full engine is wired.
+      // RRSM Engine v2 (scoring + narrative)
       setInsightErr(null);
       try {
-        setInsight(buildLocalInsight(uniqueRows));
+        const rrsm = runRRSMEngineV2(
+          uniqueRows.map((r) => ({
+            dateKey: r.local_date ?? (r.created_at ? String(r.created_at).slice(0, 10) : undefined),
+            quality: r.quality_num,
+            latencyMin: r.latency_min,
+            wakeUps: r.wakeups_count,
+            primaryDriver: r.primary_driver,
+            secondaryDriver: r.secondary_driver,
+          }))
+        );
+        setInsight(rrsm);
       } catch (e: any) {
         setInsight(null);
         setInsightErr(e?.message ?? "Failed to build RRSM insight");
@@ -340,16 +256,19 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
     [rows]
   );
 
-
   const totalLatency = useMemo(() => rows.reduce((sum, r) => sum + (r.latency_min ?? 0), 0), [rows]);
   const totalWakeups = useMemo(() => rows.reduce((sum, r) => sum + (r.wakeups_count ?? 0), 0), [rows]);
 
-  const stability = useMemo(() => stabilityScore(rows), [rows]);
+  const stability = useMemo(() => (insight?.scores ? insight.scores.stability : null), [insight]);
   const topDriver = useMemo(() => driverIndicator(rows), [rows]);
 
-  // Simple “score” placeholder: 10-point quality -> 0..100
-  const score = avgQuality === null ? null : Math.max(0, Math.min(100, (avgQuality / 10) * 100));
-  const risk = riskFromScore(score);
+  const risk = useMemo(() => {
+    const r = insight?.risk ?? null;
+    if (!r) return { level: "—", label: "No data" };
+    if (r === "low") return { level: "Low", label: "Stable" };
+    if (r === "moderate") return { level: "Moderate", label: "Watch" };
+    return { level: "High", label: "At risk" };
+  }, [insight]);
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: "28px 18px" }}>
@@ -379,7 +298,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
             }}
           >
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Sleep quality (avg)</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Sleep quality (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
                 {avgQuality === null ? "—" : `${round1(avgQuality)}/10`}
               </div>
@@ -389,27 +308,27 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Latency (avg)</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Latency (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
                 {avgLatency === null ? "—" : `${round1(avgLatency)}m`}
               </div>
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Wake ups (avg)</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Wake ups (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
                 {avgWakeups === null ? "—" : round1(avgWakeups)}
               </div>
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>RRSM risk (placeholder)</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>RRSM risk</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>{risk.level}</div>
               <div style={{ marginTop: 6, color: "#444" }}>{risk.label}</div>
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Stability score</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Stability score</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>{stability === null ? "—" : `${stability}/100`}</div>
               <div style={{ marginTop: 6, color: "#444" }}>
                 {stability === null ? "Add more nights" : stability >= 80 ? "Stable" : stability >= 60 ? "Some variation" : "Highly variable"}
@@ -417,7 +336,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Top driver</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Top driver</div>
               <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{topDriver ?? "—"}</div>
               <div style={{ marginTop: 6, color: "#444" }}>{topDriver ? "Most commonly logged" : "No driver logged yet"}</div>
             </div>
