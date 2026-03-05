@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -186,7 +187,10 @@ export default function HabitsPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Habits</h1>
         <p className="text-base text-neutral-600 mt-2">
-          Simple daily checkboxes. This is just “what happened today”, saved per date.
+          Quick “day factors” log. Tick what actually happened today (objective inputs), saved per date.
+        </p>
+        <p className="text-sm text-neutral-500 mt-1">
+          This is different from the Sleep page “drivers” (your best guess about what affected the night). Habits = inputs; Drivers = interpretation.
         </p>
       </div>
 
