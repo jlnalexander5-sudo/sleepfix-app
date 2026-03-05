@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import RRSMInsightCard from "@/components/RRSMInsightCard";
-import { runRRSMEngineV2, type RRSMV2Insight } from "@/lib/rrsm/engine-v2";
+import { runRRSMEngineV2 } from "@/lib/rrsm/engine-v2";
 
 type NightRow = {
   night_id: string;
@@ -21,6 +21,27 @@ type NightRow = {
   notes?: string | null;
 };
 
+
+type DailyHabitRow = {
+  user_id: string;
+  date: string; // YYYY-MM-DD
+  caffeine_after_2pm?: boolean | null;
+  alcohol?: boolean | null;
+  exercise?: boolean | null;
+  screens_last_hour?: boolean | null;
+};
+
+type RRSMInsight = {
+  title: string;
+  why: string[];
+  actions: string[];
+  confidence: "low" | "medium" | "high";
+  // Engine v2 extras (optional)
+  risk?: "low" | "moderate" | "high";
+  primaryIssue?: "recovery" | "onset" | "fragmentation" | "mixed";
+  topDriver?: string;
+  scores?: { recovery: number; onset: number; fragmentation: number; stability: number };
+};
 
 function fmtDate(iso: string) {
   try {
@@ -42,6 +63,95 @@ function parseChoiceToNumber(choice: string | null | undefined): number | null {
   const n = parseInt(s.replace("+", ""), 10);
   return Number.isFinite(n) ? n : null;
 }
+
+
+function dateKeyForNight(r: NightRow): string | null {
+  const k = r.local_date ?? (r.created_at ? String(r.created_at).slice(0, 10) : null);
+  return k && typeof k === "string" ? k : null;
+}
+
+function safeBool(v: any): boolean {
+  return v === true;
+}
+
+function buildHabitSignals(rows: NightRow[], habitsByDate: Record<string, DailyHabitRow>): string[] {
+  if (!rows.length) return [];
+
+  const dates = rows.map(dateKeyForNight).filter((d): d is string => Boolean(d));
+  if (!dates.length) return [];
+
+  const habitDefs: Array<{ key: keyof DailyHabitRow; label: string }> = [
+    { key: "caffeine_after_2pm", label: "Caffeine after 2pm" },
+    { key: "alcohol", label: "Alcohol" },
+    { key: "exercise", label: "Exercise" },
+    { key: "screens_last_hour", label: "Screens last hour" },
+  ];
+
+  type Cand = { score: number; line: string };
+  const cands: Cand[] = [];
+
+  for (const h of habitDefs) {
+    const nightsWith: NightRow[] = [];
+    const nightsWithout: NightRow[] = [];
+
+    for (const r of rows) {
+      const d = dateKeyForNight(r);
+      if (!d) continue;
+      const hab = habitsByDate[d];
+      const flag = hab ? safeBool((hab as any)[h.key]) : false;
+      (flag ? nightsWith : nightsWithout).push(r);
+    }
+
+    const nWith = nightsWith.length;
+    const nTotal = nightsWith.length + nightsWithout.length;
+    if (nTotal < 3 || nWith === 0 || nWith === nTotal) continue; // need contrast
+
+    const avgLatWith = safeAvg(nightsWith.map((r) => r.latency_min));
+    const avgLatNo = safeAvg(nightsWithout.map((r) => r.latency_min));
+    const avgWuWith = safeAvg(nightsWith.map((r) => r.wakeups_count));
+    const avgWuNo = safeAvg(nightsWithout.map((r) => r.wakeups_count));
+    const avgQWith = safeAvg(nightsWith.map((r) => r.quality_num));
+    const avgQNo = safeAvg(nightsWithout.map((r) => r.quality_num));
+
+    const dLat = avgLatWith === null || avgLatNo === null ? 0 : avgLatWith - avgLatNo;
+    const dWu = avgWuWith === null || avgWuNo === null ? 0 : avgWuWith - avgWuNo;
+    const dQ = avgQWith === null || avgQNo === null ? 0 : avgQWith - avgQNo;
+
+    const score = Math.abs(dLat) / 5 + Math.abs(dWu) * 2 + Math.abs(dQ) * 1;
+
+    // choose a primary metric line (most interpretable)
+    const parts: string[] = [];
+    if (avgLatWith !== null && avgLatNo !== null) parts.push(`latency ${signNum(dLat)}${round1(dLat)}m`);
+    if (avgWuWith !== null && avgWuNo !== null) parts.push(`wake-ups ${signNum(dWu)}${round1(dWu)}`);
+    if (avgQWith !== null && avgQNo !== null) parts.push(`quality ${signNum(-dQ)}${round1(Math.abs(dQ))} (worse)`);
+
+    // Build a clean sentence prioritizing latency/wakeups/quality deltas
+    const metricLine =
+      avgLatWith !== null && avgLatNo !== null && Math.abs(dLat) >= Math.abs(dWu) * 5
+        ? `avg latency ${signWord(dLat)}${round1(Math.abs(dLat))}m`
+        : avgWuWith !== null && avgWuNo !== null && Math.abs(dWu) >= 0.5
+          ? `avg wake-ups ${signWord(dWu)}${round1(Math.abs(dWu))}`
+          : avgQWith !== null && avgQNo !== null && Math.abs(dQ) >= 0.5
+            ? `avg quality ${dQ < 0 ? "lower by " : "higher by "}${round1(Math.abs(dQ))}`
+            : null;
+
+    if (!metricLine) continue;
+
+    const line = `${h.label}: ${nWith}/${nTotal} days. When checked, ${metricLine} vs not checked.`;
+    cands.push({ score, line });
+  }
+
+  cands.sort((a, b) => b.score - a.score);
+  return cands.slice(0, 2).map((c) => c.line);
+}
+
+function signWord(delta: number): string {
+  return delta >= 0 ? "higher by " : "lower by ";
+}
+function signNum(delta: number): string {
+  return delta >= 0 ? "+" : "-";
+}
+
 
 function safeAvg(nums: Array<number | null | undefined>) {
   const xs = nums.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
@@ -89,93 +199,6 @@ function driverIndicator(rows: NightRow[]) {
     .filter((s) => !!s);
   return mostCommon(drivers);
 }
-
-
-
-type ProtocolKey =
-  | "pre_sleep_discharge"
-  | "rb2_deceleration"
-  | "internal_cooling"
-  | "sleep_entry_lock"
-  | "mental_discharge"
-  | "cooling_discharge"
-  | "doms_compression";
-
-type ProtocolRecommendation = {
-  key: ProtocolKey;
-  title: string;
-  bestFor: string;
-  href: string; // link to protocols page anchor
-};
-
-const PROTOCOLS: Record<ProtocolKey, ProtocolRecommendation> = {
-  pre_sleep_discharge: {
-    key: "pre_sleep_discharge",
-    title: "Pre‑Sleep Discharge Protocol",
-    bestFor: "Wired-but-tired, overstimulated, difficulty switching off (sleep onset issues).",
-    href: "/protected/protocols#pre-sleep-discharge",
-  },
-  rb2_deceleration: {
-    key: "rb2_deceleration",
-    title: "RB2 Deceleration Protocol",
-    bestFor: "Racing mind / engagement stuck-on / emotional overstimulation (RB2 overheating).",
-    href: "/protected/protocols#rb2-deceleration",
-  },
-  internal_cooling: {
-    key: "internal_cooling",
-    title: "Internal Cooling Protocol",
-    bestFor: "‘Hot core / active mind’ feeling without needing cold temperature changes.",
-    href: "/protected/protocols#internal-cooling",
-  },
-  sleep_entry_lock: {
-    key: "sleep_entry_lock",
-    title: "Sleep Entry Lock Protocol",
-    bestFor: "Sleep fragmentation / frequent awakenings / ‘clarity spikes’ when trying to drift off.",
-    href: "/protected/protocols#sleep-entry-lock",
-  },
-  mental_discharge: {
-    key: "mental_discharge",
-    title: "Mental Discharge Protocol",
-    bestFor: "Racing thoughts, anxiety, mental loops.",
-    href: "/protected/protocols#mental-discharge",
-  },
-  cooling_discharge: {
-    key: "cooling_discharge",
-    title: "Cooling Discharge Protocol",
-    bestFor: "Heat, sweating, hot room, inflammation.",
-    href: "/protected/protocols#cooling-discharge",
-  },
-  doms_compression: {
-    key: "doms_compression",
-    title: "DOMS Compression Protocol",
-    bestFor: "Body heaviness, soreness, muscular tension (‘wired but tired’ body).",
-    href: "/protected/protocols#doms-compression",
-  },
-};
-
-function pickRecommendedProtocol(rrsm: ReturnType<typeof runRRSMEngineV2> | null): ProtocolRecommendation | null {
-  if (!rrsm) return null;
-
-  // Risk-based quick wins
-  if (rrsm.risk === "high") {
-    // High risk: prioritize stabilization + entry lock
-    return PROTOCOLS.sleep_entry_lock;
-  }
-
-  // Issue-based mapping
-  switch (rrsm.primaryIssue) {
-    case "onset":
-      return PROTOCOLS.pre_sleep_discharge;
-    case "fragmentation":
-      return PROTOCOLS.sleep_entry_lock;
-    case "recovery":
-      return PROTOCOLS.doms_compression;
-    case "mixed":
-    default:
-      return PROTOCOLS.rb2_deceleration;
-  }
-}
-
 
 function MiniLineChart({ values }: { values: number[] }) {
   if (!values.length) return null;
@@ -232,8 +255,11 @@ export default function DashboardPage() {
   const [err, setErr] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [rows, setRows] = useState<NightRow[]>([]);
+  const [habitsByDate, setHabitsByDate] = useState<Record<string, DailyHabitRow>>({});
+  const [habitsErr, setHabitsErr] = useState<string | null>(null);
 
-  const [insight, setInsight] = useState<RRSMV2Insight | null>(null);
+
+  const [insight, setInsight] = useState<RRSMInsight | null>(null);
   const [insightErr, setInsightErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -324,6 +350,56 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
     })();
   }, [supabase]);
 
+  // Load habits for the same dates as the last 7 nights (for simple correlation hints)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHabits() {
+      if (!userId || rows.length === 0) {
+        setHabitsByDate({});
+        return;
+      }
+
+      setHabitsErr(null);
+
+      const dates = Array.from(
+        new Set(rows.map(dateKeyForNight).filter((d): d is string => Boolean(d)))
+      );
+
+      if (dates.length === 0) {
+        setHabitsByDate({});
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("daily_habits")
+        .select("date,caffeine_after_2pm,alcohol,exercise,screens_last_hour")
+        .eq("user_id", userId)
+        .in("date", dates);
+
+      if (cancelled) return;
+
+      if (error) {
+        setHabitsErr(error.message);
+        setHabitsByDate({});
+        return;
+      }
+
+      const map: Record<string, DailyHabitRow> = {};
+      (data ?? []).forEach((r: any) => {
+        map[r.date] = r as DailyHabitRow;
+      });
+      setHabitsByDate(map);
+    }
+
+    loadHabits();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, userId, rows]);
+
+
+
   const avgQuality = useMemo(() => safeAvg(rows.map((r) => r.quality_num)), [rows]);
   const avgLatency = useMemo(() => safeAvg(rows.map((r) => r.latency_min)), [rows]);
   const avgWakeups = useMemo(() => safeAvg(rows.map((r) => r.wakeups_count)), [rows]);
@@ -337,7 +413,19 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
 
   const stability = useMemo(() => (insight?.scores ? insight.scores.stability : null), [insight]);
   const topDriver = useMemo(() => driverIndicator(rows), [rows]);
-  const recommendedProtocol = useMemo(() => pickRecommendedProtocol(insight), [insight]);
+
+
+  const habitSignals = useMemo(() => buildHabitSignals(rows, habitsByDate), [rows, habitsByDate]);
+
+  const insightForCard = useMemo(() => {
+    if (!insight) return null;
+    if (!habitSignals.length) return insight;
+    // Add small "habits" hints at the end of the Why section (keeps UI simple)
+    const extra = habitSignals.map((s) => `Habits: ${s}`);
+    return { ...insight, why: [...insight.why, ...extra] };
+  }, [insight, habitSignals]);
+
+
 
   const risk = useMemo(() => {
     const r = insight?.risk ?? null;
@@ -415,23 +503,6 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Recommended protocol</div>
-              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>
-                {recommendedProtocol ? recommendedProtocol.title : "—"}
-              </div>
-              <div style={{ marginTop: 6, color: "#444", lineHeight: 1.35 }}>
-                {recommendedProtocol ? recommendedProtocol.bestFor : "Log a few more nights to unlock a matched protocol."}
-              </div>
-              {recommendedProtocol ? (
-                <div style={{ marginTop: 10 }}>
-                  <Link href={recommendedProtocol.href} style={{ fontWeight: 700, color: "#000080" }}>
-                    View steps →
-                  </Link>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="sf-card" style={{ padding: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Top driver</div>
               <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{topDriver ?? "—"}</div>
               <div style={{ marginTop: 6, color: "#444" }}>{topDriver ? "Most commonly logged" : "No driver logged yet"}</div>
@@ -442,7 +513,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
             {insightErr ? (
               <div style={{ color: "#b00020" }}>{insightErr}</div>
             ) : insight ? (
-              <RRSMInsightCard insight={insight} />
+              <RRSMInsightCard insight={insightForCard} />
             ) : null}
           </div>
 
