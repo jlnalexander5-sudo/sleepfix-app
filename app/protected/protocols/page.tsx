@@ -1,108 +1,139 @@
-export default function ProtocolsPage() {
-  const H1 = { fontSize: 32, fontWeight: 900, marginBottom: 10, fontFamily: "Verdana, sans-serif", color: "#000080" } as const;
-  const H2 = { fontSize: 18, fontWeight: 900, marginBottom: 6, fontFamily: "Verdana, sans-serif", color: "#000080" } as const;
+'use client';
 
-  const sectionStyle = { marginBottom: 18 } as const;
-  const ulStyle = { marginLeft: 18, lineHeight: 1.5 } as const;
+import React, { useEffect, useMemo, useState } from "react";
+
+type Protocol = {
+  id: string;
+  title: string;
+  bestFor: string;
+  steps: string[];
+};
+
+const PROTOCOLS: Protocol[] = [
+  {
+    id: "pre-sleep-discharge",
+    title: "Pre-Sleep Discharge Protocol",
+    bestFor: "Best for: sleep onset resistance, racing mind / \u201ccan\u2019t switch off\u201d.",
+    steps: ["Remove rhythmic stimulation: no music, no scrolling, no complex thought, no narrative replay.", "Breath as the rhythm governor: inhale 4s \u2192 pause 2s \u2192 exhale 6s \u2192 pause 2s. Keep it gentle (no breath holds).", "Keep it simple: if your mind re-engages, return to the breathing pattern without trying to \u201csolve\u201d anything."],
+  },
+  {
+    id: "rb2-deceleration",
+    title: "RB2 Deceleration Protocol",
+    bestFor: "Best for: over-activation, adrenaline / \u201cwired\u201d body, difficulty downshifting.",
+    steps: ["Slow your inputs: dim light, reduce conversation, no task-switching.", "Longer exhale breathing: 6\u20138s exhale, 3\u20134s inhale, 10 cycles.", "Body downshift: scan jaw \u2192 throat \u2192 chest \u2192 belly and soften each area 2\u20133 breaths."],
+  },
+  {
+    id: "internal-cooling",
+    title: "Internal Cooling Protocol",
+    bestFor: "Best for: \u201chot core / active mind\u201d feeling without needing cold temperature changes.",
+    steps: ["Let awareness soften out to the soles of feet, back of knees, elbows, and palms.", "Do not \u201cfocus hard\u201d \u2014 just allow attention to spread.", "This reduces rhythmic concentration and helps the system downshift."],
+  },
+  {
+    id: "sleep-entry-lock",
+    title: "Sleep Entry Lock Protocol",
+    bestFor: "Best for: sleep fragmentation, frequent awakenings, \u201cclarity spikes\u201d when drifting off.",
+    steps: ["Once sleepy, don\u2019t re-engage thought (no checking, no planning).", "Let micro-images dissolve; don\u2019t \u201ctrack\u201d them.", "If clarity spikes, return to gentle breath and let sleep happen without effort."],
+  },
+  {
+    id: "mental-discharge",
+    title: "Mental Discharge Protocol",
+    bestFor: "Best for: racing thoughts, anxiety, overstimulation.",
+    steps: ["2-minute brain dump (write thoughts/tasks).", "10 slow breaths with longer exhale.", "Short, calming audio or silence."],
+  },
+  {
+    id: "cooling-discharge",
+    title: "Cooling Discharge Protocol",
+    bestFor: "Best for: heat, restlessness, agitation at bedtime.",
+    steps: ["Cool rinse/wash (face/hands) or cool cloth on neck for 30\u201360s.", "Slow breathing 10 cycles; soften shoulders/jaw.", "Lights low; keep stimuli minimal."],
+  },
+  {
+    id: "doms-compression",
+    title: "DOMS Compression Protocol",
+    bestFor: "Best for: muscle soreness / physical strain disrupting sleep recovery.",
+    steps: ["Gentle compression (socks / light wraps) or weighted blanket (light).", "Legs elevated 5\u201310 minutes if comfortable.", "Hydration + light stretch; keep it easy."],
+  },
+];
+
+function getIdFromHash(hash: string): string | null {
+  const h = (hash || "").replace("#", "").trim();
+  return h ? h : null;
+}
+
+export default function ProtocolsPage() {
+  const [hashId, setHashId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const apply = () => setHashId(getIdFromHash(window.location.hash));
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
+
+  const selected: Protocol = useMemo(() => {
+    const id = hashId;
+    if (id) {
+      const found = PROTOCOLS.find((p) => p.id === id);
+      if (found) return found;
+    }
+    // default: show the first protocol
+    return PROTOCOLS[0];
+  }, [hashId]);
 
   return (
-    <div style={{ maxWidth: 920, margin: "0 auto", padding: "24px 18px" }}>
-      <h1 style={H1}>RRSM Protocols</h1>
-      <p style={{ opacity: 0.85, marginBottom: 16 }}>
-        These protocols are short, practical steps that may appear in your RRSM recommendations. Use them as simple “next‑night experiments”.
+    <div className="mx-auto max-w-3xl px-4 py-8">
+      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">RRSM Protocols</h1>
+      <p className="mt-2 text-base text-gray-600">
+        This page shows <span className="font-semibold">one</span> protocol at a time. Your dashboard links here
+        and opens the recommended protocol automatically.
       </p>
 
-      <div style={{ marginBottom: 18, padding: 14, border: "1px solid #eee", borderRadius: 12, background: "#fafafa" }}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Quick index</div>
-        <ul style={{ marginLeft: 18, lineHeight: 1.6 }}>
-          <li><a href="#pre-sleep-discharge">Pre‑Sleep Discharge Protocol</a></li>
-          <li><a href="#rb2-deceleration">RB2 Deceleration Protocol</a></li>
-          <li><a href="#internal-cooling">Internal Cooling Protocol</a></li>
-          <li><a href="#sleep-entry-lock">Sleep Entry Lock Protocol</a></li>
-          <li><a href="#mental-discharge">Mental Discharge Protocol</a></li>
-          <li><a href="#cooling-discharge">Cooling Discharge Protocol</a></li>
-          <li><a href="#doms-compression">DOMS Compression Protocol</a></li>
-        </ul>
+      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-gray-600">
+          Showing: <span className="font-semibold text-gray-900">{selected.title}</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600" htmlFor="protocolSelect">Switch protocol</label>
+          <select
+            id="protocolSelect"
+            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+            value={selected.id}
+            onChange={(e) => {
+              window.location.hash = e.target.value;
+            }}
+          >
+            {PROTOCOLS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <section id="pre-sleep-discharge" style={sectionStyle}>
-        <h2 style={H2}>Pre‑Sleep Discharge Protocol</h2>
-        <p style={{ marginBottom: 8 }}>
-          Best for: wired‑but‑tired, overstimulated, difficulty switching off (sleep onset issues).
-        </p>
-        <ul style={ulStyle}>
-          <li><b>Step 1 — Outbound rhythmic discharge (15–30 min):</b> choose one: walking (best), gentle cycling, slow body movement, or stretching <i>with motion</i> (not static). Rule: continuous motion, not exertion.</li>
-          <li><b>Step 2 — Sensory smoothing (10 min):</b> dim lighting, no screens, neutral temperature, no high‑contrast sound.</li>
-          <li><b>Step 3 — Breath normalisation (5 min):</b> natural breathing, slightly longer exhale, no breath holds, no visualisation.</li>
-          <li><b>Step 4 — Sleep entry:</b> lie down only after the body quiets itself. If restlessness returns, repeat Step 1 briefly.</li>
-        </ul>
-      </section>
+      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-bold text-blue-900" id={selected.id}>
+          {selected.title}
+        </h2>
+        <p className="mt-2 text-base text-gray-700">{selected.bestFor}</p>
 
-      <section id="rb2-deceleration" style={sectionStyle}>
-        <h2 style={H2}>RB2 Deceleration Protocol</h2>
-        <p style={{ marginBottom: 8 }}>
-          Best for: racing mind / engagement stuck‑on / emotional overstimulation (“RB2 overheating”). Do this before bed (15–20 minutes).
-        </p>
-        <ul style={ulStyle}>
-          <li><b>Step 1 — Remove rhythmic stimulation:</b> no music, no scrolling, no complex thought, no narrative replay.</li>
-          <li><b>Step 2 — Breath as the rhythm governor:</b> inhale 4s → pause 2s → exhale 6s → pause 2s. Keep it gentle (no breath holds).</li>
-          <li><b>Step 3 — Keep it simple:</b> if your mind re‑engages, return to the breathing pattern without “trying to solve” anything.</li>
-        </ul>
-      </section>
+        <h3 className="mt-6 text-lg font-bold text-gray-900">Steps</h3>
+        <ol className="mt-3 list-decimal space-y-3 pl-6 text-base text-gray-800">
+          {selected.steps.map((s, idx) => (
+            <li key={idx} className="leading-relaxed">
+              {s}
+            </li>
+          ))}
+        </ol>
 
-      <section id="internal-cooling" style={sectionStyle}>
-        <h2 style={H2}>Internal Cooling Protocol</h2>
-        <p style={{ marginBottom: 8 }}>
-          Best for: “hot core / active mind” feeling without needing cold temperature changes.
-        </p>
-        <ul style={ulStyle}>
-          <li>Let awareness soften out to the <b>soles of feet</b>, <b>back of knees</b>, <b>elbows</b>, and <b>palms</b>.</li>
-          <li>Do not “focus hard” — just allow attention to spread.</li>
-          <li>This reduces rhythmic concentration and helps the system downshift.</li>
-        </ul>
-      </section>
+        <div className="mt-6 rounded-lg bg-gray-50 p-4 text-sm text-gray-600">
+          Tip: Don’t overdo it. Use the protocol for 2–3 nights, then compare your metrics.
+        </div>
+      </div>
 
-      <section id="sleep-entry-lock" style={sectionStyle}>
-        <h2 style={H2}>Sleep Entry Lock Protocol</h2>
-        <p style={{ marginBottom: 8 }}>
-          Best for: sleep fragmentation, frequent awakenings, “clarity spikes” when drifting off.
-        </p>
-        <ul style={ulStyle}>
-          <li>Once sleepy, <b>don’t re‑engage thought</b> (no checking, no planning).</li>
-          <li>Let micro‑images dissolve; don’t “track” them.</li>
-          <li>If clarity spikes, return to gentle breath and let sleep happen without effort.</li>
-        </ul>
-      </section>
-
-      <section id="mental-discharge" style={sectionStyle}>
-        <h2 style={H2}>Mental Discharge Protocol</h2>
-        <p style={{ marginBottom: 8 }}>Best for: racing thoughts, anxiety, overstimulation.</p>
-        <ul style={ulStyle}>
-          <li>2‑minute brain dump (write thoughts/tasks)</li>
-          <li>10 slow breaths with longer exhale</li>
-          <li>Short, calming audio or silence</li>
-        </ul>
-      </section>
-
-      <section id="cooling-discharge" style={sectionStyle}>
-        <h2 style={H2}>Cooling Discharge Protocol</h2>
-        <p style={{ marginBottom: 8 }}>Best for: heat, sweating, hot room, inflammation.</p>
-        <ul style={ulStyle}>
-          <li>Cool shower or cool pack (not ice) for 2–5 minutes</li>
-          <li>Lower room temperature / lighter bedding</li>
-          <li>Hydrate lightly (small sips)</li>
-        </ul>
-      </section>
-
-      <section id="doms-compression" style={sectionStyle}>
-        <h2 style={H2}>DOMS Compression Protocol</h2>
-        <p style={{ marginBottom: 8 }}>Best for: body heaviness, soreness, “wired but tired”, muscular tension.</p>
-        <ul style={ulStyle}>
-          <li>Light compression (socks/leggings) or gentle body pressure</li>
-          <li>Slow nasal breathing for 3–5 minutes</li>
-          <li>Low light + minimal stimulation</li>
-        </ul>
-      </section>
+      <div className="mt-6 text-sm text-gray-500">
+        Deep links supported: <span className="font-mono">/protected/protocols#sleep-entry-lock</span>
+      </div>
     </div>
   );
 }
