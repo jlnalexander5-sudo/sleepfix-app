@@ -1,3 +1,16 @@
+
+function parseWakeUpsToNumber(choice: string): number {
+  // UI choices like "0", "1", "2", "3", "4", "5+"
+  const trimmed = (choice || "").trim();
+  if (!trimmed) return 0;
+  if (trimmed.endsWith("+")) {
+    const n = Number(trimmed.slice(0, -1));
+    return Number.isFinite(n) ? n : 0;
+  }
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : 0;
+}
+
 "use client";
 /* eslint-disable react/no-unescaped-entities */
 import React, { useEffect, useMemo, useState } from "react";
@@ -89,10 +102,12 @@ const BODY_TAGS = [
 ] as const;
 
 const PROTOCOLS = [
+  "Sleep Entry Lock Protocol",
+  "Internal Cooling Protocol",
+  "Pre-Sleep Discharge Protocol",
   "DOMS compression Protocol",
   "Cooling Discharge Protocol",
   "Mental Discharge Protocol",
-  "No suggestion",
 ] as const;
 
 function toggleTag(list: string[], tag: string) {
@@ -375,7 +390,7 @@ export default function SleepPage() {
         sleep_end_time: sleepEndTime,
         sleep_quality: Number(sleepQuality),
         sleep_latency: parseLatencyToMinutes(sleepLatencyChoice),
-        wake_ups: Number(wakeUps),
+        wake_ups: parseWakeUpsToNumber(wakeUpsChoice),
         mind_state: mindState,
         environment: environment,
         body_state: bodyState,
@@ -608,9 +623,9 @@ const userInput: RRSMUserInput = {
           <div className="sf-help">
             Select this only if you actually used a protocol last night. (This is separate from the protocol the app recommends.)
           </div>
-          <a className="sf-link" href="/protected/protocols" style={{ display: "inline-block", marginTop: 4 }}>
-            View protocol steps
-          </a>
+          <a href="/protected/protocols" style={{ display: "inline-block", marginTop: 8, padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", background: "white", fontWeight: 600 }}>
+              View protocol steps
+            </a>
           <select className="sf-select" style={{ marginTop: 10 }} value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
             <option value="">(none)</option>
             {PROTOCOLS.filter((p) => p !== "No suggestion").map((p) => (
