@@ -477,7 +477,11 @@ const userInput: RRSMUserInput = {
 
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18, fontFamily: "Verdana, sans-serif", color: "#000080" }}>Sleep</h1>
 
-      {/* Sleep window */}
+      {/* Night window */}
+      <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="sf-section-title">Night recording</div>
+        <div className="sf-help">Log when you went to sleep and when you woke up.</div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep Start</div>
@@ -524,9 +528,16 @@ const userInput: RRSMUserInput = {
         </div>
       </div>
 
-      <hr style={{ margin: "18px 0", opacity: 0.3 }} />
+            </div>
 
-      {/* Airtable-style scales */}
+
+
+      {/* Required metrics */}
+      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="sf-section-title">Required sleep metrics</div>
+        <div className="sf-help">These are required to save a night and generate RRSM insights. Required fields are marked with <span className="sf-req">*</span>.</div>
+
+
       <div style={{ marginTop: 6 }}>
         <div className="sf-section-title">Quick check-in (powers insights)</div>
         <div className="sf-help">Required fields are marked with <span className="sf-req">*</span>.</div>
@@ -577,34 +588,49 @@ const userInput: RRSMUserInput = {
           <MultiCheckGroup title="Environment" options={["Not sure / none", ...ENV_TAGS]} value={environmentTags} onChange={setEnvironmentTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
           <MultiCheckGroup title="Body State" options={["Not sure / none", ...BODY_TAGS]} value={bodyTags} onChange={setBodyTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
 
-          <div style={{ marginBottom: 14 }}>
-            <div className="sf-field-label">Protocol used (optional)</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
-              <a className="sf-link" href="/protected/protocols">View RRSM protocol explanations</a>
-            </div>
-            <div className="sf-help">If you used a protocol, select it. Otherwise leave “(none)”.</div>
-            <select className="sf-select" value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
-              <option value="">(none)</option>
-              {PROTOCOLS.filter((p) => p !== "No suggestion").map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-            <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
-              If you used a protocol, selecting it lets the app detect mismatches.
-            </div>
-          </div>
+          
 
         </div>
       </div>
 
-      <hr style={{ margin: "18px 0", opacity: 0.3 }} />
+            </div>
 
-      {/* What do YOU think affected tonight? */}
+      {/* Optional inputs */}
+      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="sf-section-title">Optional extras</div>
+        <div className="sf-help">
+          These are optional. They help SleepFix learn patterns over time. This is different from the required metrics above.
+        </div>
+
+        <div style={{ marginTop: 14, marginBottom: 14 }}>
+          <div className="sf-field-label">Protocol used (optional)</div>
+          <div className="sf-help">
+            Select this only if you actually used a protocol last night. (This is separate from the protocol the app recommends.)
+          </div>
+          <a className="sf-link" href="/protected/protocols" style={{ display: "inline-block", marginTop: 4 }}>
+            View RRSM protocol steps
+          </a>
+          <select className="sf-select" style={{ marginTop: 10 }} value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
+            <option value="">(none)</option>
+            {PROTOCOLS.filter((p) => p !== "No suggestion").map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
+            Logging this helps the app detect “protocol mismatch” (e.g. you used a protocol that didn’t fit the pattern).
+          </div>
+        </div>
+
+        {/* After the night: your best guess */}
+
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
-          What do YOU think affected tonight?
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
+          After the night: what stood out?
+        </div>
+        <div className="sf-help" style={{ marginBottom: 12 }}>
+          This is your best guess about what may have affected the night. It’s different from <b>Habits</b>, which logs what happened during the day.
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -656,6 +682,8 @@ const userInput: RRSMUserInput = {
           </div>
         )}
       </div>
+      </div>
+
 
       {/* Insight card */}
       <div style={{ marginTop: 18 }}>
