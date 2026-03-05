@@ -92,22 +92,6 @@ export default function ProtocolsPage() {
           Showing: <span className="font-semibold text-gray-900">{selected.title}</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600" htmlFor="protocolSelect">Switch protocol</label>
-          <select
-            id="protocolSelect"
-            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
-            value={selected.id}
-            onChange={(e) => {
-              window.location.hash = e.target.value;
-            }}
-          >
-            {PROTOCOLS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
