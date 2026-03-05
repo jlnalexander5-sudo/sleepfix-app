@@ -394,7 +394,7 @@ export default function SleepPage() {
         mind_state: mindTags,
         environment: environmentTags,
         body_state: bodyTags,
-        protocol_used: protocolUsed === "none" ? null : protocolUsed,
+        protocol_used: protocolUsedName === "none" ? null : protocolUsedName,
         affected_tonight: affectedTonight,
         notes: notes.trim() ? notes.trim() : null,
         created_at: new Date().toISOString(),
