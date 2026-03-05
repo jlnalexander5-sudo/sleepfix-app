@@ -155,6 +155,27 @@ function buildLocalInsight(rows: NightRow[]): RRSMInsight {
   };
 }
 
+function dateKey(r: NightRow) {
+  // Prefer the stored local_date (YYYY-MM-DD). Fallback: created_at date slice.
+  if (r.local_date && String(r.local_date).trim()) return String(r.local_date).slice(0, 10);
+  return String(r.created_at ?? "").slice(0, 10);
+}
+
+function dedupeByNightDate(rows: NightRow[], maxUnique: number) {
+  const out: NightRow[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const k = dateKey(r);
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+    if (out.length >= maxUnique) break;
+  }
+  return out;
+}
+
+
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -197,7 +218,7 @@ export default function DashboardPage() {
         .eq("user_id", uid)
         .order("local_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(7);
+        .limit(30);
 
 
       if (error) {
@@ -229,14 +250,15 @@ const nextRows: NightRow[] = (data ?? []).map((r: any) => {
     notes: r.notes ?? null,
   };
 });
-setRows(nextRows);
+const uniqueRows = dedupeByNightDate(nextRows, 7);
+      setRows(uniqueRows);
 
       setLoading(false);
 
       // Local RRSM preview until the full engine is wired.
       setInsightErr(null);
       try {
-        setInsight(buildLocalInsight(nextRows));
+        setInsight(buildLocalInsight(uniqueRows));
       } catch (e: any) {
         setInsight(null);
         setInsightErr(e?.message ?? "Failed to build RRSM insight");
