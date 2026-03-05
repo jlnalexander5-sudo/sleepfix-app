@@ -181,10 +181,8 @@ export default function DashboardPage() {
       }
 
       const { data, error } = await supabase
-        
-const { data, error } = await supabase
-  .from("sleep_nights")
-  .select([
+        .from("sleep_nights")
+        .select([
     "id",
     "user_id",
     "created_at",
@@ -199,10 +197,10 @@ const { data, error } = await supabase
     "secondary_driver",
     "notes"
   ].join(","))
-  .eq("user_id", uid)
-  .order("local_date", { ascending: false, nullsFirst: false })
-  .order("created_at", { ascending: false })
-  .limit(7);
+        .eq("user_id", uid)
+        .order("local_date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(7);
 
 
       if (error) {
