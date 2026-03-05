@@ -396,7 +396,7 @@ export default function SleepPage() {
         body_state: bodyTags,
         protocol_used: protocolUsedName === "none" ? null : protocolUsedName,
         affected_tonight: affectedTonight,
-        notes: notes.trim() ? notes.trim() : null,
+        notes: userNotes.trim() ? userNotes.trim() : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         sleep_start_at: startAt.toISOString(),
@@ -411,7 +411,6 @@ export default function SleepPage() {
 
       // Optimistically reset form + refresh list.
       resetNightForm();
-      await loadRecentNights();
       setSaveNotice("Saved ✅");
 
       // Optional: refresh RRSM insight immediately after saving a valid night.
@@ -425,7 +424,7 @@ export default function SleepPage() {
 
         if (response.ok) {
           const json = (await response.json()) as { insight?: unknown };
-          if (json?.insight) setRrsmInsight(json.insight as RRSMV2Insight);
+          if (json?.insight) setRrsmInsight(json.insight as RRSMInsight);
         }
       } catch {
         // ignore; the night still saved
