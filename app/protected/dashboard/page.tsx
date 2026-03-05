@@ -190,10 +190,7 @@ export default function DashboardPage() {
     "sleep_quality",
     "sleep_latency_choice",
     "wake_ups_choice",
-    "quality_num",
-    "latency_min",
-    "wakeups_count",
-    "primary_driver",
+        "primary_driver",
     "secondary_driver",
     "notes"
   ].join(","))
@@ -212,22 +209,11 @@ export default function DashboardPage() {
 
       
 const nextRows: NightRow[] = (data ?? []).map((r: any) => {
-  const quality =
-    typeof r.quality_num === "number"
-      ? r.quality_num
-      : typeof r.sleep_quality === "number"
-      ? r.sleep_quality
-      : null;
+  const quality = typeof r.sleep_quality === "number" ? r.sleep_quality : parseChoiceToNumber(r.sleep_quality);
 
-  const latency =
-    typeof r.latency_min === "number"
-      ? r.latency_min
-      : parseChoiceToNumber(r.sleep_latency_choice);
+  const latency = parseChoiceToNumber(r.sleep_latency_choice);
 
-  const wakeups =
-    typeof r.wakeups_count === "number"
-      ? r.wakeups_count
-      : parseChoiceToNumber(r.wake_ups_choice);
+  const wakeups = parseChoiceToNumber(r.wake_ups_choice);
 
   return {
     night_id: r.id,
