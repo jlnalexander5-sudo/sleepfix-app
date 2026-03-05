@@ -324,7 +324,9 @@ export default function SleepPage() {
         setRrsmInsightLoading(false);
       }
     })();
-  }, async function saveNight() {
+  }, [userId]);
+
+  async function saveNight() {
     if (!userId || !canSaveNight) return;
 
     setSaveNotice(null);
@@ -408,9 +410,6 @@ export default function SleepPage() {
     }
   }
 
-);
-    }
-}
 
   if (!mounted) return null;
 
