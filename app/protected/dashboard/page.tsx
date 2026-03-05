@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import RRSMInsightCard from "@/components/RRSMInsightCard";
-import { runRRSMEngineV2 } from "@/lib/rrsm/engine-v2";
+import { runRRSMEngineV2, type RRSMV2Insight } from "@/lib/rrsm/engine-v2";
 
 type NightRow = {
   night_id: string;
@@ -21,17 +21,6 @@ type NightRow = {
   notes?: string | null;
 };
 
-type RRSMInsight = {
-  title: string;
-  why: string[];
-  actions: string[];
-  confidence: "low" | "medium" | "high";
-  // Engine v2 extras (optional)
-  risk?: "low" | "moderate" | "high";
-  primaryIssue?: "recovery" | "onset" | "fragmentation" | "mixed";
-  topDriver?: string;
-  scores?: { recovery: number; onset: number; fragmentation: number; stability: number };
-};
 
 function fmtDate(iso: string) {
   try {
@@ -244,7 +233,7 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [rows, setRows] = useState<NightRow[]>([]);
 
-  const [insight, setInsight] = useState<RRSMInsight | null>(null);
+  const [insight, setInsight] = useState<RRSMV2Insight | null>(null);
   const [insightErr, setInsightErr] = useState<string | null>(null);
 
   useEffect(() => {
