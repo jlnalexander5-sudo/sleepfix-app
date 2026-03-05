@@ -329,7 +329,9 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
 
             <div className="sf-card" style={{ padding: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Stability score</div>
-              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>{stability === null ? "—" : `${stability}/100`}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6, whiteSpace: "nowrap" }}>
+                {stability === null ? "—" : `${round1(stability)}/100`}
+              </div>
               <div style={{ marginTop: 6, color: "#444" }}>
                 {stability === null ? "Add more nights" : stability >= 80 ? "Stable" : stability >= 60 ? "Some variation" : "Highly variable"}
               </div>
