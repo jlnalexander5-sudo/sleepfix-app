@@ -92,7 +92,6 @@ export default function ProtocolsPage() {
           Showing: <span className="font-semibold text-gray-900">{selected.title}</span>
         </div>
 
-        </div>
       </div>
 
       <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
