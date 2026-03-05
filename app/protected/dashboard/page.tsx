@@ -108,6 +108,72 @@ function mostCommon(values: Array<string | null | undefined>) {
   return best;
 }
 
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function stddev(nums: Array<number | null | undefined>) {
+  const xs = nums.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  if (xs.length < 2) return null;
+  const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const v = xs.reduce((acc, x) => acc + (x - mean) ** 2, 0) / (xs.length - 1);
+  return Math.sqrt(v);
+}
+
+// Stability score (0..100): lower variability across the last 7 nights => higher stability.
+// (Dashboard v10 placeholder — can be replaced later by RRSM scoring.)
+function stabilityScore(rows: NightRow[]) {
+  const sdQ = stddev(rows.map((r) => r.quality_num)); // 0..10
+  const sdL = stddev(rows.map((r) => r.latency_min)); // minutes
+  const sdW = stddev(rows.map((r) => r.wakeups_count)); // count
+
+  if (sdQ === null && sdL === null && sdW === null) return null;
+
+  // Normalize into rough “penalties”
+  const pQ = sdQ === null ? 0 : (sdQ / 2.0) * 20; // sd=2 -> 20 penalty
+  const pL = sdL === null ? 0 : (sdL / 20.0) * 20; // sd=20m -> 20 penalty
+  const pW = sdW === null ? 0 : (sdW / 2.0) * 20; // sd=2 -> 20 penalty
+
+  const score = 100 - (pQ + pL + pW);
+  return clamp(Math.round(score), 0, 100);
+}
+
+function driverIndicator(rows: NightRow[]) {
+  const drivers = rows
+    .map((r) => (r.primary_driver ?? r.secondary_driver ?? "").trim())
+    .filter((s) => !!s);
+  return mostCommon(drivers);
+}
+
+function MiniLineChart({ values }: { values: number[] }) {
+  if (!values.length) return null;
+
+  const width = 150;
+  const height = 30;
+  const pad = 2;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+
+  const pts = values.map((v, i) => {
+    const x = pad + (i * (width - pad * 2)) / Math.max(1, values.length - 1);
+    const t = (v - min) / span;
+    const y = pad + (1 - t) * (height - pad * 2);
+    return [x, y] as const;
+  });
+
+  const d = pts.map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.75" />
+      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="2.5" fill="currentColor" />
+    </svg>
+  );
+}
+
 function buildLocalInsight(rows: NightRow[]): RRSMInsight {
   const valid = rows.filter(isValidNight);
   const validCount = valid.length;
@@ -274,6 +340,13 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
     [rows]
   );
 
+
+  const totalLatency = useMemo(() => rows.reduce((sum, r) => sum + (r.latency_min ?? 0), 0), [rows]);
+  const totalWakeups = useMemo(() => rows.reduce((sum, r) => sum + (r.wakeups_count ?? 0), 0), [rows]);
+
+  const stability = useMemo(() => stabilityScore(rows), [rows]);
+  const topDriver = useMemo(() => driverIndicator(rows), [rows]);
+
   // Simple “score” placeholder: 10-point quality -> 0..100
   const score = avgQuality === null ? null : Math.max(0, Math.min(100, (avgQuality / 10) * 100));
   const risk = riskFromScore(score);
@@ -306,33 +379,47 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
             }}
           >
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, color: "#666" }}>Sleep quality (avg)</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Sleep quality (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
                 {avgQuality === null ? "—" : `${round1(avgQuality)}/10`}
               </div>
               <div style={{ marginTop: 6, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-                {sparkline(qualitySeries)}
+                <MiniLineChart values={qualitySeries} />
               </div>
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, color: "#666" }}>Latency (avg)</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Latency (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
                 {avgLatency === null ? "—" : `${round1(avgLatency)}m`}
               </div>
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, color: "#666" }}>Wake ups (avg)</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Wake ups (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
                 {avgWakeups === null ? "—" : round1(avgWakeups)}
               </div>
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, color: "#666" }}>RRSM risk (placeholder)</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>RRSM risk (placeholder)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>{risk.level}</div>
               <div style={{ marginTop: 6, color: "#444" }}>{risk.label}</div>
+            </div>
+
+            <div className="sf-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Stability score</div>
+              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>{stability === null ? "—" : `${stability}/100`}</div>
+              <div style={{ marginTop: 6, color: "#444" }}>
+                {stability === null ? "Add more nights" : stability >= 80 ? "Stable" : stability >= 60 ? "Some variation" : "Highly variable"}
+              </div>
+            </div>
+
+            <div className="sf-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#555" }}>Top driver</div>
+              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{topDriver ?? "—"}</div>
+              <div style={{ marginTop: 6, color: "#444" }}>{topDriver ? "Most commonly logged" : "No driver logged yet"}</div>
             </div>
           </div>
 
@@ -373,6 +460,21 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
                       <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? "—"}</td>
                     </tr>
                   ))}
+                  <tr style={{ borderTop: "2px solid #e5e5e5", background: "#fafafa", fontWeight: 800 }}>
+                    <td style={{ padding: "10px 12px" }}>Totals</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      {avgQuality === null ? "—" : round1(avgQuality)}
+                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>AVE</span>
+                    </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      {totalLatency}
+                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>SUM</span>
+                    </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      {totalWakeups}
+                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>SUM</span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
