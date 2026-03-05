@@ -101,6 +101,93 @@ function driverIndicator(rows: NightRow[]) {
   return mostCommon(drivers);
 }
 
+
+
+type ProtocolKey =
+  | "pre_sleep_discharge"
+  | "rb2_deceleration"
+  | "internal_cooling"
+  | "sleep_entry_lock"
+  | "mental_discharge"
+  | "cooling_discharge"
+  | "doms_compression";
+
+type ProtocolRecommendation = {
+  key: ProtocolKey;
+  title: string;
+  bestFor: string;
+  href: string; // link to protocols page anchor
+};
+
+const PROTOCOLS: Record<ProtocolKey, ProtocolRecommendation> = {
+  pre_sleep_discharge: {
+    key: "pre_sleep_discharge",
+    title: "Pre‑Sleep Discharge Protocol",
+    bestFor: "Wired-but-tired, overstimulated, difficulty switching off (sleep onset issues).",
+    href: "/protected/protocols#pre-sleep-discharge",
+  },
+  rb2_deceleration: {
+    key: "rb2_deceleration",
+    title: "RB2 Deceleration Protocol",
+    bestFor: "Racing mind / engagement stuck-on / emotional overstimulation (RB2 overheating).",
+    href: "/protected/protocols#rb2-deceleration",
+  },
+  internal_cooling: {
+    key: "internal_cooling",
+    title: "Internal Cooling Protocol",
+    bestFor: "‘Hot core / active mind’ feeling without needing cold temperature changes.",
+    href: "/protected/protocols#internal-cooling",
+  },
+  sleep_entry_lock: {
+    key: "sleep_entry_lock",
+    title: "Sleep Entry Lock Protocol",
+    bestFor: "Sleep fragmentation / frequent awakenings / ‘clarity spikes’ when trying to drift off.",
+    href: "/protected/protocols#sleep-entry-lock",
+  },
+  mental_discharge: {
+    key: "mental_discharge",
+    title: "Mental Discharge Protocol",
+    bestFor: "Racing thoughts, anxiety, mental loops.",
+    href: "/protected/protocols#mental-discharge",
+  },
+  cooling_discharge: {
+    key: "cooling_discharge",
+    title: "Cooling Discharge Protocol",
+    bestFor: "Heat, sweating, hot room, inflammation.",
+    href: "/protected/protocols#cooling-discharge",
+  },
+  doms_compression: {
+    key: "doms_compression",
+    title: "DOMS Compression Protocol",
+    bestFor: "Body heaviness, soreness, muscular tension (‘wired but tired’ body).",
+    href: "/protected/protocols#doms-compression",
+  },
+};
+
+function pickRecommendedProtocol(rrsm: ReturnType<typeof runRRSMEngineV2> | null): ProtocolRecommendation | null {
+  if (!rrsm) return null;
+
+  // Risk-based quick wins
+  if (rrsm.risk === "high") {
+    // High risk: prioritize stabilization + entry lock
+    return PROTOCOLS.sleep_entry_lock;
+  }
+
+  // Issue-based mapping
+  switch (rrsm.primaryIssue) {
+    case "onset":
+      return PROTOCOLS.pre_sleep_discharge;
+    case "fragmentation":
+      return PROTOCOLS.sleep_entry_lock;
+    case "recovery":
+      return PROTOCOLS.doms_compression;
+    case "mixed":
+    default:
+      return PROTOCOLS.rb2_deceleration;
+  }
+}
+
+
 function MiniLineChart({ values }: { values: number[] }) {
   if (!values.length) return null;
 
@@ -261,6 +348,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
 
   const stability = useMemo(() => (insight?.scores ? insight.scores.stability : null), [insight]);
   const topDriver = useMemo(() => driverIndicator(rows), [rows]);
+  const recommendedProtocol = useMemo(() => pickRecommendedProtocol(insight), [insight]);
 
   const risk = useMemo(() => {
     const r = insight?.risk ?? null;
@@ -335,6 +423,23 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
               <div style={{ marginTop: 6, color: "#444" }}>
                 {stability === null ? "Add more nights" : stability >= 80 ? "Stable" : stability >= 60 ? "Some variation" : "Highly variable"}
               </div>
+            </div>
+
+            <div className="sf-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Recommended protocol</div>
+              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>
+                {recommendedProtocol ? recommendedProtocol.title : "—"}
+              </div>
+              <div style={{ marginTop: 6, color: "#444", lineHeight: 1.35 }}>
+                {recommendedProtocol ? recommendedProtocol.bestFor : "Log a few more nights to unlock a matched protocol."}
+              </div>
+              {recommendedProtocol ? (
+                <div style={{ marginTop: 10 }}>
+                  <Link href={recommendedProtocol.href} style={{ fontWeight: 700, color: "#000080" }}>
+                    View steps →
+                  </Link>
+                </div>
+              ) : null}
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
