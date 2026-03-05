@@ -199,6 +199,7 @@ export default function SleepPage() {
 
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   function resetNightForm() {
     // Reset *all* user-entered fields so it’s obvious the night was saved
@@ -664,6 +665,10 @@ const userInput: RRSMUserInput = {
       {saveNotice && (
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#000080" }}>{saveNotice}</div>
       )}
+      {saveError && (
+        <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600, color: "#B00020" }}>{saveError}</div>
+      )}
+
 
         {!canSaveNight && (
           <div className="sf-help" style={{ marginTop: 10 }}>
