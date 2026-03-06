@@ -240,12 +240,13 @@ export default function SleepPage() {
     setUserNotes("");
       setAffectedTonight([]);
 
-    // Put dates back to a sensible “tonight” default
-    const start = new Date();
-    start.setHours(23, 30, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
+    // Put dates back to a sensible “last night” default
+    // Start = yesterday 11:30 PM, End = today 7:30 AM
+    const end = new Date();
     end.setHours(7, 30, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 1);
+    start.setHours(23, 30, 0, 0);
     setSleepStartDate(toIsoLocalDate(start));
     setSleepStartTime(toLocalTimeHHMM(start));
     setSleepEndDate(toIsoLocalDate(end));
@@ -256,11 +257,12 @@ export default function SleepPage() {
 
   // Default datetime-local values on client
   useEffect(() => {
-    const start = new Date();
-    start.setHours(23, 30, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
+    // Show “last night” by default, not a future wake date.
+    const end = new Date();
     end.setHours(7, 30, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 1);
+    start.setHours(23, 30, 0, 0);
 
     setSleepStartDate(toIsoLocalDate(start));
     setSleepStartTime(toLocalTimeHHMM(start));
@@ -541,6 +543,7 @@ const userInput: RRSMUserInput = {
                 selected={startDateObj}
                 onChange={(d: Date) => setSleepStartDate(toIsoLocalDate(d))}
                 dateFormat="dd/MM/yyyy"
+                maxDate={new Date()}
                 className="sf-datetime-input"
               />
             </div>
@@ -563,6 +566,7 @@ const userInput: RRSMUserInput = {
                 selected={endDateObj}
                 onChange={(d: Date) => setSleepEndDate(toIsoLocalDate(d))}
                 dateFormat="dd/MM/yyyy"
+                maxDate={new Date()}
                 className="sf-datetime-input"
               />
             </div>
