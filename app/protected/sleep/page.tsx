@@ -383,32 +383,38 @@ export default function SleepPage() {
         return;
       }
 
-      const { error } = await supabase.from("sleep_nights").insert({
+      const primaryDriver = drivers.find((d) => d !== "Nothing / no clear driver") ?? null;
+      const extraDrivers = drivers.filter((d) => d !== primaryDriver && d !== "Nothing / no clear driver");
+
+      const payload = {
         user_id: userId,
-        sleep_date: sleepStartDate,
-        sleep_start_time: sleepStartTime,
-        sleep_end_time: sleepEndTime,
+        sleep_start: startAt.toISOString(),
+        sleep_end: endAt.toISOString(),
+        local_date: toIsoLocalDate(startAt),
         sleep_quality: Number(sleepQuality),
-        sleep_latency: parseLatencyToMinutes(sleepLatencyChoice),
-        wake_ups: parseWakeUpsToNumber(wakeUpsChoice),
-        mind_state: mindTags,
-        environment: environmentTags,
-        body_state: bodyTags,
-        protocol_used: protocolUsedName === "none" ? null : protocolUsedName,
-        notes: [affectedTonight.length ? `Affected tonight: ${affectedTonight.join(", ")}` : null, userNotes.trim() || null]
-        .filter(Boolean)
-        .join(" | ") || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        sleep_start_at: startAt.toISOString(),
-        sleep_end_at: endAt.toISOString(),
-        sleep_duration: durationMinutes,
-      });
+        sleep_latency_choice: sleepLatencyChoice,
+        wake_ups_choice: wakeUpsChoice,
+        mind_tags: mindTags,
+        environment_tags: environmentTags,
+        body_tags: bodyTags,
+        primary_driver: primaryDriver,
+        secondary_driver: extraDrivers.length ? extraDrivers.join(", ") : null,
+        protocol_used_name: !protocolUsedName || protocolUsedName === "none" ? null : protocolUsedName,
+        notes: buildNotes(userNotes, affectedTonight) || null,
+      };
+
+      const { data: inserted, error } = await supabase
+        .from("sleep_nights")
+        .insert(payload)
+        .select("id")
+        .single();
 
       if (error) {
         setSaveError(error.message || "Failed to save.");
         return;
       }
+
+      setLatestNightId(inserted?.id ?? null);
 
       // Optimistically reset form + refresh list.
       resetNightForm();
