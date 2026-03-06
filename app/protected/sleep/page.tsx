@@ -374,6 +374,13 @@ export default function SleepPage() {
       const endLocalDate = toIsoLocalDate(endAt);
       if (sleepEndDate !== endLocalDate) setSleepEndDate(endLocalDate);
 
+      // Rule 1: do not allow future wake dates.
+      const todayLocalDate = toIsoLocalDate(new Date());
+      if (endLocalDate > todayLocalDate) {
+        setSaveError("Future dates are not allowed. Please choose today or an earlier date.");
+        return;
+      }
+
       const durationMinutes = Math.round((endAt.getTime() - startAt.getTime()) / 60000);
 
       // Basic guardrails (prevents DB duration check constraints from firing).
@@ -381,6 +388,25 @@ export default function SleepPage() {
         setSaveError(
           "Sleep duration looks invalid. Please check your bedtime + wake time (crossing midnight is supported)."
         );
+        return;
+      }
+
+      // Rule 2: one saved night per wake date.
+      const { data: existingNight, error: existingNightError } = await supabase
+        .from("sleep_nights")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("local_date", endLocalDate)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingNightError) {
+        setSaveError(existingNightError.message || "Could not validate the selected date.");
+        return;
+      }
+
+      if (existingNight?.id) {
+        setSaveError(`A night for ${endLocalDate} has already been saved. Please edit that date instead of creating a duplicate.`);
         return;
       }
 
