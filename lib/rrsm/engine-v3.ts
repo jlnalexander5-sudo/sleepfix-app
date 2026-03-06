@@ -11,7 +11,6 @@ function detectTrend(nights: RRSMMetricsNight[]): RRSMV3Insight["trend"] {
   if (nights.length < 4) return "mixed";
 
   const last = nights.slice(-3);
-
   const q = last.map(n => n.quality ?? 0);
   const w = last.map(n => n.wakeUps ?? 0);
 
@@ -54,19 +53,13 @@ export function runRRSMEngineV3(nights: RRSMMetricsNight[]): RRSMV3Insight {
   const base = runRRSMEngineV2(nights);
 
   const trend = detectTrend(nights);
-
   const protocol = protocolForIssue(base.primaryIssue);
-
   const driverConf = driverConfidence(nights, base.topDriver);
 
   const why = [...base.why];
-
-  if (trend) {
-    why.push(`Trend detected: ${trend}.`);
-  }
+  if (trend) why.push(`Trend detected: ${trend}.`);
 
   const actions = [...base.actions];
-
   actions.unshift(`Recommended protocol: ${protocol}`);
 
   return {
