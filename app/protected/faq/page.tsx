@@ -89,14 +89,14 @@ export default function FAQPage() {
       {
         id: "getting-started",
         title: "Getting Started",
-        intro: "Basic questions about what SleepFix is, how it works, and how much data it needs.",
+        intro: "Basic questions about what SleepFixMe is, how it works, and how much data it needs.",
         items: [
           {
-            question: "What does SleepFix do?",
+            question: "What does SleepFixMe do?",
             answer: (
               <>
                 <p>
-                  SleepFix is a sleep analysis app that helps you track, interpret, and improve your sleep using the
+                  SleepFixMe is a sleep analysis app that helps you track, interpret, and improve your sleep using the
                   <strong> RRSM model</strong>.
                 </p>
                 <p>
@@ -118,7 +118,7 @@ export default function FAQPage() {
             answer: (
               <>
                 <p>
-                  SleepFix needs at least <strong>3 complete nights</strong> to begin generating a basic RRSM insight.
+                  SleepFixMe needs at least <strong>3 complete nights</strong> to begin generating a basic RRSM insight.
                 </p>
                 <p>The more complete nights you log, the more reliable the analysis becomes.</p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
@@ -131,7 +131,7 @@ export default function FAQPage() {
             ),
           },
           {
-            question: "Why does SleepFix need multiple nights?",
+            question: "Why does SleepFixMe need multiple nights?",
             answer: (
               <>
                 <p>
@@ -139,7 +139,7 @@ export default function FAQPage() {
                   real trend.
                 </p>
                 <p>
-                  Multiple nights help SleepFix detect whether your issues are mainly about:
+                  Multiple nights help SleepFixME detect whether your issues are mainly about:
                 </p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
                   <li>recovery quality</li>
@@ -193,7 +193,7 @@ export default function FAQPage() {
                   <li>Wake ups</li>
                 </ul>
                 <p>
-                  Without these, SleepFix cannot produce a reliable baseline insight.
+                  Without these, SleepFixMe cannot produce a reliable baseline insight.
                 </p>
               </>
             ),
@@ -210,7 +210,7 @@ export default function FAQPage() {
             question: "Why do I need to log wake ups?",
             answer: (
               <p>
-                Wake ups help SleepFix measure <strong>fragmentation</strong>. Even if total sleep time seems okay,
+                Wake ups help SleepFixMe measure <strong>fragmentation</strong>. Even if total sleep time seems okay,
                 frequent awakenings can reduce recovery and destabilize sleep.
               </p>
             ),
@@ -252,7 +252,7 @@ export default function FAQPage() {
                   <li>screens in the last hour</li>
                 </ul>
                 <p>
-                  These are logged separately so SleepFix can compare daytime inputs with nighttime outcomes.
+                  These are logged separately so SleepFixMe can compare daytime inputs with nighttime outcomes.
                 </p>
               </>
             ),
@@ -270,14 +270,14 @@ export default function FAQPage() {
                   <li>Driver: you selected “Late caffeine” as something you think affected the night</li>
                 </ul>
                 <p>
-                  SleepFix separates these on purpose, so it can compare what actually happened with what you believe
+                  SleepFixMe separates these on purpose, so it can compare what actually happened with what you believe
                   happened.
                 </p>
               </>
             ),
           },
           {
-            question: "Why does SleepFix need both habits and drivers?",
+            question: "Why does SleepFixMe need both habits and drivers?",
             answer: (
               <>
                 <p>
@@ -285,7 +285,7 @@ export default function FAQPage() {
                 </p>
                 <p>
                   Sometimes users believe stress was the cause, but the repeated pattern may show stronger links with
-                  caffeine timing, screens, or alcohol. Keeping both allows SleepFix to detect mismatches and hidden
+                  caffeine timing, screens, or alcohol. Keeping both allows SleepFixMe to detect mismatches and hidden
                   drivers.
                 </p>
               </>
@@ -306,7 +306,7 @@ export default function FAQPage() {
                   RRSM stands for <strong>Radial Resonance Sleep Model</strong>.
                 </p>
                 <p>
-                  In SleepFix, RRSM organizes sleep analysis into four practical domains:
+                  In SleepFixMe, RRSM organizes sleep analysis into four practical domains:
                 </p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
                   <li><strong>Recovery</strong> — how restorative sleep felt</li>
@@ -410,7 +410,7 @@ export default function FAQPage() {
             question: "Are drivers confirmed causes?",
             answer: (
               <p>
-                No. Drivers are not medical or scientific proof by themselves. They are signals that SleepFix combines
+                No. Drivers are not medical or scientific proof by themselves. They are signals that SleepFixMe combines
                 with patterns and habits over time.
               </p>
             ),
@@ -419,7 +419,7 @@ export default function FAQPage() {
             question: "What if I do not know what affected the night?",
             answer: (
               <p>
-                You can choose <strong>Nothing / no clear driver</strong>. SleepFix can still work with your sleep
+                You can choose <strong>Nothing / no clear driver</strong>. SleepFixMe can still work with your sleep
                 metrics and habits data.
               </p>
             ),
@@ -436,7 +436,7 @@ export default function FAQPage() {
             answer: (
               <>
                 <p>
-                  A protocol is a short, targeted strategy recommended by SleepFix based on your current pattern.
+                  A protocol is a short, targeted strategy recommended by SleepFixMe based on your current pattern.
                 </p>
                 <p>Examples include:</p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
@@ -453,7 +453,7 @@ export default function FAQPage() {
             question: "Why is a protocol recommended?",
             answer: (
               <p>
-                SleepFix recommends a protocol when your current pattern suggests a specific area of support, such as
+                SleepFixMe recommends a protocol when your current pattern suggests a specific area of support, such as
                 sleep onset, fragmentation, or physical recovery.
               </p>
             ),
@@ -468,11 +468,11 @@ export default function FAQPage() {
             ),
           },
           {
-            question: "Why does SleepFix ask whether I used a protocol?",
+            question: "Why does SleepFixMe ask whether I used a protocol?",
             answer: (
               <>
                 <p>
-                  This helps SleepFix learn whether the chosen protocol matched the pattern and whether your sleep
+                  This helps SleepFixMe learn whether the chosen protocol matched the pattern and whether your sleep
                   improved afterward.
                 </p>
                 <p>
@@ -493,7 +493,7 @@ export default function FAQPage() {
             answer: (
               <>
                 <p>
-                  SleepFix is designed to keep your data private to your account.
+                  SleepFixMe is designed to keep your data private to your account.
                 </p>
                 <p>
                   Your records are stored in your app database and are tied to your authenticated user account.
@@ -506,7 +506,7 @@ export default function FAQPage() {
             answer: (
               <>
                 <p>
-                  SleepFix uses modern web app security practices, including authenticated access and encrypted
+                  SleepFixMe uses modern web app security practices, including authenticated access and encrypted
                   transmission over HTTPS.
                 </p>
                 <p>
@@ -516,19 +516,19 @@ export default function FAQPage() {
             ),
           },
           {
-            question: "Does SleepFix sell or share my data?",
+            question: "Does SleepFixMe sell or share my data?",
             answer: (
               <p>
-                SleepFix should not sell or share your sleep data for advertising. It is intended to be a personal sleep
+                SleepFixMe should not sell or share your sleep data for advertising. It is intended to be a personal sleep
                 analysis tool.
               </p>
             ),
           },
           {
-            question: "Is SleepFix a medical system?",
+            question: "Is SleepFixMe a medical system?",
             answer: (
               <p>
-                No. SleepFix is a self-tracking and pattern-analysis tool. It is not a medical diagnostic device and
+                No. SleepFixMe is a self-tracking and pattern-analysis tool. It is not a medical diagnostic device and
                 does not replace professional healthcare advice.
               </p>
             ),
@@ -558,7 +558,7 @@ export default function FAQPage() {
             question: "Why can’t I enter the same night twice?",
             answer: (
               <p>
-                SleepFix prevents duplicate dates because duplicate nights would distort the pattern analysis and make
+                SleepFixMe prevents duplicate dates because duplicate nights would distort the pattern analysis and make
                 the dashboard misleading.
               </p>
             ),
@@ -567,7 +567,7 @@ export default function FAQPage() {
             question: "Why can’t I enter future dates?",
             answer: (
               <p>
-                SleepFix only accepts completed nights. Future dates would break the time-based pattern logic.
+                SleepFixMe only accepts completed nights. Future dates would break the time-based pattern logic.
               </p>
             ),
           },
@@ -583,14 +583,14 @@ export default function FAQPage() {
       },
       {
         id: "science",
-        title: "How SleepFix Works",
+        title: "How SleepFixMe Works",
         intro: "A simple explanation of the reasoning behind the app.",
         items: [
           {
-            question: "How does SleepFix generate insights?",
+            question: "How does SleepFixMe generate insights?",
             answer: (
               <>
-                <p>SleepFix combines several layers:</p>
+                <p>SleepFixMe combines several layers:</p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
                   <li>nightly sleep metrics</li>
                   <li>sleep tags and possible drivers</li>
@@ -605,16 +605,16 @@ export default function FAQPage() {
             ),
           },
           {
-            question: "Does SleepFix diagnose insomnia or sleep disorders?",
+            question: "Does SleepFixMe diagnose insomnia or sleep disorders?",
             answer: (
               <p>
-                No. SleepFix can detect repeated patterns that may be useful for self-observation, but it does not
+                No. SleepFixMe can detect repeated patterns that may be useful for self-observation, but it does not
                 diagnose medical sleep disorders.
               </p>
             ),
           },
           {
-            question: "Why does SleepFix recommend one change at a time?",
+            question: "Why does SleepFixMe recommend one change at a time?",
             answer: (
               <p>
                 Because changing multiple things at once makes it hard to know what actually helped. A targeted protocol
@@ -660,9 +660,9 @@ export default function FAQPage() {
     <div style={{ maxWidth: 980, margin: "0 auto", padding: "28px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 34, fontWeight: 800, color: "var(--sf-brand)" }}>SleepFix FAQ</div>
+          <div style={{ fontSize: 34, fontWeight: 800, color: "var(--sf-brand)" }}>FAQ</div>
           <div style={{ marginTop: 8, color: "#444", fontSize: 16, maxWidth: 760 }}>
-            A help and explanation center for common questions, concerns, and deeper understanding of how SleepFix
+            A help and explanation center for common questions, concerns, and deeper understanding of how SleepFixMe
             works.
           </div>
         </div>
