@@ -748,18 +748,7 @@ const userInput: RRSMUserInput = {
         <RRSMInsightCard insight={rrsmInsight} loading={rrsmInsightLoading} error={rrsmInsightError} userInput={userInput} />
       </div>
 
-      {/* Keep debug for now (you said we remove at end) */}
-      <details style={{ marginTop: 14, opacity: 0.9 }}>
-        <summary style={{ cursor: "pointer", fontWeight: 800 }}>Debug (show raw sleep metrics)</summary>
-        <div style={{ marginTop: 10, fontFamily: "monospace", fontSize: 13 }}>
-          <div style={{ opacity: 0.9 }}>latestNightId: {latestNightId ?? "(none)"}</div>
-          <div style={{ marginTop: 10 }}>
-            {metrics.length === 0 ? <div>No rows yet.</div> : <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(metrics, null, 2)}</pre>}
-          </div>
-        </div>
-      </details>
-
-      <style jsx global>{`
+       <style jsx global>{`
         .react-datepicker {
           font-size: 1rem;
         }
