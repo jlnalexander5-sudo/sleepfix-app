@@ -363,8 +363,9 @@ export default function SleepPage() {
     try {
       const startAt = parseLocalDateTime(sleepStartDate, sleepStartTime);
 
-      // Build end from the start date + wake time; if earlier than start, assume it crossed midnight.
-      let endAt = parseLocalDateTime(sleepStartDate, sleepEndTime);
+      // Build end from the explicit end date + wake time.
+      // If the chosen end datetime is still before the start datetime, assume the user meant "next day".
+      let endAt = parseLocalDateTime(sleepEndDate, sleepEndTime);
       if (endAt.getTime() <= startAt.getTime()) {
         endAt = new Date(endAt.getTime() + 24 * 60 * 60 * 1000);
       }
@@ -390,7 +391,8 @@ export default function SleepPage() {
         user_id: userId,
         sleep_start: startAt.toISOString(),
         sleep_end: endAt.toISOString(),
-        local_date: toIsoLocalDate(startAt),
+        // Use the wake date as the night's local_date so dashboard dates match what users expect.
+        local_date: toIsoLocalDate(endAt),
         sleep_quality: Number(sleepQuality),
         sleep_latency_choice: sleepLatencyChoice,
         wake_ups_choice: wakeUpsChoice,
