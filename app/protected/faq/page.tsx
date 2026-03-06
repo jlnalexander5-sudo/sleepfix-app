@@ -833,9 +833,22 @@ export default function FAQPage() {
               View Protocols
             </button>
           </Link>
-          
-        </div>
+          </div>
       </div>
     </div>
+    <div style={{ marginTop: 40, textAlign: "center" }}>
+    <button
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      style={{
+        padding: "10px 16px",
+        borderRadius: 8,
+        border: "1px solid #ccc",
+        background: "#f8f8f8",
+        cursor: "pointer",
+      }}
+    >
+      Back to top
+    </button>
+  </div>
    );
 }
