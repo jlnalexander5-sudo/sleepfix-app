@@ -627,7 +627,7 @@ const userInput: RRSMUserInput = {
             </a>
           <select className="sf-select" style={{ marginTop: 10 }} value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
             <option value="">(none)</option>
-            {PROTOCOLS.filter((p) => p !== "No suggestion").map((p) => (
+            {PROTOCOLS.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
