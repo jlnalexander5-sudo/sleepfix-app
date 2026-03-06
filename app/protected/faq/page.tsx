@@ -756,7 +756,15 @@ export default function FAQPage() {
         </div>
       </div>
 
-      <div style={{ marginTop: 22 }}>
+     <div
+  style={{
+    marginTop: 22,
+    background: "rgba(60,80,255,0.05)",
+    padding: 16,
+    borderRadius: 12,
+    transition: "all 0.2s ease",
+  }}
+>
         <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>{currentSection.title}</div>
         {currentSection.intro ? (
           <div style={{ color: "#555", marginBottom: 16, fontSize: 15 }}>{currentSection.intro}</div>
@@ -828,5 +836,19 @@ export default function FAQPage() {
         </div>
       </div>
     </div>
+    <div style={{ marginTop: 40, textAlign: "center" }}>
+  <button
+    onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+    style={{
+      padding: "10px 16px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: "#f8f8f8",
+      cursor: "pointer"
+    }}
+  >
+    Back to top
+  </button>
+</div>
   );
 }
