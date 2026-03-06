@@ -395,8 +395,9 @@ export default function SleepPage() {
         environment: environmentTags,
         body_state: bodyTags,
         protocol_used: protocolUsedName === "none" ? null : protocolUsedName,
-        affected_tonight: affectedTonight,
-        notes: userNotes.trim() ? userNotes.trim() : null,
+        notes: [affectedTonight.length ? `Affected tonight: ${affectedTonight.join(", ")}` : null, userNotes.trim() || null]
+        .filter(Boolean)
+        .join(" | ") || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         sleep_start_at: startAt.toISOString(),
