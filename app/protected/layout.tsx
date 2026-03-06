@@ -35,6 +35,11 @@ export default function ProtectedLayout({
           <Link href="/protected/sleep" style={{ textDecoration: "none" }}>
             Sleep
           </Link>
+            <span className="sf-sep">|</span>
+
+      <Link href="/protected/faq" style={{ textDecoration: "none" }}>
+        FAQ
+        </Link>
           </div>
         </nav>
       </header>
