@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import RRSMInsightCard from "@/components/RRSMInsightCard";
-import { runRRSMEngineV2 } from "@/lib/rrsm/engine-v2";
+import { runRRSMEngineV3 } from "@/lib/rrsm/engine-v3";
 
 type NightRow = {
   night_id: string;
@@ -15,16 +15,14 @@ type NightRow = {
   latency_min: number | null;
   wakeups_count: number | null;
   quality_num: number | null;
-  // These are merged in from sleep_nights (not present on v_sleep_night_metrics)
   primary_driver: string | null;
   secondary_driver: string | null;
   notes?: string | null;
 };
 
-
 type DailyHabitRow = {
   user_id: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   caffeine_after_2pm?: boolean | null;
   alcohol?: boolean | null;
   exercise?: boolean | null;
@@ -36,11 +34,13 @@ type RRSMInsight = {
   why: string[];
   actions: string[];
   confidence: "low" | "medium" | "high";
-  // Engine v2 extras (optional)
   risk?: "low" | "moderate" | "high";
   primaryIssue?: "recovery" | "onset" | "fragmentation" | "mixed";
   topDriver?: string;
   scores?: { recovery: number; onset: number; fragmentation: number; stability: number };
+  trend?: "improving" | "worsening" | "stable" | "mixed";
+  protocol?: string;
+  driverConfidence?: "low" | "moderate" | "high";
 };
 
 function fmtDate(iso: string) {
@@ -59,11 +59,9 @@ function parseChoiceToNumber(choice: string | null | undefined): number | null {
   if (!choice) return null;
   const s = String(choice).trim();
   if (!s) return null;
-  // supports "60+", "5", "10", etc.
   const n = parseInt(s.replace("+", ""), 10);
   return Number.isFinite(n) ? n : null;
 }
-
 
 function dateKeyForNight(r: NightRow): string | null {
   const k = r.local_date ?? (r.created_at ? String(r.created_at).slice(0, 10) : null);
@@ -104,7 +102,7 @@ function buildHabitSignals(rows: NightRow[], habitsByDate: Record<string, DailyH
 
     const nWith = nightsWith.length;
     const nTotal = nightsWith.length + nightsWithout.length;
-    if (nTotal < 3 || nWith === 0 || nWith === nTotal) continue; // need contrast
+    if (nTotal < 3 || nWith === 0 || nWith === nTotal) continue;
 
     const avgLatWith = safeAvg(nightsWith.map((r) => r.latency_min));
     const avgLatNo = safeAvg(nightsWithout.map((r) => r.latency_min));
@@ -117,15 +115,8 @@ function buildHabitSignals(rows: NightRow[], habitsByDate: Record<string, DailyH
     const dWu = avgWuWith === null || avgWuNo === null ? 0 : avgWuWith - avgWuNo;
     const dQ = avgQWith === null || avgQNo === null ? 0 : avgQWith - avgQNo;
 
-    const score = Math.abs(dLat) / 5 + Math.abs(dWu) * 2 + Math.abs(dQ) * 1;
+    const score = Math.abs(dLat) / 5 + Math.abs(dWu) * 2 + Math.abs(dQ);
 
-    // choose a primary metric line (most interpretable)
-    const parts: string[] = [];
-    if (avgLatWith !== null && avgLatNo !== null) parts.push(`latency ${signNum(dLat)}${round1(dLat)}m`);
-    if (avgWuWith !== null && avgWuNo !== null) parts.push(`wake-ups ${signNum(dWu)}${round1(dWu)}`);
-    if (avgQWith !== null && avgQNo !== null) parts.push(`quality ${signNum(-dQ)}${round1(Math.abs(dQ))} (worse)`);
-
-    // Build a clean sentence prioritizing latency/wakeups/quality deltas
     const metricLine =
       avgLatWith !== null && avgLatNo !== null && Math.abs(dLat) >= Math.abs(dWu) * 5
         ? `avg latency ${signWord(dLat)}${round1(Math.abs(dLat))}m`
@@ -148,10 +139,6 @@ function buildHabitSignals(rows: NightRow[], habitsByDate: Record<string, DailyH
 function signWord(delta: number): string {
   return delta >= 0 ? "higher by " : "lower by ";
 }
-function signNum(delta: number): string {
-  return delta >= 0 ? "+" : "-";
-}
-
 
 function safeAvg(nums: Array<number | null | undefined>) {
   const xs = nums.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
@@ -161,15 +148,6 @@ function safeAvg(nums: Array<number | null | undefined>) {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
-}
-
-function isValidNight(r: NightRow) {
-  // For the “baseline unlock at 3 nights” gate: require the core quick-check fields
-  return (
-    typeof r.quality_num === "number" &&
-    typeof r.latency_min === "number" &&
-    typeof r.wakeups_count === "number"
-  );
 }
 
 function mostCommon(values: Array<string | null | undefined>) {
@@ -189,9 +167,6 @@ function mostCommon(values: Array<string | null | undefined>) {
   }
   return best;
 }
-
-// Stability score (0..100): lower variability across the last 7 nights => higher stability.
-// (Dashboard v10 placeholder — can be replaced later by RRSM scoring.)
 
 function driverIndicator(rows: NightRow[]) {
   const drivers = rows
@@ -229,7 +204,6 @@ function MiniLineChart({ values }: { values: number[] }) {
 }
 
 function dateKey(r: NightRow) {
-  // Prefer the stored local_date (YYYY-MM-DD). Fallback: created_at date slice.
   if (r.local_date && String(r.local_date).trim()) return String(r.local_date).slice(0, 10);
   return String(r.created_at ?? "").slice(0, 10);
 }
@@ -248,6 +222,18 @@ function dedupeByNightDate(rows: NightRow[], maxUnique: number) {
   return out;
 }
 
+function protocolHash(protocol?: string | null) {
+  const p = (protocol ?? "").trim().toLowerCase();
+  if (!p) return "/protected/protocols";
+  if (p.includes("sleep entry lock")) return "/protected/protocols#sleep-entry-lock";
+  if (p.includes("cooling discharge")) return "/protected/protocols#cooling-discharge";
+  if (p.includes("mental discharge")) return "/protected/protocols#mental-discharge";
+  if (p.includes("doms compression")) return "/protected/protocols#doms-compression";
+  if (p.includes("internal cooling")) return "/protected/protocols#internal-cooling";
+  if (p.includes("pre-sleep discharge")) return "/protected/protocols#pre-sleep-discharge";
+  return "/protected/protocols";
+}
+
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -257,8 +243,6 @@ export default function DashboardPage() {
   const [rows, setRows] = useState<NightRow[]>([]);
   const [habitsByDate, setHabitsByDate] = useState<Record<string, DailyHabitRow>>({});
   const [habitsErr, setHabitsErr] = useState<string | null>(null);
-
-
   const [insight, setInsight] = useState<RRSMInsight | null>(null);
   const [insightErr, setInsightErr] = useState<string | null>(null);
 
@@ -270,6 +254,7 @@ export default function DashboardPage() {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth?.user?.id ?? null;
       setUserId(uid);
+
       if (!uid) {
         setRows([]);
         setLoading(false);
@@ -278,18 +263,20 @@ export default function DashboardPage() {
 
       const { data, error } = await supabase
         .from("sleep_nights")
-        .select([
-    "id",
-    "user_id",
-    "created_at",
-    "local_date",
-    "sleep_quality",
-    "sleep_latency_choice",
-    "wake_ups_choice",
-        "primary_driver",
-    "secondary_driver",
-    "notes"
-  ].join(","))
+        .select(
+          [
+            "id",
+            "user_id",
+            "created_at",
+            "local_date",
+            "sleep_quality",
+            "sleep_latency_choice",
+            "wake_ups_choice",
+            "primary_driver",
+            "secondary_driver",
+            "notes",
+          ].join(",")
+        )
         .eq("user_id", uid)
         .order("local_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -302,37 +289,33 @@ export default function DashboardPage() {
         return;
       }
 
-      
-const nextRows: NightRow[] = (data ?? []).map((r: any) => {
-  const quality = typeof r.sleep_quality === "number" ? r.sleep_quality : parseChoiceToNumber(r.sleep_quality);
+      const nextRows: NightRow[] = (data ?? []).map((r: any) => {
+        const quality = typeof r.sleep_quality === "number" ? r.sleep_quality : parseChoiceToNumber(r.sleep_quality);
+        const latency = parseChoiceToNumber(r.sleep_latency_choice);
+        const wakeups = parseChoiceToNumber(r.wake_ups_choice);
 
-  const latency = parseChoiceToNumber(r.sleep_latency_choice);
+        return {
+          night_id: r.id,
+          user_id: r.user_id,
+          created_at: r.created_at,
+          local_date: r.local_date ?? null,
+          duration_min: null,
+          latency_min: latency,
+          wakeups_count: wakeups,
+          quality_num: quality,
+          primary_driver: r.primary_driver ?? null,
+          secondary_driver: r.secondary_driver ?? null,
+          notes: r.notes ?? null,
+        };
+      });
 
-  const wakeups = parseChoiceToNumber(r.wake_ups_choice);
-
-  return {
-    night_id: r.id,
-    user_id: r.user_id,
-    created_at: r.created_at,
-    local_date: r.local_date ?? null,
-    duration_min: null,
-    latency_min: latency,
-    wakeups_count: wakeups,
-    quality_num: quality,
-    primary_driver: r.primary_driver ?? null,
-    secondary_driver: r.secondary_driver ?? null,
-    notes: r.notes ?? null,
-  };
-});
-const uniqueRows = dedupeByNightDate(nextRows, 7);
+      const uniqueRows = dedupeByNightDate(nextRows, 7);
       setRows(uniqueRows);
-
       setLoading(false);
 
-      // RRSM Engine v2 (scoring + narrative)
       setInsightErr(null);
       try {
-        const rrsm = runRRSMEngineV2(
+        const rrsm = runRRSMEngineV3(
           uniqueRows.map((r) => ({
             dateKey: r.local_date ?? (r.created_at ? String(r.created_at).slice(0, 10) : undefined),
             quality: r.quality_num,
@@ -350,7 +333,6 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
     })();
   }, [supabase]);
 
-  // Load habits for the same dates as the last 7 nights (for simple correlation hints)
   useEffect(() => {
     let cancelled = false;
 
@@ -362,10 +344,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
 
       setHabitsErr(null);
 
-      const dates = Array.from(
-        new Set(rows.map(dateKeyForNight).filter((d): d is string => Boolean(d)))
-      );
-
+      const dates = Array.from(new Set(rows.map(dateKeyForNight).filter((d): d is string => Boolean(d))));
       if (dates.length === 0) {
         setHabitsByDate({});
         return;
@@ -398,11 +377,10 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
     };
   }, [supabase, userId, rows]);
 
-
-
   const avgQuality = useMemo(() => safeAvg(rows.map((r) => r.quality_num)), [rows]);
   const avgLatency = useMemo(() => safeAvg(rows.map((r) => r.latency_min)), [rows]);
   const avgWakeups = useMemo(() => safeAvg(rows.map((r) => r.wakeups_count)), [rows]);
+
   const qualitySeries = useMemo(
     () => rows.map((r) => r.quality_num).filter((n): n is number => typeof n === "number" && Number.isFinite(n)),
     [rows]
@@ -414,18 +392,22 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
   const stability = useMemo(() => (insight?.scores ? insight.scores.stability : null), [insight]);
   const topDriver = useMemo(() => driverIndicator(rows), [rows]);
 
-
   const habitSignals = useMemo(() => buildHabitSignals(rows, habitsByDate), [rows, habitsByDate]);
 
   const insightForCard = useMemo(() => {
     if (!insight) return null;
-    if (!habitSignals.length) return insight;
-    // Add small "habits" hints at the end of the Why section (keeps UI simple)
-    const extra = habitSignals.map((s) => `Habits: ${s}`);
+
+    const extra: string[] = [];
+    if (habitSignals.length) extra.push(...habitSignals.map((s) => `Habits: ${s}`));
+    if (insight.driverConfidence && insight.topDriver && insight.topDriver !== "(no driver logged)") {
+      extra.push(`Driver confidence: ${insight.driverConfidence}.`);
+    }
+    if (insight.trend) {
+      extra.push(`Trend detected: ${insight.trend}.`);
+    }
+
     return { ...insight, why: [...insight.why, ...extra] };
   }, [insight, habitSignals]);
-
-
 
   const risk = useMemo(() => {
     const r = insight?.risk ?? null;
@@ -439,7 +421,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
     <div style={{ maxWidth: 980, margin: "0 auto", padding: "28px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 30, fontWeight: 800 , color: 'var(--sf-brand)'}}>Dashboard</div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: "var(--sf-brand)" }}>Dashboard</div>
           <div style={{ marginTop: 6, color: "#444" }}>
             Last 7 nights snapshot + RRSM preview (baseline unlock at 3 valid nights).
           </div>
@@ -513,9 +495,55 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
             {insightErr ? (
               <div style={{ color: "#b00020" }}>{insightErr}</div>
             ) : insight ? (
-              <RRSMInsightCard insight={insightForCard} />
+              <>
+                <RRSMInsightCard insight={insightForCard} />
+
+                {insight.protocol ? (
+                  <div
+                    className="sf-card"
+                    style={{
+                      marginTop: 12,
+                      padding: 14,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#444" }}>
+                        Recommended protocol
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4 }}>
+                        {insight.protocol}
+                      </div>
+                    </div>
+
+                    <Link href={protocolHash(insight.protocol)}>
+                      <button
+                        style={{
+                          padding: "10px 14px",
+                          background: "#4f46e5",
+                          color: "#fff",
+                          borderRadius: 8,
+                          border: "none",
+                          cursor: "pointer",
+                          fontWeight: 700,
+                        }}
+                      >
+                        View Recommended Protocol
+                      </button>
+                    </Link>
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </div>
+
+          {habitsErr ? (
+            <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{habitsErr}</div>
+          ) : null}
 
           <div style={{ marginTop: 18 }}>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Recent nights</div>
