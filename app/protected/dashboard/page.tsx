@@ -150,6 +150,15 @@ function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
+
+
+function todayLocalDateKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function mostCommon(values: Array<string | null | undefined>) {
   const counts = new Map<string, number>();
   for (const v of values) {
@@ -392,6 +401,12 @@ export default function DashboardPage() {
   const stability = useMemo(() => (insight?.scores ? insight.scores.stability : null), [insight]);
   const topDriver = useMemo(() => driverIndicator(rows), [rows]);
 
+  const nightLoggedToday = useMemo(() => {
+    const today = todayLocalDateKey();
+    return rows.some((r) => dateKey(r) === today);
+  }, [rows]);
+
+
   const habitSignals = useMemo(() => buildHabitSignals(rows, habitsByDate), [rows, habitsByDate]);
 
   const insightForCard = useMemo(() => {
@@ -436,6 +451,44 @@ export default function DashboardPage() {
         <div style={{ marginTop: 18 }}>Please sign in.</div>
       ) : (
         <>
+          {!nightLoggedToday ? (
+            <div
+              className="sf-card"
+              style={{
+                marginTop: 18,
+                padding: 14,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+                background: "#fff8e1",
+                border: "1px solid #f2d38b",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>You have not logged a night for today yet.</div>
+                <div style={{ color: "#555", marginTop: 4 }}>Open Sleep and save last night when you are ready.</div>
+              </div>
+
+              <Link href="/protected/sleep">
+                <button
+                  style={{
+                    padding: "10px 14px",
+                    background: "#4f46e5",
+                    color: "#fff",
+                    borderRadius: 8,
+                    border: "none",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Log night
+                </button>
+              </Link>
+            </div>
+          ) : null}
+
           <div
             style={{
               marginTop: 18,
