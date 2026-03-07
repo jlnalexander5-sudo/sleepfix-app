@@ -1,10 +1,11 @@
-// app/layout.tsx
 import "react-datepicker/dist/react-datepicker.css";
 import "./globals.css";
 
 export const metadata = {
-  title: "SleepFix",
-  description: "SleepFix",
+  title: "SleepFixMe",
+  description: "SleepFixMe",
+  manifest: "/manifest.json",
+  themeColor: "#1d2dbf",
 };
 
 export default function RootLayout({
