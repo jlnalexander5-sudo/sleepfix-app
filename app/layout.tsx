@@ -4,8 +4,6 @@ import "./globals.css";
 export const metadata = {
   title: "SleepFixMe",
   description: "SleepFixMe",
-  manifest: "/manifest.json",
-  themeColor: "#1d2dbf",
 };
 
 export default function RootLayout({
@@ -15,7 +13,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>{children}</body>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+      </head>
+
+      <body>
+        {children}
+
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function () {
+                  navigator.serviceWorker.register('/sw.js');
+                });
+              }
+            `,
+          }}
+        />
+      </body>
     </html>
   );
 }
