@@ -1,7 +1,6 @@
-// app/protected/layout.tsx
-
 import Link from "next/link";
 import Head from "next/head";
+import Script from "next/script";
 
 export default function ProtectedLayout({
   children,
@@ -15,8 +14,19 @@ export default function ProtectedLayout({
         <meta name="theme-color" content="#1d2dbf" />
       </Head>
 
+      <Script id="sleepfixme-sw" strategy="afterInteractive">
+        {`
+          if ("serviceWorker" in navigator) {
+            window.addEventListener("load", function () {
+              navigator.serviceWorker.register("/sw.js").catch(function (err) {
+                console.error("SW registration failed:", err);
+              });
+            });
+          }
+        `}
+      </Script>
+
       <div style={{ minHeight: "100vh", fontSize: "18px", lineHeight: 1.6 }}>
-        {/* Top Nav */}
         <header
           style={{
             borderBottom: "1px solid rgba(255,255,255,0.12)",
@@ -58,7 +68,6 @@ export default function ProtectedLayout({
           </nav>
         </header>
 
-        {/* Page body */}
         <main style={{ maxWidth: 980, margin: "0 auto" }}>{children}</main>
       </div>
     </>
