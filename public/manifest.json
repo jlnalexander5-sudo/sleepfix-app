@@ -2,6 +2,7 @@
   "name": "SleepFixMe",
   "short_name": "SleepFixMe",
   "start_url": "/protected/dashboard",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1d2dbf",
