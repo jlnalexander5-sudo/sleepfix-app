@@ -14,8 +14,9 @@ export default function ProtectedLayout({
           borderBottom: "1px solid rgba(255,255,255,0.12)",
           padding: "14px 16px",
         }}
-      >
-        <nav className="sf-topnav">
+   >
+<link rel="manifest" href="/manifest.json" />
+<nav className="sf-topnav">
           <a href="/protected/dashboard" className="sf-brand" aria-label="SleepFix home">SleepFixMe</a>
 
           <div className="sf-links">
