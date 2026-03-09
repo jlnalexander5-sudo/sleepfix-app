@@ -130,7 +130,7 @@ function ProtocolFeedback({ insightTitle, suggestedPlan }: { insightTitle: strin
   // Only show on "Tonight plan" insights (keeps UI clean during baseline messages)
   const shouldShow = useMemo(() => {
     const t = (insightTitle ?? "").toLowerCase();
-    return (t.includes("tonight plan") || t.includes("rrsm")) && (suggestedPlan ?? "").trim().length > 0;
+    return (t.includes("Last Night") || t.includes("rrsm")) && (suggestedPlan ?? "").trim().length > 0;
   }, [insightTitle, suggestedPlan]);
 
   useEffect(() => {
