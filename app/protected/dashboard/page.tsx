@@ -658,10 +658,6 @@ export default function DashboardPage() {
               </table>
             </div>
           </div>
-
-          <footer style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid #d7d7d7", fontSize: 13, color: "#444", fontWeight: 700 }}>
-            All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
-          </footer>
         </>
       )}
     </div>
