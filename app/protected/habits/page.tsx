@@ -267,10 +267,10 @@ export default function HabitsPage() {
         </div>
 
         <div className="mt-4 grid gap-3">
-          <HabitCheckbox date={todayYMD} field="caffeine_after_2pm" label="Caffeine after 2pm" />
+          <HabitCheckbox date={todayYMD} field="caffeine" label="Caffeine" />
           <HabitCheckbox date={todayYMD} field="alcohol" label="Alcohol" />
           <HabitCheckbox date={todayYMD} field="exercise" label="Heavy exercise" />
-          <HabitCheckbox date={todayYMD} field="screens_last_hour" label="Screens / heavy lights in last hour" />
+          <HabitCheckbox date={todayYMD} field="screens" label="Screens / heavy lights" />
         </div>
 
         <p className="text-base text-neutral-500 mt-4">
@@ -304,3 +304,4 @@ export default function HabitsPage() {
     </main>
   );
 }
+
