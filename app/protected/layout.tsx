@@ -69,6 +69,20 @@ export default function ProtectedLayout({
         </header>
 
         <main style={{ maxWidth: 980, margin: "0 auto" }}>{children}</main>
+
+        <footer
+          style={{
+            maxWidth: 980,
+            margin: "0 auto",
+            padding: "18px 0 26px",
+            borderTop: "1px solid #d7d7d7",
+            fontSize: 13,
+            color: "#444",
+            fontWeight: 700,
+          }}
+        >
+          All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
+        </footer>
       </div>
     </>
   );
