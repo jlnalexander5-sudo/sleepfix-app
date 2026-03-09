@@ -38,12 +38,50 @@ function buildDayList(fromYMD: string, toYMDStr: string) {
   return out;
 }
 
+type HabitGuide = {
+  field: keyof DailyHabitRow;
+  label: string;
+  sensitive: string;
+  nonsensitive: string;
+  note?: string;
+};
+
+const habitGuide: HabitGuide[] = [
+  {
+    field: "caffeine_after_2pm",
+    label: "Caffeine",
+    sensitive: "Sensitive RB2: avoid after 2pm.",
+    nonsensitive: "Less sensitive: many people tolerate it until about 6pm.",
+    note: "Keep tracking your personal cut-off time. The engine should learn this over time.",
+  },
+  {
+    field: "alcohol",
+    label: "Alcohol",
+    sensitive: "Sensitive RB2: evening alcohol often disrupts sleep.",
+    nonsensitive: "Less sensitive: some tolerate earlier alcohol better, but close-to-bed still often affects sleep.",
+    note: "Notice your own timing threshold instead of assuming a universal rule.",
+  },
+  {
+    field: "exercise",
+    label: "Heavy exercise",
+    sensitive: "Sensitive RB2: avoid heavy exercise after 5pm.",
+    nonsensitive: "Less sensitive: some tolerate heavy exercise until about 3 hours before sleep.",
+    note: "Light movement is different from intense exercise. Log what actually applied.",
+  },
+  {
+    field: "screens_last_hour",
+    label: "Screens / heavy light",
+    sensitive: "Sensitive RB2: avoid screens in the last hour before sleep.",
+    nonsensitive: "Less sensitive: some tolerate screens better, but many still feel the effect in the final hour.",
+    note: "This includes heavy lights and high visual stimulation.",
+  },
+];
+
 export default function HabitsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [todayYMD, setTodayYMD] = useState<string>("");
 
   useEffect(() => {
-    // Use Date() only on the client after mount to avoid Next.js prerender errors
     setTodayYMD(toYMD(new Date()));
   }, []);
 
@@ -56,7 +94,6 @@ export default function HabitsPage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Load user + last 7 days of habits
   useEffect(() => {
     let cancelled = false;
 
@@ -97,11 +134,8 @@ export default function HabitsPage() {
         map[r.date] = r as DailyHabitRow;
       });
 
-      // ensure each date has a row shape (even if empty)
       dayList.forEach((d) => {
-        if (!map[d]) {
-          map[d] = { user_id: uid, date: d };
-        }
+        if (!map[d]) map[d] = { user_id: uid, date: d };
       });
 
       if (!cancelled) {
@@ -122,7 +156,6 @@ export default function HabitsPage() {
     setSavingKey(`${date}:${String(field)}`);
     setError(null);
 
-    // optimistic update
     setRowsByDate((prev) => ({
       ...prev,
       [date]: {
@@ -132,7 +165,6 @@ export default function HabitsPage() {
     }));
 
     const existing = (rowsByDate[date] ?? {}) as DailyHabitRow;
-    // Remove keys that would cause duplicate properties in an object literal
     const { user_id: _u, date: _d, ...rest } = existing as any;
 
     const payload: DailyHabitRow = {
@@ -146,20 +178,11 @@ export default function HabitsPage() {
       .from("daily_habits")
       .upsert(payload, { onConflict: "user_id,date" });
 
-    if (upsertErr) {
-      setError(upsertErr.message);
-    }
-
+    if (upsertErr) setError(upsertErr.message);
     setSavingKey(null);
   }
 
-  const todayRow = rowsByDate[todayYMD] ?? (userId ? { user_id: userId, date: todayYMD } : null);
-
-  function HabitCheckbox(props: {
-    date: string;
-    field: keyof DailyHabitRow;
-    label: string;
-  }) {
+  function HabitCheckbox(props: { date: string; field: keyof DailyHabitRow; label: string }) {
     const row = rowsByDate[props.date];
     const checked = Boolean(row?.[props.field]);
 
@@ -183,7 +206,7 @@ export default function HabitsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8 text-base">
+    <main className="mx-auto max-w-4xl px-4 py-8 text-base">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Habits</h1>
         <p className="text-base text-neutral-600 mt-2">
@@ -194,16 +217,12 @@ export default function HabitsPage() {
           <div className="mt-1 text-sm text-neutral-700">
             Record what actually happened during the day, independent of your sleep perception.
           </div>
-          <div className="mt-2 text-sm text-neutral-600">
-            This data feeds the RRSM Engine.
-          </div>
+          <div className="mt-2 text-sm text-neutral-600">This data feeds the RRSM Engine.</div>
         </div>
       </div>
 
       {error ? (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-base text-red-700">
-          {error}
-        </div>
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-base text-red-700">{error}</div>
       ) : null}
 
       <section className="rounded-xl border p-4">
@@ -212,11 +231,46 @@ export default function HabitsPage() {
           {loading ? <span className="text-base text-neutral-500">Loading…</span> : null}
         </div>
 
+        <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+          <div className="text-sm font-bold text-neutral-900">Timing guide for common sleep drivers</div>
+          <div className="mt-1 text-sm text-neutral-700">
+            The left column is stricter and fits more sensitive RB2 prototypes. The right column is more flexible and fits less sensitive people.
+          </div>
+          <div className="mt-2 text-sm text-neutral-600">
+            These are approximate thresholds only. Keep logging so SleepFixMe can learn your personal cut-off times.
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-neutral-50">
+                  <th className="border p-2 text-left">Driver</th>
+                  <th className="border p-2 text-left">Sensitive RB2 prototype</th>
+                  <th className="border p-2 text-left">Less sensitive prototype</th>
+                </tr>
+              </thead>
+              <tbody>
+                {habitGuide.map((item) => (
+                  <tr key={String(item.field)}>
+                    <td className="border p-2 font-semibold align-top">{item.label}</td>
+                    <td className="border p-2 align-top">{item.sensitive}</td>
+                    <td className="border p-2 align-top">{item.nonsensitive}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 text-sm text-neutral-700">
+            Monitor these timings for yourself. Your own threshold matters more than a generic rule.
+          </div>
+        </div>
+
         <div className="mt-4 grid gap-3">
           <HabitCheckbox date={todayYMD} field="caffeine_after_2pm" label="Caffeine after 2pm" />
           <HabitCheckbox date={todayYMD} field="alcohol" label="Alcohol" />
-          <HabitCheckbox date={todayYMD} field="exercise" label="Exercise" />
-          <HabitCheckbox date={todayYMD} field="screens_last_hour" label="Screens in last hour" />
+          <HabitCheckbox date={todayYMD} field="exercise" label="Heavy exercise" />
+          <HabitCheckbox date={todayYMD} field="screens_last_hour" label="Screens / heavy lights in last hour" />
         </div>
 
         <p className="text-base text-neutral-500 mt-4">
@@ -226,9 +280,7 @@ export default function HabitsPage() {
 
       <section className="mt-6 rounded-xl border p-4">
         <h2 className="text-lg font-semibold">Last 7 days</h2>
-        <p className="text-base text-neutral-600 mt-2">
-          Shows what you ticked on each day (not asking you to remember anything).
-        </p>
+        <p className="text-base text-neutral-600 mt-2">Shows what you ticked on each day (not asking you to remember anything).</p>
 
         <div className="mt-4 grid gap-2">
           {dayList.map((d) => {
