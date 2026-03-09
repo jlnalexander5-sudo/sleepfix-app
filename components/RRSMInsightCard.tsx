@@ -153,7 +153,16 @@ function ProtocolFeedback({ insightTitle, suggestedPlan }: { insightTitle: strin
   if (!shouldShow) return null;
 
   return (
-    <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+   <div
+  style={{
+    marginTop: 18,
+    border: "1px solid #e5e7eb",
+    borderRadius: 18,
+    background: "#ffffff",
+    padding: 24,
+    boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+  }}
+>
       <div className="text-base font-semibold text-neutral-900">Protocol check</div>
       <div className="mt-1 text-base text-neutral-700">
         Suggested protocol: <span className="font-semibold">{suggestedPlan}</span>
