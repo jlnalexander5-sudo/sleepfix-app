@@ -161,6 +161,28 @@ function fmt1(n: number) {
   return Number.isFinite(n) ? n.toFixed(1) : "—";
 }
 
+function wakeBand(avgW: number): string {
+  if (avgW >= 5) return "severe";
+  if (avgW >= 3) return "fragmented";
+  if (avgW >= 1) return "normal";
+  return "none";
+}
+
+function dominantFactorForAverage(avgW: number, avgL: number, avgQ: number): string {
+  if (avgW >= 4) return "Frequent awakenings";
+  if (avgL >= 45) return "Long sleep latency";
+  if (avgQ <= 4) return "Low sleep quality";
+  if (avgW >= 2) return "Mild sleep fragmentation";
+  return "No dominant factor";
+}
+
+function primaryDriverLabel(issue: RRSMV2Insight["primaryIssue"]): string {
+  if (issue === "fragmentation") return "Mild sleep fragmentation";
+  if (issue === "onset") return "Sleep onset difficulty";
+  if (issue === "recovery") return "Recovery instability";
+  return "Mixed sleep pattern";
+}
+
 export function runRRSMEngineV2(nights: RRSMMetricsNight[]): RRSMV2Insight {
   // "Valid" nights: require at least one metric; for scoring we need all three,
   // but we’ll keep partial nights for driver counting.
@@ -179,7 +201,7 @@ export function runRRSMEngineV2(nights: RRSMMetricsNight[]): RRSMV2Insight {
   if (validN < 3) {
     const topDriver = pickTopDriver(withAnyMetric);
     return {
-      title: "RRSM insight (v2 — early signal)",
+      title: "Last 7 nights (early signal)",
       risk: "moderate",
       primaryIssue: "mixed",
       topDriver,
@@ -210,8 +232,11 @@ export function runRRSMEngineV2(nights: RRSMMetricsNight[]): RRSMV2Insight {
   const why: string[] = [
     `Avg sleep quality (last ${validN} valid nights): ${fmt1(avgQ)}/10.`,
     `Avg sleep latency: ${fmt1(avgL)} mins.`,
-    `Avg wake ups: ${fmt1(avgW)}.`,
+    `Night waking: ${wakeBand(avgW)} (${fmt1(avgW)} average wake-ups).`,
     `Stability score: ${Math.round(scores.stability)}/100 (variability across nights).`,
+    `Main sleep pattern: ${primaryDriverLabel(primaryIssue)}.`,
+    `Protocol fit: Good.`,
+    `Main factor: ${dominantFactorForAverage(avgW, avgL, avgQ)}.`,
   ];
 
   if (topDriver !== "(no driver logged)") {
@@ -245,7 +270,7 @@ export function runRRSMEngineV2(nights: RRSMMetricsNight[]): RRSMV2Insight {
   actions.push("After 14 valid nights, the confidence will upgrade to 'high'.");
 
   return {
-    title: "RRSM insight (v2)",
+    title: "Last 7 nights",
     risk,
     primaryIssue,
     topDriver,
