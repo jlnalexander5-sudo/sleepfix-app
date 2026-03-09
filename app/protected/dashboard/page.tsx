@@ -437,7 +437,7 @@ export default function DashboardPage() {
         <div>
           <div style={{ fontSize: 30, fontWeight: 800, color: "var(--sf-brand)" }}>Dashboard</div>
           <div style={{ marginTop: 6, color: "#444" }}>
-            Last 7 nights snapshot + RRSM preview (baseline unlock at 3 valid nights).
+            Last 7 nights snapshot + RRSM preview.
           </div>
         </div>
       </div>
@@ -450,14 +450,19 @@ export default function DashboardPage() {
         <div style={{ marginTop: 18 }}>Please sign in.</div>
       ) : (
         <>
-          <div
+          <div className="sf-card"
             style={{
               marginTop: 18,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
+              padding: 16,
             }}
           >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 12,
+              }}
+            >
             <div className="sf-card" style={{ padding: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Sleep quality (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
@@ -503,6 +508,7 @@ export default function DashboardPage() {
               <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{topDriver ?? "—"}</div>
               <div style={{ marginTop: 6, color: "#444" }}>{topDriver ? "Most commonly logged" : "No driver logged yet"}</div>
             </div>
+          </div>
           </div>
 
           {needsNightLog ? (
@@ -597,7 +603,7 @@ export default function DashboardPage() {
             <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{habitsErr}</div>
           ) : null}
 
-          <div style={{ marginTop: 18 }}>
+          <div className="sf-card" style={{ marginTop: 18, padding: 16 }}>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Recent nights</div>
             <div className="sf-card" style={{ padding: 0, overflow: "hidden" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -645,6 +651,10 @@ export default function DashboardPage() {
               </table>
             </div>
           </div>
+
+          <footer style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid #d7d7d7", fontSize: 13, color: "#444", fontWeight: 700 }}>
+            All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
+          </footer>
         </>
       )}
     </div>
