@@ -653,7 +653,7 @@ export default function DashboardPage() {
               </table>
             </div>
           </div>
-        </>
+    
       )}
     </div>
   );
