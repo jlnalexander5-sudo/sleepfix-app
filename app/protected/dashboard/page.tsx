@@ -437,7 +437,7 @@ export default function DashboardPage() {
         <div>
           <div style={{ fontSize: 30, fontWeight: 800, color: "var(--sf-brand)" }}>Dashboard</div>
           <div style={{ marginTop: 6, color: "#444" }}>
-            Last 7 nights snapshot + RRSM preview.
+          Last 7 nights snapshot (baseline unlock at 3 valid nights).
           </div>
         </div>
       </div>
@@ -456,13 +456,20 @@ export default function DashboardPage() {
               padding: 16,
             }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 12,
-              }}
-            >
+          <div
+  className="sf-card"
+  style={{
+    marginTop: 18,
+    padding: 16,
+  }}
+>
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      gap: 12,
+    }}
+  ></div>
             <div className="sf-card" style={{ padding: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Sleep quality (avg)</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
