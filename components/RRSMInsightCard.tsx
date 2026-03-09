@@ -61,8 +61,8 @@ function humanizeWhyLine(line: string): string {
 
   // More human labels
   t = t.replace(/^Latency band:/i, "Time to fall asleep:");
-  t = t.replace(/^Wake band:/i, "Night waking (how often):");
-  t = t.replace(/^Dominant factor:/i, "Main factor:");
+  t = t.replace(/^Wake band:/i, "Night waking:");
+  t = t.replace(/^Dominant factor:/i, "Main sleep pattern:");
   t = t.replace(/^Primary driver:/i, "Main pattern:");
   t = t.replace(/^Sleep grade:/i, "Overall sleep:");
   t = t.replace(/^Risk score:/i, "Sleep risk score:");
@@ -73,16 +73,16 @@ function humanizeWhyLine(line: string): string {
   if (/^Mismatch:/i.test(t)) {
     const n = Number((t.match(/-?\d+(?:\.\d+)?/) || [])[0]);
     if (!Number.isNaN(n)) {
-      if (n === 0) return "Plan match: good (no mismatch)";
-      return `Plan match: off by ${n}`;
+      if (n === 0) return "Protocol fit: Good";
+      return `Protocol fit: Off by ${n}`;
     }
-    return "Plan match: (unknown)";
+    return "Protocol fit: Unknown";
   }
 
   // Friendly band words
   t = t.replace(/\bFast\b/g, "quick");
   t = t.replace(/\bMedium\b/g, "average");
-  t = t.replace(/\bMany\b/g, "a lot");
+  t = t.replace(/\bMany\b/g, "frequent");
 
   return t;
 }
@@ -347,33 +347,6 @@ export default function RRSMInsightCard(props: {
 
       <div className="mt-1 text-lg font-bold text-neutral-900">{insight.title}</div>
 
-      {hasUserInput && (
-        <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-          <div className="text-base font-semibold text-neutral-900">Your input</div>
-          <div className="mt-2 space-y-1 text-base text-neutral-700">
-            {Array.isArray(userInput?.drivers) && userInput!.drivers!.length > 0 ? (
-              <div>
-                <span className="font-semibold">Drivers:</span> {userInput!.drivers!.join(", ")}
-              </div>
-            ) : null}
-            {userInput?.primaryDriver ? (
-              <div>
-                <span className="font-semibold">Primary:</span> {userInput.primaryDriver}
-              </div>
-            ) : null}
-            {userInput?.secondaryDriver ? (
-              <div>
-                <span className="font-semibold">Secondary:</span> {userInput.secondaryDriver}
-              </div>
-            ) : null}
-            {userInput?.notes ? (
-              <div>
-                <span className="font-semibold">Notes:</span> {userInput.notes}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
 
       <div className="mt-4">
         <div className="text-base font-semibold text-neutral-900">Why</div>
