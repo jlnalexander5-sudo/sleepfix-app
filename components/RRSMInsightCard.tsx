@@ -348,13 +348,21 @@ export default function RRSMInsightCard(props: {
       !!userInput.notes
     );
 
+  const displayTitle = (() => {
+    const raw = insight.title ?? "";
+    if (/^Tonight\s+plan\s*:/i.test(raw)) {
+      return raw.replace(/^Tonight\s+plan\s*:/i, "This night’s performance:").trim();
+    }
+    return raw;
+  })();
+
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5">
       <div className="text-sm font-semibold text-neutral-600">
         {(insight.code ?? "RRSM") + (insight.code ? " " : "")}
       </div>
 
-      <div className="mt-1 text-lg font-bold text-neutral-900">{insight.title}</div>
+      <div className="mt-1 text-lg font-bold text-neutral-900">{displayTitle}</div>
 
 
       <div className="mt-4">
