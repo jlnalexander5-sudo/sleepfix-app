@@ -608,7 +608,7 @@ export default function DashboardPage() {
             <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{habitsErr}</div>
           ) : null}
 
-          <div style={{ marginTop: 18 }}>
+         <div style={{ marginTop: 18 }}>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Recent nights</div>
             <div className="sf-card" style={{ padding: 0, overflow: "hidden" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
