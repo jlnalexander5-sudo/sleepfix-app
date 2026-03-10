@@ -5,7 +5,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import RRSMInsightCard from "@/components/RRSMInsightCard";
 import { runRRSMEngineV2 } from "@/lib/rrsm/engine-v2";
-import InstallAppButton from "@/components/InstallAppButton";
 
 type NightRow = {
   night_id: string;
@@ -441,8 +440,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 30, fontWeight: 800 , color: 'var(--sf-brand)'}}>Dashboard</div>
-          <InstallAppButton />
-          <div style={{ marginTop: 6, color: "#444" }}>
+         <div style={{ marginTop: 6, color: "#444" }}>
             Last 7 nights snapshot (baseline unlock at 3 valid nights).
           </div>
         </div>
