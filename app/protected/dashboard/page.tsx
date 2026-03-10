@@ -551,7 +551,7 @@ export default function DashboardPage() {
             </div>
           ) : null}
 
-          <div style={{ marginTop: 16 }}>
+         <div style={{ marginTop: 16 }}>
             {insightErr ? (
               <div style={{ color: "#b00020" }}>{insightErr}</div>
             ) : insight ? (
