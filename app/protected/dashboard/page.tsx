@@ -1,10 +1,10 @@
 "use client";
 
-import InstallAppButton from "@/components/InstallAppButton";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import RRSMInsightCard from "@/components/RRSMInsightCard";
+import InstallAppButton from "@/components/InstallAppButton";
 import { runRRSMEngineV3 } from "@/lib/rrsm/engine-v3";
 
 type NightRow = {
@@ -436,13 +436,12 @@ export default function DashboardPage() {
     <div style={{ width: "100%", maxWidth: 1400, margin: "0 auto", padding: "28px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-        <div>
-  <div style={{ fontSize: 30, fontWeight: 800, color: "var(--sf-brand)" }}>Dashboard</div>
-  <InstallAppButton />
-  <div style={{ marginTop: 6, color: "#444" }}>
-    Last 7 nights snapshot (baseline unlock at 3 valid nights).
-  </div>
-</div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: "var(--sf-brand)" }}>Dashboard</div>
+          <InstallAppButton />
+          <div style={{ marginTop: 6, color: "#444" }}>
+            Last 7 nights snapshot (baseline unlock at 3 valid nights).
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -515,7 +514,7 @@ export default function DashboardPage() {
               <div style={{ marginTop: 6, color: "#444" }}>{topDriver ? "Most commonly logged" : "No driver logged yet"}</div>
             </div>
           </div>
-      </div>
+
           {needsNightLog ? (
             <div
               className="sf-card"
@@ -554,7 +553,7 @@ export default function DashboardPage() {
             </div>
           ) : null}
 
-         <div style={{ marginTop: 16 }}>
+          <div style={{ marginTop: 16 }}>
             {insightErr ? (
               <div style={{ color: "#b00020" }}>{insightErr}</div>
             ) : insight ? (
@@ -608,7 +607,7 @@ export default function DashboardPage() {
             <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{habitsErr}</div>
           ) : null}
 
-         <div style={{ marginTop: 18 }}>
+          <div style={{ marginTop: 18 }}>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Recent nights</div>
             <div className="sf-card" style={{ padding: 0, overflow: "hidden" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -654,7 +653,7 @@ export default function DashboardPage() {
                   </tr>
                 </tbody>
               </table>
-          </div>
+            </div>
           </div>
         </>
       )}
