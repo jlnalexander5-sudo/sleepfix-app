@@ -1,6 +1,11 @@
-self.addEventListener('install', (event) => {
-  console.log('Service Worker installed');
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("fetch", () => {
+  // Required so Chrome treats the app as installable.
 });
