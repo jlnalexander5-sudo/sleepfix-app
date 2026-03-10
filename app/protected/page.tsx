@@ -241,15 +241,6 @@ export default function ProtectedPage() {
             Save
           </button>
 
-          <hr style={{ margin: "18px 0", opacity: 0.2 }} />
-
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-            Raw profile JSON
-          </h3>
-
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, opacity: 0.9 }}>
-            {JSON.stringify(profile, null, 2)}
-          </pre>
         </div>
       )}
     </main>
