@@ -512,7 +512,7 @@ export default function DashboardPage() {
               <div style={{ marginTop: 6, color: "#444" }}>{topDriver ? "Most commonly logged" : "No driver logged yet"}</div>
             </div>
           </div>
-
+      </div>
           {needsNightLog ? (
             <div
               className="sf-card"
