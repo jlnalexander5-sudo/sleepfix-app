@@ -654,10 +654,10 @@ export default function DashboardPage() {
                   </tr>
                 </tbody>
               </table>
-            </div>
+          </div>
           </div>
         </>
-         )}
+      )}
     </div>
   );
 }
