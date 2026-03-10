@@ -2,8 +2,9 @@ import "react-datepicker/dist/react-datepicker.css";
 import "./globals.css";
 
 export const metadata = {
-  title: "SleepFixMe",
-  description: "SleepFixMe",
+  title: "SleepFix",
+  description: "SleepFix",
+  manifest: "/manifest.json"
 };
 
 export default function RootLayout({
