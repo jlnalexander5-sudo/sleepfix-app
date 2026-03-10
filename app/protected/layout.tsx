@@ -76,9 +76,9 @@ export default function ProtectedLayout({
             margin: "0 auto",
             padding: "18px 0 26px",
             borderTop: "1px solid #d7d7d7",
-            fontSize: 13,
+            fontSize: 11,
             color: "#444",
-            fontWeight: 700,
+            fontWeight: 400,
           }}
         >
           All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
