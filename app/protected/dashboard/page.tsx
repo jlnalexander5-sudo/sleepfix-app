@@ -1,5 +1,6 @@
 "use client";
 
+import InstallAppButton from "@/components/InstallAppButton";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -435,11 +436,13 @@ export default function DashboardPage() {
     <div style={{ width: "100%", maxWidth: 1400, margin: "0 auto", padding: "28px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: "var(--sf-brand)" }}>Dashboard</div>
-          <div style={{ marginTop: 6, color: "#444" }}>
-            Last 7 nights snapshot + RRSM preview (baseline unlock at 3 valid nights).
-          </div>
-        </div>
+        <div>
+  <div style={{ fontSize: 30, fontWeight: 800, color: "var(--sf-brand)" }}>Dashboard</div>
+  <InstallAppButton />
+  <div style={{ marginTop: 6, color: "#444" }}>
+    Last 7 nights snapshot (baseline unlock at 3 valid nights).
+  </div>
+</div>
       </div>
 
       {loading ? (
