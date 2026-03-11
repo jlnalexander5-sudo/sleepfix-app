@@ -737,17 +737,6 @@ export default function FAQPage() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: "#f8fafc",
-            border: "1px solid #e5e7eb",
-            borderRadius: 12,
-            padding: 16,
-            color: "#334155",
-            fontSize: 14,
-            lineHeight: 1.6,
-          }}
-        >
         
         </div>
       </div>
