@@ -784,38 +784,7 @@ export default function FAQPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link href="/protected/dashboard">
-            <button
-              style={{
-                padding: "10px 14px",
-                background: "#fff",
-                border: "1px solid #d1d5db",
-                borderRadius: 10,
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              Back to Dashboard
-            </button>
-          </Link>
-
-          <Link href="/protected/protocols">
-            <button
-              style={{
-                padding: "10px 14px",
-                background: "#4f46e5",
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              View Protocols
-            </button>
-          </Link>
-   <div style={{ marginTop: 40, textAlign: "center" }}>
+      <div style={{ marginTop: 40, textAlign: "center" }}>
     <button
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       style={{
