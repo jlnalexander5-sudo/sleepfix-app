@@ -735,9 +735,7 @@ export default function FAQPage() {
               Close all in section
             </button>
           </div>
-        </div>
-
-        
+        </div> 
         </div>
       </div>
 
