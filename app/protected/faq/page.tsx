@@ -765,7 +765,15 @@ export default function FAQPage() {
     transition: "all 0.2s ease",
   }}
 >
-           <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>
+  {currentSection.title}
+</div>
+{currentSection.intro ? (
+  <div style={{ color: "#555", marginBottom: 16, fontSize: 15 }}>
+    {currentSection.intro}
+  </div>
+) : null}  
+       <div style={{ display: "grid", gap: 12 }}>
           {currentSection.items.map((item) => (
             <FAQAccordionItem
               key={item.question}
