@@ -668,16 +668,14 @@ export default function FAQPage() {
         </div>
       </div>
 
-      <div
-        className="sf-card"
-        style={{
-          marginTop: 20,
-          padding: 18,
-          display: "grid",
-          gridTemplateColumns: "1.2fr 2fr",
-          gap: 16,
-        }}
-      >
+  <div
+  className="sf-card"
+  style={{
+    marginTop: 20,
+    padding: 18,
+    maxWidth: 520,
+  }}
+>
         <div>
           <label
             htmlFor="faq-section"
