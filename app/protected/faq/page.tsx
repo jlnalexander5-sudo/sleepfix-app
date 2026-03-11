@@ -748,11 +748,7 @@ export default function FAQPage() {
             lineHeight: 1.6,
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>{currentSection.title}</div>
-          <div>
-            {currentSection.intro ??
-              "Use the dropdown to move through the FAQ and expand any question you want to explore."}
-          </div>
+        
         </div>
       </div>
 
