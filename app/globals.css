@@ -353,3 +353,128 @@ h1, h2 {
 .sf-page-title {
   color: var(--sf-brand);
 }
+/* SleepFixMe mobile auth layout */
+.sf-auth-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.sf-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 14px 28px;
+}
+
+.sf-auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+  padding: 24px 18px;
+}
+
+.sf-auth-brand {
+  font-size: 14px;
+  font-weight: 800;
+  color: #4f46e5;
+  letter-spacing: 0.02em;
+  margin-bottom: 10px;
+}
+
+.sf-auth-title {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 10px;
+}
+
+.sf-auth-subtitle {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #4b5563;
+  margin: 0 0 18px;
+}
+
+.sf-auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.sf-auth-label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.sf-auth-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px 14px;
+  font-size: 16px;
+  color: #111827;
+  outline: none;
+}
+
+.sf-auth-input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.sf-auth-message {
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #374151;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sf-auth-button {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: #4f46e5;
+  color: #fff;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sf-auth-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.sf-auth-switch {
+  margin-top: 14px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #4f46e5;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px 0 0;
+}
+
+@media (min-width: 768px) {
+  .sf-auth-shell {
+    padding: 32px 20px 40px;
+  }
+
+  .sf-auth-card {
+    max-width: 460px;
+    padding: 30px 24px;
+  }
+}
