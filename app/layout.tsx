@@ -1,5 +1,6 @@
 import "react-datepicker/dist/react-datepicker.css";
 import "./globals.css";
+import IPhoneInstallPrompt from "@/components/IPhoneInstallPrompt";
 
 export const metadata = {
   title: "SleepFix",
@@ -18,7 +19,10 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
 
-      <body>{children}</body>
+      <body>
+<IPhoneInstallPrompt />
+{children}
+</body>
     </html>
   );
 }
