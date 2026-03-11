@@ -3,8 +3,8 @@ import "./globals.css";
 import IPhoneInstallPrompt from "@/components/IPhoneInstallPrompt";
 
 export const metadata = {
-  title: "SleepFix",
-  description: "SleepFix",
+  title: "SleepFixMe",
+  description: "SleepFixMe",
   manifest: "/manifest.json"
 };
 
