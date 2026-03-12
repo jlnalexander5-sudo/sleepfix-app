@@ -47,6 +47,21 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
+  const pathname = request.nextUrl.pathname;
+
+// Allow static PWA files to bypass auth redirect
+if (
+  pathname === "/manifest.json" ||
+  pathname === "/sw.js" ||
+  pathname === "/favicon.ico" ||
+  pathname.endsWith(".png") ||
+  pathname.endsWith(".jpg") ||
+  pathname.endsWith(".jpeg") ||
+  pathname.endsWith(".svg") ||
+  pathname.startsWith("/_next/")
+) {
+  return NextResponse.next();
+}
   if (
     request.nextUrl.pathname !== "/" &&
     !user &&
