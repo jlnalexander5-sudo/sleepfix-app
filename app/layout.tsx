@@ -15,8 +15,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-    <head>
+  <head>
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon192.png" />
+  <link rel="apple-touch-icon" href="/icon192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="SleepFixMe" />
