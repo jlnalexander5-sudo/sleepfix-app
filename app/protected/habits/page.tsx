@@ -208,7 +208,7 @@ export default function HabitsPage() {
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 text-base">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Habits</h1>
+        <h1 className="text-3xl font-bold">Sleep Diary</h1>
         <p className="text-base text-neutral-600 mt-2">
           Quick “day factors” log. Tick what actually happened today (objective inputs), saved per date.
         </p>
