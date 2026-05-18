@@ -626,7 +626,5 @@ const canSaveNight = missingRequired.length === 0;
         )}
       </div>
       </div>
-     
-    </div>
   );
 }
