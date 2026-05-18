@@ -292,10 +292,7 @@ export default function HabitsPage() {
           <div className="mt-1 text-sm text-neutral-700">
             Use this space to record what happened before sleep, during the night, and how you felt the next day.
           </div>
-          <div className="mt-2 text-sm text-neutral-600">
-           Use this space to record what happened before sleep, during the night, and how you felt the next day.
-          </div>
-        </div>
+               </div>
       </div>
 
       {error ? (
