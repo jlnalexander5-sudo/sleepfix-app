@@ -407,9 +407,9 @@ export default function HabitsPage() {
       </section>
 
       <section className="mt-6 rounded-xl border p-4 bg-white">
-        <h2 className="text-xl font-semibold">Quick sleep factors</h2>
+        <h2 className="text-xl font-semibold">Quick tags (optional)</h2>
         <p className="text-base text-neutral-600 mt-2">
-          These are quick checkboxes. They support pattern detection, but they are secondary to the diary notes.
+          Optional quick tags for pattern tracking.
         </p>
 
         <div className="mt-4 grid gap-3">
