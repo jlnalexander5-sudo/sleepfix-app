@@ -628,7 +628,7 @@ const canSaveNight = missingRequired.length === 0;
       </div>
 
 
-       <style jsx global>{`
+       <style jsx global>{
         .react-datepicker {
           font-size: 1rem;
         }
