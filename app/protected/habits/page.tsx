@@ -91,7 +91,7 @@ export default function HabitsPage() {
   }, []);
 
   const fromYMD = useMemo(
-    () => (todayYMD ? addDays(todayYMD, -13) : ""),
+    () => (todayYMD ? addDays(todayYMD, -6) : ""),
     [todayYMD],
   );
   const dayList = useMemo(
@@ -362,7 +362,7 @@ export default function HabitsPage() {
       </section>
 
       <section className="mt-8 rounded-xl border bg-white p-4">
-        <h2 className="text-xl font-semibold">Diary history — last 14 days</h2>
+        <h2 className="text-xl font-semibold">Diary history — last 7 days</h2>
         <p className="mt-2 text-base text-neutral-600">
           A short history of what you recorded, so patterns can start to stand
           out.
