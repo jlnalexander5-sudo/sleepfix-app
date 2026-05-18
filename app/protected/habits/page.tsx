@@ -107,6 +107,7 @@ export default function HabitsPage() {
   const [rowsByDate, setRowsByDate] = useState<Record<string, DailyHabitRow>>({});
   const [diaryByDate, setDiaryByDate] = useState<Record<string, DiaryEntry>>({});
   const [selectedDate, setSelectedDate] = useState<string>("");
+  const [personalNote, setPersonalNote] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [diarySavedMessage, setDiarySavedMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -361,7 +362,17 @@ export default function HabitsPage() {
               placeholder="Example: stress, heat, noise, pain, alcohol, late work, late food..."
             />
           </label>
+<label className="mt-4 block font-bold">
+  My own notes / lesson from this night
+</label>
 
+<textarea
+  value={personalNote}
+  onChange={(e) => setPersonalNote(e.target.value)}
+  rows={4}
+  placeholder="Example: I woke up to use the bathroom 3 times. I drank too much water before bed. Next time I should stop drinking fluids by 7pm if I sleep at 10pm."
+  className="mt-2 w-full rounded-lg border p-3"
+/>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-2">
               <span className="font-semibold">Stress level today (1–10)</span>
