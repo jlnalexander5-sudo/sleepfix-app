@@ -159,7 +159,7 @@ export default function HabitsPage() {
           what_helped: row.what_helped ?? "",
           during_night: row.during_night ?? "",
           personal_note: row.personal_note ?? "",
-          morning_feeling: row.morning_feeling ?? "",
+          
         };
       });
 
