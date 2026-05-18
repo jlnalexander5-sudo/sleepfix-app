@@ -370,7 +370,7 @@ export default function HabitsPage() {
   value={personalNote}
   onChange={(e) => setPersonalNote(e.target.value)}
   rows={4}
-  placeholder="Example: I woke up to use the bathroom 3 times. I drank too much water before bed. Next time I should stop drinking fluids by 7pm if I sleep at 10pm."
+  placeholder="Example: I woke up to use the bathroom 3 times. I probably drank too many fluids before bed. Next time I should stop drinking after 7pm if sleeping at 10pm."
   className="mt-2 w-full rounded-lg border p-3"
 />
           <div className="grid gap-4 md:grid-cols-2">
