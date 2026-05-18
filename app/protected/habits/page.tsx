@@ -406,25 +406,7 @@ export default function HabitsPage() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-xl border p-4 bg-white">
-        <h2 className="text-xl font-semibold">Quick tags (optional)</h2>
-        <p className="text-base text-neutral-600 mt-2">
-          Optional quick tags for pattern tracking.
-        </p>
-
-        <div className="mt-4 grid gap-3">
-          {habitGuide.map((item) => (
-            <HabitCheckbox
-              key={String(item.field)}
-              date={selectedDate || todayYMD}
-              field={item.field}
-              label={item.label}
-              explanation={item.explanation}
-            />
-          ))}
-        </div>
-      </section>
-
+   
       <section className="mt-6 rounded-xl border p-4 bg-white">
         <h2 className="text-xl font-semibold">Diary history — last 14 days</h2>
         <p className="text-base text-neutral-600 mt-2">
