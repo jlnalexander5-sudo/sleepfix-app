@@ -575,36 +575,6 @@ const canSaveNight = missingRequired.length === 0;
 
             </div>
 
-      {/* Optional inputs */}
-      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-section-title">Optional extras</div>
-        <div className="sf-help">
-          These are optional. They help SleepFix learn patterns over time. This is different from the required metrics above.
-        </div>
-
-        <div style={{ marginTop: 14, marginBottom: 14 }}>
-          <div className="sf-field-label">Protocol used (optional)</div>
-          <div className="sf-help">
-            Select this only if you actually used a protocol last night. (This is separate from the protocol the app recommends.)
-          </div>
-          <a href="/protected/protocols" style={{ display: "inline-block", marginTop: 8, padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", background: "white", fontWeight: 600 }}>
-              View protocol steps
-            </a>
-          <select className="sf-select" style={{ marginTop: 10 }} value={protocolUsedName} onChange={(e) => setProtocolUsedName(e.target.value)}>
-            <option value="">(none)</option>
-            {PROTOCOLS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-          <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
-            Logging this helps the app detect “protocol mismatch” (e.g. you used a protocol that didn’t fit the pattern).
-          </div>
-        </div>
-
-        {/* After the night: your best guess */}
-
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
           After the night: what stood out?
