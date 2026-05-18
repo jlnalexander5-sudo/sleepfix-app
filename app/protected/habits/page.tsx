@@ -386,19 +386,6 @@ export default function HabitsPage() {
                 placeholder="1–10"
               />
             </label>
-
-            <label className="grid gap-2">
-              <span className="font-semibold">Energy level next day (1–10)</span>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={selectedDiary.energyNextDay}
-                onChange={(e) => updateDiaryField("energyNextDay", e.target.value)}
-                className="w-full rounded-lg border p-3 text-base"
-                placeholder="1–10"
-              />
-            </label>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
