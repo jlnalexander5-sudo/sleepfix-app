@@ -66,8 +66,7 @@ function diarySignal(entry: DiaryEntry) {
     Number(Boolean(entry.before_sleep.trim())) +
     Number(Boolean(entry.what_helped.trim())) +
     Number(Boolean(entry.during_night.trim())) +
-    Number(Boolean(entry.personal_note.trim())) +
-  Number(Boolean(entry.personal_note.trim()))
+    Number(Boolean(entry.personal_note.trim()));
   if (filled >= 4) return "Strong diary entry";
   if (filled >= 2) return "Partial diary entry";
   return "No diary entry";
@@ -129,7 +128,7 @@ export default function HabitsPage() {
       const { data, error: fetchErr } = await supabase
         .from("sleep_diary_entries")
         .select(
-          "id,user_id,entry_date,before_sleep,what_helped,during_night,personal_note,morning_feeling",
+          "id,user_id,entry_date,before_sleep,what_helped,during_night,personal_note",
         )
         .eq("user_id", uid)
         .gte("entry_date", fromYMD)
@@ -207,7 +206,6 @@ export default function HabitsPage() {
       what_helped: entry.what_helped.trim() || null,
       during_night: entry.during_night.trim() || null,
       personal_note: entry.personal_note.trim() || null,
-      morning_feeling: entry.morning_feeling || null,
     };
 
     const { data: existing, error: existingErr } = await supabase
@@ -389,8 +387,7 @@ export default function HabitsPage() {
                   {entry.before_sleep.trim() ||
                   entry.what_helped.trim() ||
                   entry.during_night.trim() ||
-                  entry.personal_note.trim() ||
-                  entry.morning_feeling ? (
+                  entry.personal_note.trim() ? (
                     <div className="mt-2 grid gap-1 text-sm text-neutral-700">
                       {entry.before_sleep.trim() ? (
                         <div>
@@ -411,12 +408,6 @@ export default function HabitsPage() {
                       {entry.personal_note.trim() ? (
                         <div>
                           <strong>My note:</strong> {entry.personal_note}
-                        </div>
-                      ) : null}
-                      {entry.morning_feeling ? (
-                        <div>
-                          <strong>Morning feeling:</strong>{" "}
-                          {entry.morning_feeling}
                         </div>
                       ) : null}
                     </div>
