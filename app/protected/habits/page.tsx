@@ -407,7 +407,7 @@ export default function HabitsPage() {
       </section>
 
    
-      <section className="mt-6 rounded-xl border p-4 bg-white">
+      <section className="mt-8 rounded-xl border p-4 bg-white">
         <h2 className="text-xl font-semibold">Diary history — last 14 days</h2>
         <p className="text-base text-neutral-600 mt-2">
         Use this space to record what happened before sleep, during the night, and how you felt the next day.
