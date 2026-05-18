@@ -8,9 +8,7 @@ type DiaryEntry = {
   user_id?: string;
   entry_date: string;
   before_sleep: string;
-  what_helped: string;
   during_night: string;
-  personal_note: string;
 };
 
 function toYMD(d: Date) {
@@ -43,9 +41,7 @@ function emptyDiary(date: string): DiaryEntry {
   return {
     entry_date: date,
     before_sleep: "",
-    what_helped: "",
     during_night: "",
-    personal_note: "",
   };
 }
 
@@ -64,11 +60,10 @@ function formatDisplayDate(ymd: string) {
 function diarySignal(entry: DiaryEntry) {
   const filled =
     Number(Boolean(entry.before_sleep.trim())) +
-    Number(Boolean(entry.what_helped.trim())) +
-    Number(Boolean(entry.during_night.trim())) +
-    Number(Boolean(entry.personal_note.trim()));
-  if (filled >= 4) return "Strong diary entry";
-  if (filled >= 2) return "Partial diary entry";
+    Number(Boolean(entry.during_night.trim()));
+
+  if (filled >= 2) return "Saved diary entry";
+  if (filled >= 1) return "Partial diary entry";
   return "No diary entry";
 }
 
@@ -80,9 +75,10 @@ export default function HabitsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [diaryByDate, setDiaryByDate] = useState<Record<string, DiaryEntry>>(
-    {},
-  );
+  const [diaryByDate, setDiaryByDate] = useState<Record<string, DiaryEntry>>({});
+  const [draftBeforeSleep, setDraftBeforeSleep] = useState("");
+  const [draftDuringNight, setDraftDuringNight] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
   const [diarySavedMessage, setDiarySavedMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
@@ -94,6 +90,7 @@ export default function HabitsPage() {
     () => (todayYMD ? addDays(todayYMD, -6) : ""),
     [todayYMD],
   );
+
   const dayList = useMemo(
     () => (todayYMD ? buildDayList(fromYMD, todayYMD) : []),
     [fromYMD, todayYMD],
@@ -127,9 +124,7 @@ export default function HabitsPage() {
 
       const { data, error: fetchErr } = await supabase
         .from("sleep_diary_entries")
-        .select(
-          "id,user_id,entry_date,before_sleep,what_helped,during_night,personal_note",
-        )
+        .select("id,user_id,entry_date,before_sleep,during_night")
         .eq("user_id", uid)
         .gte("entry_date", fromYMD)
         .lte("entry_date", todayYMD)
@@ -155,10 +150,7 @@ export default function HabitsPage() {
           user_id: row.user_id,
           entry_date: row.entry_date,
           before_sleep: row.before_sleep ?? "",
-          what_helped: row.what_helped ?? "",
           during_night: row.during_night ?? "",
-          personal_note: row.personal_note ?? "",
-          
         };
       });
 
@@ -175,20 +167,26 @@ export default function HabitsPage() {
     };
   }, [supabase, fromYMD, todayYMD, dayList]);
 
-  const selectedDiary =
-    diaryByDate[selectedDate] ?? emptyDiary(selectedDate || todayYMD);
-
-  function updateDiaryField(field: keyof DiaryEntry, value: string) {
+  useEffect(() => {
     if (!selectedDate) return;
 
+    const savedEntry = diaryByDate[selectedDate] ?? emptyDiary(selectedDate);
+    setDraftBeforeSleep(savedEntry.before_sleep);
+    setDraftDuringNight(savedEntry.during_night);
+    setIsDirty(false);
     setDiarySavedMessage("");
-    setDiaryByDate((prev) => ({
-      ...prev,
-      [selectedDate]: {
-        ...(prev[selectedDate] ?? emptyDiary(selectedDate)),
-        [field]: value,
-      },
-    }));
+  }, [selectedDate, diaryByDate]);
+
+  function updateDraftBeforeSleep(value: string) {
+    setDraftBeforeSleep(value);
+    setDiarySavedMessage("");
+    setIsDirty(true);
+  }
+
+  function updateDraftDuringNight(value: string) {
+    setDraftDuringNight(value);
+    setDiarySavedMessage("");
+    setIsDirty(true);
   }
 
   async function saveDiary() {
@@ -197,15 +195,13 @@ export default function HabitsPage() {
     setSaving(true);
     setError(null);
 
-    const entry = diaryByDate[selectedDate] ?? emptyDiary(selectedDate);
-
     const payload = {
       user_id: userId,
       entry_date: selectedDate,
-      before_sleep: entry.before_sleep.trim() || null,
-      what_helped: entry.what_helped.trim() || null,
-      during_night: entry.during_night.trim() || null,
-      personal_note: entry.personal_note.trim() || null,
+      before_sleep: draftBeforeSleep.trim() || null,
+      during_night: draftDuringNight.trim() || null,
+      what_helped: null,
+      personal_note: null,
     };
 
     const { data: existing, error: existingErr } = await supabase
@@ -234,7 +230,20 @@ export default function HabitsPage() {
       return;
     }
 
-    setDiarySavedMessage("Diary saved.");
+    setDiaryByDate((prev) => ({
+      ...prev,
+      [selectedDate]: {
+        ...(prev[selectedDate] ?? emptyDiary(selectedDate)),
+        id: existing?.id ?? prev[selectedDate]?.id,
+        user_id: userId,
+        entry_date: selectedDate,
+        before_sleep: draftBeforeSleep,
+        during_night: draftDuringNight,
+      },
+    }));
+
+    setDiarySavedMessage("Saved ✅");
+    setIsDirty(false);
     setSaving(false);
     window.setTimeout(() => setDiarySavedMessage(""), 2500);
   }
@@ -244,9 +253,9 @@ export default function HabitsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Sleep Diary</h1>
         <p className="mt-2 text-base text-neutral-600">
-          Record your nightly observations, thoughts, and sleep patterns. Over
-          time, this becomes a useful history for spotting what is helping or
-          working against your sleep.
+          Record what happened before sleep and during the night. Over time, this
+          becomes a useful history for spotting what is helping or working
+          against your sleep.
         </p>
 
         <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
@@ -254,8 +263,8 @@ export default function HabitsPage() {
             Diary page = nightly observations and pattern tracking.
           </div>
           <div className="mt-1 text-sm text-neutral-700">
-            Use this space to record what happened before sleep, during the
-            night, and how you felt the next day.
+            Keep it simple: write what happened before bed and what happened
+            during the night.
           </div>
         </div>
       </div>
@@ -271,7 +280,7 @@ export default function HabitsPage() {
           <div>
             <h2 className="text-xl font-semibold">Diary entry</h2>
             <p className="mt-1 text-base text-neutral-600">
-              Choose the day/night and write what actually happened.
+              Choose the day/night, write the entry, then save before leaving.
             </p>
           </div>
 
@@ -299,62 +308,41 @@ export default function HabitsPage() {
           <label className="grid gap-2">
             <span className="font-semibold">Before sleep</span>
             <textarea
-              value={selectedDiary.before_sleep}
-              onChange={(e) => updateDiaryField("before_sleep", e.target.value)}
+              value={draftBeforeSleep}
+              onChange={(e) => updateDraftBeforeSleep(e.target.value)}
               rows={4}
               className="w-full rounded-lg border p-3 text-base"
-              placeholder="Example: late screen time, heavy meal, racing thoughts, relaxed evening, warm room..."
+              placeholder="Example: screen time, food, drink, caffeine, exercise, stress, relaxation, room temperature..."
             />
           </label>
 
           <label className="grid gap-2">
-            <span className="font-semibold">What seemed to help?</span>
+            <span className="font-semibold">During the night / after waking</span>
             <textarea
-              value={selectedDiary.what_helped}
-              onChange={(e) => updateDiaryField("what_helped", e.target.value)}
-              rows={3}
+              value={draftDuringNight}
+              onChange={(e) => updateDraftDuringNight(e.target.value)}
+              rows={5}
               className="w-full rounded-lg border p-3 text-base"
-              placeholder="Example: cooler room, earlier bedtime, no caffeine, walk, breathing, less screen time..."
+              placeholder="Example: woke up at 3am, bathroom trip, cold/hot, noise, pain, dreams, racing thoughts, how you felt after waking..."
             />
           </label>
 
-          <label className="grid gap-2">
-            <span className="font-semibold">During the night</span>
-            <textarea
-              value={selectedDiary.during_night}
-              onChange={(e) => updateDiaryField("during_night", e.target.value)}
-              rows={3}
-              className="w-full rounded-lg border p-3 text-base"
-              placeholder="Example: woke up at 3am, bathroom trip, heat, noise, pain, dreams, restlessness..."
-            />
-          </label>
-
-          <label className="grid gap-2">
-            <span className="font-semibold">
-              My own notes / lesson from this night
-            </span>
-            <textarea
-              value={selectedDiary.personal_note}
-              onChange={(e) =>
-                updateDiaryField("personal_note", e.target.value)
-              }
-              rows={4}
-              className="w-full rounded-lg border p-3 text-base"
-              placeholder="Example: I woke up to use the bathroom 3 times. I probably drank too many fluids before bed. Next time I should stop drinking after 7pm if sleeping at 10pm."
-            />
-          </label>
-
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
+              type="button"
               onClick={saveDiary}
               disabled={!userId || !selectedDate || saving}
               className="rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save diary entry before leaving this page"}
+              {saving ? "Saving..." : "Save diary entry before leaving"}
             </button>
-              <div className="mt-2 text-sm font-semibold text-red-700">
-  Unsaved notes will be lost if you leave or refresh this page.
-</div>
+
+            {isDirty ? (
+              <span className="text-sm font-semibold text-red-700">
+                Unsaved changes
+              </span>
+            ) : null}
+
             {diarySavedMessage ? (
               <span className="text-sm font-semibold text-green-700">
                 {diarySavedMessage}
@@ -367,7 +355,7 @@ export default function HabitsPage() {
       <section className="mt-8 rounded-xl border bg-white p-4">
         <h2 className="text-xl font-semibold">Diary history — last 7 days</h2>
         <p className="mt-2 text-base text-neutral-600">
-        Only saved diary entries appear here after refresh.
+          Only saved diary entries appear here.
         </p>
 
         <div className="mt-4 grid gap-3">
@@ -386,30 +374,18 @@ export default function HabitsPage() {
                     </div>
                   </div>
 
-                  {entry.before_sleep.trim() ||
-                  entry.what_helped.trim() ||
-                  entry.during_night.trim() ||
-                  entry.personal_note.trim() ? (
+                  {entry.before_sleep.trim() || entry.during_night.trim() ? (
                     <div className="mt-2 grid gap-1 text-sm text-neutral-700">
                       {entry.before_sleep.trim() ? (
                         <div>
                           <strong>Before sleep:</strong> {entry.before_sleep}
                         </div>
                       ) : null}
-                      {entry.what_helped.trim() ? (
-                        <div>
-                          <strong>What helped:</strong> {entry.what_helped}
-                        </div>
-                      ) : null}
+
                       {entry.during_night.trim() ? (
                         <div>
                           <strong>During the night:</strong>{" "}
                           {entry.during_night}
-                        </div>
-                      ) : null}
-                      {entry.personal_note.trim() ? (
-                        <div>
-                          <strong>My note:</strong> {entry.personal_note}
                         </div>
                       ) : null}
                     </div>
