@@ -16,19 +16,10 @@ function parseWakeUpsToNumber(choice: string): number {
 import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import RRSMInsightCard, { RRSMInsight, RRSMUserInput } from "@/components/RRSMInsightCard";
-function buildNotes(notes: string, affected: string[]) {
-  const parts: string[] = [];
-
-  if (affected && affected.length > 0) {
-    parts.push("Affected tonight: " + affected.join(", "));
-  }
-
-  if (notes && notes.trim() !== "") {
-    parts.push("Notes: " + notes.trim());
-  }
-
-  return parts.join(" | ");
+function buildDriverNotes(drivers: string[]) {
+  const selectedDrivers = drivers.filter((d) => d !== "Nothing / no clear driver");
+  if (selectedDrivers.length === 0) return null;
+  return "After the night: " + selectedDrivers.join(", ");
 }
 const DatePicker = dynamic(
   () => import("react-datepicker").then((m) => m.default as any),
@@ -212,17 +203,8 @@ export default function SleepPage() {
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
 
-  // RRSM insight
-  const [rrsmInsight, setRrsmInsight] = useState<RRSMInsight | null>(null);
-  const [rrsmInsightLoading, setRrsmInsightLoading] = useState(true);
-  const [rrsmInsightError, setRrsmInsightError] = useState<string | null>(null);
-
   // Driver confirmation (simple fields)
   const [drivers, setDrivers] = useState<string[]>(["Nothing / no clear driver"]);
-  const [userNotes, setUserNotes] = useState<string>("");
-  const [affectedTonight, setAffectedTonight] = useState<string[]>([]);
-
-
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -237,8 +219,6 @@ export default function SleepPage() {
     setBodyTags([]);
     setProtocolUsedName("");
     setDrivers(["Nothing / no clear driver"]);
-    setUserNotes("");
-      setAffectedTonight([]);
 
     // Put dates back to a sensible “last night” default
     // Start = yesterday 11:30 PM, End = today 7:30 AM
@@ -326,35 +306,6 @@ export default function SleepPage() {
     })();
   }, [supabase, userId]);
 
-  // Fetch RRSM insight (POST only)
-  useEffect(() => {
-    if (!userId) return;
-    (async () => {
-      setRrsmInsightLoading(true);
-      setRrsmInsightError(null);
-      try {
-        const res = await fetch("/api/rrsm/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ days: 7, includeDrivers: true }),
-        });
-
-        if (!res.ok) {
-          const t = await res.text();
-          throw new Error(`RRSM analyze failed (${res.status}). ${t}`);
-        }
-
-        const data = (await res.json()) as { insights?: RRSMInsight[] };
-        setRrsmInsight(data?.insights?.[0] ?? null);
-      } catch (e: any) {
-        setRrsmInsight(null);
-        setRrsmInsightError(e?.message ?? "RRSM analyze failed.");
-      } finally {
-        setRrsmInsightLoading(false);
-      }
-    })();
-  }, [userId]);
-
   async function saveNight() {
     if (!userId || !canSaveNight) return;
 
@@ -430,7 +381,7 @@ export default function SleepPage() {
         primary_driver: primaryDriver,
         secondary_driver: extraDrivers.length ? extraDrivers.join(", ") : null,
         protocol_used_name: !protocolUsedName || protocolUsedName === "none" ? null : protocolUsedName,
-        notes: buildNotes(userNotes, affectedTonight) || null,
+        notes: buildDriverNotes(drivers),
       };
 
       const { data: inserted, error } = await supabase
@@ -450,22 +401,7 @@ export default function SleepPage() {
       resetNightForm();
       setSaveNotice("Saved ✅");
 
-      // Optional: refresh RRSM insight immediately after saving a valid night.
-      setRrsmInsightLoading(true);
-      try {
-        const response = await fetch("/api/rrsm/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
-        });
-
-        if (response.ok) {
-          const json = (await response.json()) as { insight?: unknown };
-          if (json?.insight) setRrsmInsight(json.insight as RRSMInsight);
-        }
-      } catch {
-        // ignore; the night still saved
-      } finally {
+    } finally {
         setRrsmInsightLoading(false);
       }
     } finally {
@@ -489,12 +425,6 @@ if (!mindTags || mindTags.length === 0) missingRequired.push("Mind tag");
 if (!environmentTags || environmentTags.length === 0) missingRequired.push("Environment tag");
 if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body tag");
 const canSaveNight = missingRequired.length === 0;
-
-const userInput: RRSMUserInput = {
-    primaryDriver: drivers.join(", "),
-    secondaryDriver: "",
-    notes: buildNotes(userNotes, affectedTonight),
-  };
 
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "24px 18px" }}>
@@ -684,7 +614,7 @@ const userInput: RRSMUserInput = {
           After the night: what stood out?
         </div>
         <div className="sf-help" style={{ marginBottom: 12 }}>
-          This is your best guess about what may have affected the night. It’s different from <b>Habits</b>, which logs what happened during the day.
+          This is your best guess about what may have affected the night. This is a quick driver check, not a diary note. Longer reflection belongs in the Diary page.
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -710,18 +640,7 @@ const userInput: RRSMUserInput = {
           />
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <div className="sf-field-label">Notes (optional)</div>
-          <div className="sf-help">
-            The information you provide also goes into our analysis and gives us more information to work with.
-          </div>
-          <textarea
-            className="sf-textarea"
-            value={userNotes}
-            onChange={(e) => setUserNotes(e.target.value)}
-            placeholder="e.g., neighbor noise until midnight, but slept well after"
-          />
-        </div>
+
 
         <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
           {isSavingNight ? "Saving…" : saveNotice === "Saved" ? "Saved" : "Save night"}
@@ -742,11 +661,6 @@ const userInput: RRSMUserInput = {
       </div>
       </div>
 
-
-      {/* Insight card */}
-      <div style={{ marginTop: 18 }}>
-        <RRSMInsightCard insight={rrsmInsight} loading={rrsmInsightLoading} error={rrsmInsightError} userInput={userInput} />
-      </div>
 
        <style jsx global>{`
         .react-datepicker {
