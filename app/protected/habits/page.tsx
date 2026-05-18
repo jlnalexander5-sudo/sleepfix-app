@@ -333,7 +333,7 @@ export default function HabitsPage() {
 
         <div className="mt-4 grid gap-4">
           <label className="grid gap-2">
-            <span className="font-semibold">What happened before sleep?</span>
+            <span className="font-semibold">Before sleep</span>
             <textarea
               value={selectedDiary.sleepContext}
               onChange={(e) => updateDiaryField("sleepContext", e.target.value)}
@@ -344,7 +344,7 @@ export default function HabitsPage() {
           </label>
 
           <label className="grid gap-2">
-            <span className="font-semibold">What helped?</span>
+            <span className="font-semibold">What helped your sleep?</span>
             <textarea
               value={selectedDiary.whatHelped}
               onChange={(e) => updateDiaryField("whatHelped", e.target.value)}
@@ -355,7 +355,7 @@ export default function HabitsPage() {
           </label>
 
           <label className="grid gap-2">
-            <span className="font-semibold">What worked against your sleep?</span>
+            <span className="font-semibold">During the night / what disturbed sleep?</span>
             <textarea
               value={selectedDiary.whatWorkedAgainst}
               onChange={(e) => updateDiaryField("whatWorkedAgainst", e.target.value)}
