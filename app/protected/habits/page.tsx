@@ -11,7 +11,6 @@ type DiaryEntry = {
   what_helped: string;
   during_night: string;
   personal_note: string;
-  morning_feeling: string;
 };
 
 function toYMD(d: Date) {
@@ -47,7 +46,6 @@ function emptyDiary(date: string): DiaryEntry {
     what_helped: "",
     during_night: "",
     personal_note: "",
-    morning_feeling: "",
   };
 }
 
@@ -349,28 +347,7 @@ export default function HabitsPage() {
             />
           </label>
 
-          <label className="grid gap-2">
-            <span className="font-semibold">How do you feel this morning?</span>
-            <select
-              value={selectedDiary.morning_feeling}
-              onChange={(e) =>
-                updateDiaryField("morning_feeling", e.target.value)
-              }
-              className="w-full rounded-lg border p-3 text-base"
-            >
-              <option value="">Choose one</option>
-              <option value="refreshed">Refreshed / clear</option>
-              <option value="okay">Okay / normal</option>
-              <option value="tired">Tired but functional</option>
-              <option value="groggy">Groggy / heavy</option>
-              <option value="wired">Wired but tired</option>
-              <option value="anxious">Anxious / unsettled</option>
-              <option value="sore">Sore / physically heavy</option>
-              <option value="headache">Headache / foggy</option>
-            </select>
-          </label>
-
-          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={saveDiary}
               disabled={!userId || !selectedDate || saving}
