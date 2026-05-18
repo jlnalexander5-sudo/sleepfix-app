@@ -67,7 +67,7 @@ function diarySignal(entry: DiaryEntry) {
     Number(Boolean(entry.what_helped.trim())) +
     Number(Boolean(entry.during_night.trim())) +
     Number(Boolean(entry.personal_note.trim())) +
-  
+  Number(Boolean(entry.personal_note.trim()))
   if (filled >= 4) return "Strong diary entry";
   if (filled >= 2) return "Partial diary entry";
   return "No diary entry";
