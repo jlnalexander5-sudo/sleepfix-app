@@ -280,7 +280,7 @@ export default function HabitsPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 text-base">
-      <div className="mb-6">
+      <div className="mb-8">
         <h1 className="text-3xl font-bold">Sleep Diary</h1>
         <p className="text-base text-neutral-600 mt-2">
           Record your nightly observations, thoughts, and sleep patterns. Over time, this becomes a useful history for
