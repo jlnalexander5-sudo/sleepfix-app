@@ -618,12 +618,6 @@ const canSaveNight = missingRequired.length === 0;
         <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600, color: "#B00020" }}>{saveError}</div>
       )}
 
-
-        {!canSaveNight && (
-          <div className="sf-help" style={{ marginTop: 10 }}>
-            Complete: {missingRequired.join(", ")}
-          </div>
-        )}
       </div>
       </div>
   );
