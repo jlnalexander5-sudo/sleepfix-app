@@ -293,7 +293,7 @@ export default function HabitsPage() {
             Use this space to record what happened before sleep, during the night, and how you felt the next day.
           </div>
           <div className="mt-2 text-sm text-neutral-600">
-            The checkboxes are kept as quick signals, but the main value is the diary history.
+           Use this space to record what happened before sleep, during the night, and how you felt the next day.
           </div>
         </div>
       </div>
