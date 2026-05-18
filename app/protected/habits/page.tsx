@@ -288,10 +288,9 @@ export default function HabitsPage() {
         </p>
 
         <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
-          <div className="text-sm font-bold text-neutral-900">Diary page = context and pattern notes</div>
+          <div className="text-sm font-bold text-neutral-900">Diary page = nightly observations and pattern tracking.</div>
           <div className="mt-1 text-sm text-neutral-700">
-            Use this page to write what happened around sleep, what you think affected the night, and what changed the
-            next day.
+            Use this space to record what happened before sleep, during the night, and how you felt the next day.
           </div>
           <div className="mt-2 text-sm text-neutral-600">
             The checkboxes are kept as quick signals, but the main value is the diary history.
