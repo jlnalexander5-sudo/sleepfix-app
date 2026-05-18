@@ -400,10 +400,6 @@ export default function SleepPage() {
       // Optimistically reset form + refresh list.
       resetNightForm();
       setSaveNotice("Saved ✅");
-
-    } finally {
-        setRrsmInsightLoading(false);
-      }
     } finally {
       setIsSavingNight(false);
     }
