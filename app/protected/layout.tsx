@@ -50,7 +50,7 @@ export default function ProtectedLayout({
               <span className="sf-sep">|</span>
 
               <Link href="/protected/habits" style={{ textDecoration: "none" }}>
-                Habits
+               Diary
               </Link>
 
               <span className="sf-sep">|</span>
