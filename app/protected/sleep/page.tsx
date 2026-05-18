@@ -626,31 +626,35 @@ const canSaveNight = missingRequired.length === 0;
         )}
       </div>
       </div>
+<style jsx global>{`
+  .react-datepicker {
+    font-size: 1rem;
+  }
 
+  .react-datepicker__header {
+    padding-top: 0.8rem;
+  }
 
-       <style jsx global>{
-        .react-datepicker {
-          font-size: 1rem;
-        }
-        .react-datepicker__header {
-          padding-top: 0.8rem;
-        }
-        .react-datepicker__month {
-          margin: 0.4rem 1rem;
-        }
-        .react-datepicker__day-name,
-        .react-datepicker__day,
-        .react-datepicker__time-name {
-          width: 2.2rem;
-          line-height: 2.2rem;
-          margin: 0.15rem;
-        }
-        .react-datepicker__current-month,
-        .react-datepicker-time__header,
-        .react-datepicker-year-header {
-          font-size: 1.1rem;
-        }
-      `}</style>
+  .react-datepicker__month {
+    margin: 0.4rem 1rem;
+  }
+
+  .react-datepicker__day-name,
+  .react-datepicker__day,
+  .react-datepicker__time-name {
+    width: 2.2rem;
+    line-height: 2.2rem;
+    margin: 0.15rem;
+  }
+
+  .react-datepicker__current-month,
+  .react-datepicker-time__header,
+  .react-datepicker-year-header {
+    font-size: 1rem;
+  }
+`}</style>
+
+     
     </div>
   );
 }
