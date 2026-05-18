@@ -350,8 +350,11 @@ export default function HabitsPage() {
               disabled={!userId || !selectedDate || saving}
               className="rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save diary entry"}
+              {saving ? "Saving..." : "Save diary entry before leaving this page"}
             </button>
+              <div className="mt-2 text-sm font-semibold text-red-700">
+  Unsaved notes will be lost if you leave or refresh this page.
+</div>
             {diarySavedMessage ? (
               <span className="text-sm font-semibold text-green-700">
                 {diarySavedMessage}
@@ -364,8 +367,7 @@ export default function HabitsPage() {
       <section className="mt-8 rounded-xl border bg-white p-4">
         <h2 className="text-xl font-semibold">Diary history — last 7 days</h2>
         <p className="mt-2 text-base text-neutral-600">
-          A short history of what you recorded, so patterns can start to stand
-          out.
+        Only saved diary entries appear here after refresh.
         </p>
 
         <div className="mt-4 grid gap-3">
