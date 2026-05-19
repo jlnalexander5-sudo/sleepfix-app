@@ -198,6 +198,7 @@ export default function SleepPage() {
   const [environmentTags, setEnvironmentTags] = useState<string[]>([]);
   const [bodyTags, setBodyTags] = useState<string[]>([]);
   const [protocolUsedName, setProtocolUsedName] = useState<string>("");
+  const [protocolFollowed, setProtocolFollowed] = useState<string>("");
 
   // Latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
@@ -218,6 +219,7 @@ export default function SleepPage() {
     setEnvironmentTags([]);
     setBodyTags([]);
     setProtocolUsedName("");
+    setProtocolFollowed("");
     setDrivers(["Nothing / no clear driver"]);
 
     // Put dates back to a sensible “last night” default
@@ -257,6 +259,7 @@ export default function SleepPage() {
     setEnvironmentTags([]);
     setBodyTags([]);
     setProtocolUsedName("");
+    setProtocolFollowed("");
   }, []);
 
   // Get user
@@ -381,6 +384,7 @@ export default function SleepPage() {
         primary_driver: primaryDriver,
         secondary_driver: extraDrivers.length ? extraDrivers.join(", ") : null,
         protocol_used_name: !protocolUsedName || protocolUsedName === "none" ? null : protocolUsedName,
+        protocol_followed: protocolFollowed || null,
         notes: buildDriverNotes(drivers),
       };
 
@@ -607,6 +611,21 @@ const canSaveNight = missingRequired.length === 0;
         </div>
 
 
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="sf-field-label">Was last night's recommended protocol followed?</div>
+          <div className="sf-help">This helps SleepFix learn whether the recommendation worked, partly worked, or was not tested.</div>
+          <select
+            className="sf-select"
+            value={protocolFollowed}
+            onChange={(e) => setProtocolFollowed(e.target.value)}
+          >
+            <option value="">Select…</option>
+            <option value="yes">Yes — followed</option>
+            <option value="partial">Partially followed</option>
+            <option value="no">No — did not follow</option>
+            <option value="not_used">No protocol used</option>
+          </select>
+        </div>
 
         <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
           {isSavingNight ? "Saving…" : saveNotice === "Saved" ? "Saved" : "Save night"}
