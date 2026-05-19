@@ -28,6 +28,7 @@ type SleepNightRow = {
   primary_driver?: string | null;
   secondary_driver?: string | null;
   protocol_used_name?: string | null;
+  protocol_followed?: string | null;
 };
 
 const PROTOCOLS: Protocol[] = [
@@ -154,7 +155,7 @@ function textFromArray(value?: string[] | null) {
   return Array.isArray(value) ? value.join(", ") : "";
 }
 
-function mapNight(row: SleepNightRow): RRSMMetricsNight {
+function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocol_followed?: string | null; protocolFollowed?: string | null } {
   const drivers = [
     row.primary_driver,
     row.secondary_driver,
@@ -172,6 +173,8 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight {
     wakeUps: parseWakeUps(row.wake_ups_choice),
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
+    protocol_followed: row.protocol_followed ?? null,
+    protocolFollowed: row.protocol_followed ?? null,
   };
 }
 
@@ -242,7 +245,7 @@ export default function ProtocolsPage() {
 
       const { data, error: rowsErr } = await supabase
         .from("sleep_nights")
-        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,mind_tags,environment_tags,body_tags,primary_driver,secondary_driver,protocol_used_name")
+        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,mind_tags,environment_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
         .eq("user_id", authData.user.id)
         .order("local_date", { ascending: true })
         .limit(14);
@@ -372,11 +375,23 @@ export default function ProtocolsPage() {
           </section>
 
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-gray-900">Protocol feedback status</h3>
-            <p className="mt-2 text-sm text-gray-700">{evaluationText(result.protocolEvaluation)}</p>
-            <p className="mt-3 text-sm text-gray-500">
-              Next step: add “Was the protocol followed? Yes / Partially / No” to the Sleep page so SleepFix can judge protocol fit more accurately.
+            <h3 className="text-lg font-bold text-gray-900">Protocol review</h3>
+            <p className="mt-2 text-sm font-semibold text-gray-900">
+              {(result as any).protocolEvaluationLabel ?? evaluationText(result.protocolEvaluation)}
             </p>
+            <p className="mt-2 text-sm text-gray-700">
+              {(result as any).protocolEvaluationReason ??
+                "SleepFix compares whether the recommended protocol was followed against the next sleep result."}
+            </p>
+
+            <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+              <div className="font-bold text-gray-900">How to read this</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li><strong>Case A:</strong> protocol followed and sleep improved.</li>
+                <li><strong>Case B:</strong> protocol followed but sleep did not improve, so another factor may be present.</li>
+                <li><strong>Case C:</strong> protocol was not followed, partially followed, or not recorded, so effectiveness cannot be judged.</li>
+              </ul>
+            </div>
           </section>
         </>
       ) : null}
