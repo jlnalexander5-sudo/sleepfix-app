@@ -5,7 +5,7 @@
 // 2) Detect whether the same issue is recurring.
 // 3) Score contributor categories from 1–7.
 // 4) Choose the best protocol using RRSM priority order.
-// 5) Prepare the structure needed later for protocol-followed evaluation.
+// 5) Evaluate whether the previous recommended protocol appears to be working.
 //
 // This file is intentionally deterministic and explainable.
 
@@ -19,6 +19,12 @@ export type RRSMContributorCategory =
   | "sleep_hygiene"
   | "circadian_context"
   | "none";
+
+export type RRSMProtocolEvaluation =
+  | "not_enough_data"
+  | "case_a_working"
+  | "case_b_hidden_factor"
+  | "case_c_not_followed";
 
 export type RRSMProtocolResult = RRSMV2Insight & {
   sleepIssueDetected: boolean;
@@ -35,11 +41,24 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   protocolReason: string;
   secondaryFactors: RRSMContributorCategory[];
   protocolConfidence: "low" | "moderate" | "high";
-  protocolEvaluation: "not_enough_data" | "case_a_working" | "case_b_hidden_factor" | "case_c_not_followed";
+  protocolEvaluation: RRSMProtocolEvaluation;
+  protocolEvaluationLabel: string;
+  protocolEvaluationReason: string;
 };
 
+type ProtocolFollowedValue =
+  | "yes"
+  | "partial"
+  | "no"
+  | "none"
+  | "not_used"
+  | "not_applicable"
+  | null
+  | undefined;
+
 type NightWithOptionalProtocol = RRSMMetricsNight & {
-  protocolFollowed?: "yes" | "partial" | "no" | null;
+  protocolFollowed?: ProtocolFollowedValue;
+  protocol_followed?: ProtocolFollowedValue;
   protocol_used_name?: string | null;
   protocolUsedName?: string | null;
 };
@@ -54,13 +73,7 @@ function lowerIncludes(value: string | null | undefined, needles: string[]) {
 }
 
 function joinedNightText(night: RRSMMetricsNight) {
-  return [
-    night.primaryDriver,
-    night.secondaryDriver,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  return [night.primaryDriver, night.secondaryDriver].filter(Boolean).join(" ").toLowerCase();
 }
 
 function detectSleepIssue(night: RRSMMetricsNight | undefined): boolean {
@@ -139,7 +152,7 @@ function scoreNightCategories(night: RRSMMetricsNight | undefined) {
     scores.body_physiology += 1;
   }
 
-  // C3 — Environment
+  // C3 — Environment / room disruption
   if (
     lowerIncludes(text, [
       "hot",
@@ -285,6 +298,7 @@ function secondaryFactorsFor(scores: ReturnType<typeof scoreNightCategories>, do
 
 function recurringIssue(nights: RRSMMetricsNight[], dominant: RRSMContributorCategory): boolean {
   if (dominant === "none") return false;
+
   const lastSeven = nights.slice(-7);
   const matches = lastSeven.filter((night) => {
     const scores = scoreNightCategories(night);
@@ -302,22 +316,73 @@ function confidenceFor(nights: RRSMMetricsNight[], sleepIssueDetected: boolean, 
   return "low";
 }
 
-function evaluateProtocol(nights: NightWithOptionalProtocol[]): RRSMProtocolResult["protocolEvaluation"] {
-  if (nights.length < 2) return "not_enough_data";
+function getProtocolFollowed(night: NightWithOptionalProtocol | undefined): ProtocolFollowedValue {
+  if (!night) return null;
+  return night.protocolFollowed ?? night.protocol_followed ?? null;
+}
+
+function normalizeProtocolFollowed(value: ProtocolFollowedValue): "yes" | "partial" | "no" | "none" | null {
+  if (!value) return null;
+  const v = String(value).toLowerCase().trim();
+
+  if (v === "yes" || v.includes("followed")) return "yes";
+  if (v === "partial" || v.includes("part")) return "partial";
+  if (v === "none" || v === "not_used" || v === "not applicable" || v === "not_applicable") return "none";
+  if (v === "no" || v.includes("did not")) return "no";
+
+  return null;
+}
+
+function evaluateProtocol(nights: NightWithOptionalProtocol[]): {
+  value: RRSMProtocolEvaluation;
+  label: string;
+  reason: string;
+} {
+  if (nights.length < 2) {
+    return {
+      value: "not_enough_data",
+      label: "Not enough data yet",
+      reason: "SleepFix needs at least two saved nights to compare protocol use against the next sleep result.",
+    };
+  }
 
   const previous = nights[nights.length - 2];
   const latest = nights[nights.length - 1];
 
-  const followed = previous.protocolFollowed ?? null;
-  if (!followed || followed === "no" || followed === "partial") return "case_c_not_followed";
+  const followed = normalizeProtocolFollowed(getProtocolFollowed(previous));
+
+  if (!followed || followed === "none" || followed === "no" || followed === "partial") {
+    return {
+      value: "case_c_not_followed",
+      label: "Case C — protocol not fully followed",
+      reason: "The previous protocol was not followed fully, so SleepFix cannot fairly judge whether it worked.",
+    };
+  }
 
   const prevIssue = detectSleepIssue(previous);
   const latestIssue = detectSleepIssue(latest);
 
-  if (prevIssue && !latestIssue) return "case_a_working";
-  if (prevIssue && latestIssue) return "case_b_hidden_factor";
+  if (prevIssue && !latestIssue) {
+    return {
+      value: "case_a_working",
+      label: "Case A — protocol appears to be working",
+      reason: "The protocol was followed and the next saved night no longer shows a clear sleep issue.",
+    };
+  }
 
-  return "not_enough_data";
+  if (prevIssue && latestIssue) {
+    return {
+      value: "case_b_hidden_factor",
+      label: "Case B — hidden factor likely remains",
+      reason: "The protocol was followed but the next saved night still shows a sleep issue, so another contributor may be present.",
+    };
+  }
+
+  return {
+    value: "not_enough_data",
+    label: "Not enough data yet",
+    reason: "The saved nights do not yet show a clear before-and-after protocol comparison.",
+  };
 }
 
 export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtocolResult {
@@ -342,12 +407,10 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
       ? "This contributor appears to be recurring in recent entries."
       : "This does not yet look like a recurring pattern.",
     reasonForCategory(dominantCategory),
+    protocolEvaluation.reason,
   ];
 
-  const actions = [
-    `Tonight's recommended protocol: ${recommendedProtocol}`,
-    ...base.actions,
-  ];
+  const actions = [`Tonight's recommended protocol: ${recommendedProtocol}`, ...base.actions];
 
   if (secondaryFactors.length > 0) {
     actions.push(`Secondary factors to watch: ${secondaryFactors.join(", ")}.`);
@@ -363,9 +426,10 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     protocolReason: reasonForCategory(dominantCategory),
     secondaryFactors,
     protocolConfidence,
-    protocolEvaluation,
+    protocolEvaluation: protocolEvaluation.value,
+    protocolEvaluationLabel: protocolEvaluation.label,
+    protocolEvaluationReason: protocolEvaluation.reason,
     why,
     actions,
   };
 }
-
