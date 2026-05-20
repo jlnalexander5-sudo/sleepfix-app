@@ -155,7 +155,7 @@ function textFromArray(value?: string[] | null) {
   return Array.isArray(value) ? value.join(", ") : "";
 }
 
-function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocol_followed?: string | null; protocolFollowed?: string | null } {
+function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocolFollowed?: "yes" | "partial" | "no" | "none" | null } {
   const drivers = [
     row.primary_driver,
     row.secondary_driver,
@@ -166,6 +166,14 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocol_followed?: 
     .filter(Boolean)
     .join(", ");
 
+  const protocolFollowed =
+    row.protocol_followed === "yes" ||
+    row.protocol_followed === "partial" ||
+    row.protocol_followed === "no" ||
+    row.protocol_followed === "none"
+      ? row.protocol_followed
+      : null;
+
   return {
     dateKey: row.local_date ?? row.created_at?.slice(0, 10),
     quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
@@ -173,23 +181,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocol_followed?: 
     wakeUps: parseWakeUps(row.wake_ups_choice),
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
-const protocolFollowed =
-  row.protocol_followed === "yes" ||
-  row.protocol_followed === "partial" ||
-  row.protocol_followed === "no" ||
-  row.protocol_followed === "none"
-    ? row.protocol_followed
-    : null;
-
-return {
-  dateKey: row.local_date ?? row.created_at?.slice(0, 10),
-  quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
-  latencyMin: parseLatency(row.sleep_latency_choice),
-  wakeUps: parseWakeUps(row.wake_ups_choice),
-  primaryDriver: drivers || row.primary_driver || "(no driver logged)",
-  secondaryDriver: row.secondary_driver ?? null,
-  protocolFollowed,
-};
+    protocolFollowed,
   };
 }
 
