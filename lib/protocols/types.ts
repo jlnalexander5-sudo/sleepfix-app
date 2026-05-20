@@ -10,8 +10,8 @@ export type SleepFixProtocolLevel = "standard" | "escalated";
 export type SleepFixProtocol = {
   id: string;
   title: string;
-  category: SleepFixProtocolCategory;
-  level: SleepFixProtocolLevel;
+  category?: SleepFixProtocolCategory;
+  level?: SleepFixProtocolLevel;
   related: string;
   bestFor: string;
   focus: string;
