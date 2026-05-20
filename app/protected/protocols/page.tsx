@@ -173,13 +173,23 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocol_followed?: 
     wakeUps: parseWakeUps(row.wake_ups_choice),
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
-   protocolFollowed:
+const protocolFollowed =
   row.protocol_followed === "yes" ||
   row.protocol_followed === "partial" ||
   row.protocol_followed === "no" ||
   row.protocol_followed === "none"
     ? row.protocol_followed
-    : null,
+    : null;
+
+return {
+  dateKey: row.local_date ?? row.created_at?.slice(0, 10),
+  quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
+  latencyMin: parseLatency(row.sleep_latency_choice),
+  wakeUps: parseWakeUps(row.wake_ups_choice),
+  primaryDriver: drivers || row.primary_driver || "(no driver logged)",
+  secondaryDriver: row.secondary_driver ?? null,
+  protocolFollowed,
+};
   };
 }
 
