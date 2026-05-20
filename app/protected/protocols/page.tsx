@@ -75,7 +75,7 @@ const PROTOCOLS: Protocol[] = [
     steps: [
       "Dim the room and reduce stimulation for 20–30 minutes.",
       "Do a slow body scan: jaw → neck → shoulders → chest → belly → hips → legs.",
-      "For each area, exhale slowly and soften only 5–10%, not forcefully.",
+      "For each area, exhale slowly, not forcefully.",
       "Stay still once the body becomes heavier. Let sleep come without checking for it.",
     ],
   },
