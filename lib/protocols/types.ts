@@ -18,4 +18,5 @@ export type SleepFixProtocol = {
   steps: string[];
   doNot?: string[];
   diaryPrompt?: string;
+  escalationNote?: string;
 };
