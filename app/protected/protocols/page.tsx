@@ -383,13 +383,27 @@ export default function ProtocolsPage() {
 
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="text-lg font-bold text-gray-900">Protocol review</h3>
-            <p className="mt-2 text-sm font-semibold text-gray-900">
-              {(result as any).protocolEvaluationLabel ?? evaluationText(result.protocolEvaluation)}
-            </p>
-            <p className="mt-2 text-sm text-gray-700">
-              {(result as any).protocolEvaluationReason ??
-                "SleepFix compares whether the recommended protocol was followed against the next sleep result."}
-            </p>
+          {!result.sleepIssueDetected ? (
+  <>
+    <div className="mt-3 font-semibold text-gray-900">
+      No protocol review needed
+    </div>
+
+    <p className="mt-2 text-gray-700">
+      There was no clear sleep issue in the latest sleep record, so SleepFix is not evaluating protocol effectiveness tonight.
+    </p>
+  </>
+) : (
+  <>
+    <div className="mt-3 font-semibold text-gray-900">
+      {result.protocolEvaluationLabel}
+    </div>
+
+    <p className="mt-2 text-gray-700">
+      {result.protocolEvaluationReason}
+    </p>
+  </>
+)}
 
             <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
               <div className="font-bold text-gray-900">How to read this</div>
