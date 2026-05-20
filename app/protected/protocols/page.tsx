@@ -351,7 +351,7 @@ export default function ProtocolsPage() {
               <div className="mt-1">{protocol.related}</div>
             </div>
 
-            {result.sleepIssueDetected && result.secondaryFactors.length > 0 (
+            {result.sleepIssueDetected && result.secondaryFactors.length > 0 ? (
               <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
                 <div className="font-bold text-gray-900">Secondary factors to watch</div>
                 <div className="mt-1">{result.secondaryFactors.map(prettyCategory).join(", ")}</div>
