@@ -173,8 +173,13 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocol_followed?: 
     wakeUps: parseWakeUps(row.wake_ups_choice),
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
-    protocol_followed: row.protocol_followed ?? null,
-    protocolFollowed: row.protocol_followed ?? null,
+   protocolFollowed:
+  row.protocol_followed === "yes" ||
+  row.protocol_followed === "partial" ||
+  row.protocol_followed === "no" ||
+  row.protocol_followed === "none"
+    ? row.protocol_followed
+    : null,
   };
 }
 
