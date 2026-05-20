@@ -4,16 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { runRRSMEngineV4, type RRSMProtocolResult } from "@/lib/rrsm/engine-v4";
 import type { RRSMMetricsNight } from "@/lib/rrsm/engine-v2";
-
-type Protocol = {
-  id: string;
-  title: string;
-  related: string;
-  bestFor: string;
-  focus: string;
-  steps: string[];
-  doNot?: string[];
-};
+import { getStandardProtocolByTitle, getEscalatedProtocolForTitle, type SleepFixProtocol } from "@/lib/protocols";
 
 type SleepNightRow = {
   id: string;
@@ -31,113 +22,6 @@ type SleepNightRow = {
   protocol_followed?: string | null;
 };
 
-const PROTOCOLS: Protocol[] = [
-  {
-    id: "rrsm-quieting",
-    title: "RRSM Quieting Protocol",
-    related: "RB2 / RB3 — mind and emotional activation",
-    bestFor: "Best for: racing thoughts, emotional replay, worry, anxiety, overstimulation, or a mind that will not switch off.",
-    focus: "Reduce mental and emotional activation so the system can enter sleep without fighting itself.",
-    steps: [
-      "Do a 2-minute brain dump: write down tomorrow’s tasks, worries, or unresolved thoughts.",
-      "Close the loop with one sentence: ‘This is recorded. I do not need to solve it now.’",
-      "Use slow exhale breathing for 10 cycles: inhale gently, then exhale longer than the inhale.",
-      "If thoughts restart, do not argue with them. Return to the breath and repeat the same phrase.",
-    ],
-    doNot: [
-      "Do not problem-solve in bed.",
-      "Do not check messages, news, or work tasks once the protocol starts.",
-    ],
-  },
-  {
-    id: "rrsm-body-recovery",
-    title: "RRSM Body Recovery Protocol",
-    related: "RB1 — body physiology, pain, inflammation, DOMS, tension",
-    bestFor: "Best for: DOMS, soreness, inflammation, pain, restless body, illness, or physical discomfort affecting sleep.",
-    focus: "Reduce body activation so physical discomfort does not keep pulling the system back toward waking.",
-    steps: [
-      "Use gentle positioning support: pillow under knees, side support, or whichever position reduces strain.",
-      "Apply mild recovery support: light compression, warm/cool comfort, or gentle stretch only if it settles the body.",
-      "Keep the room and bedding neutral. Avoid overheating the body.",
-      "Use relaxed breathing while scanning jaw, shoulders, abdomen, hips, and legs for tension release.",
-    ],
-    doNot: [
-      "Do not stretch aggressively before bed if the body is already inflamed or sore.",
-      "Do not use this protocol as a substitute for medical advice if pain is severe, new, or worsening.",
-    ],
-  },
-  {
-    id: "rrsm-body-downshift",
-    title: "RRSM Body Downshift Protocol",
-    related: "RB1 — body tension and physical activation",
-    bestFor: "Best for: tense, restless, or activated body without a clear DOMS/pain pattern.",
-    focus: "Bring the body down gradually without forcing sleep.",
-    steps: [
-      "Dim the room and reduce stimulation for 20–30 minutes.",
-      "Do a slow body scan: jaw → neck → shoulders → chest → belly → hips → legs.",
-      "For each area, exhale slowly, not forcefully.",
-      "Stay still once the body becomes heavier. Let sleep come without checking for it.",
-    ],
-  },
-  {
-    id: "sleep-environment-reset",
-    title: "Sleep Environment Reset Protocol",
-    related: "External sleep field — room and environmental interference",
-    bestFor: "Best for: heat, cold, humidity, light, noise, mosquitoes, bedding discomfort, or repeated room disturbance.",
-    focus: "Remove obvious external interference before trying deeper protocols.",
-    steps: [
-      "Fix the strongest room problem first: temperature, noise, light, bedding, or insects.",
-      "Prepare the room before bedtime, not after you are already frustrated or awake.",
-      "Keep one stable setup for 2–3 nights so the app can compare the result.",
-      "If the environment cannot be fixed, use the diary to record exactly what disturbed the night.",
-    ],
-    doNot: [
-      "Do not keep changing several room variables at once if you are trying to learn what helps.",
-    ],
-  },
-  {
-    id: "rrsm-shutdown-ritual",
-    title: "RRSM Shutdown Ritual",
-    related: "Personal sleep hygiene — behaviour and shutdown timing",
-    bestFor: "Best for: late caffeine, nicotine, alcohol, screens, late food, late exercise, or stimulation too close to bed.",
-    focus: "Create a repeatable shutdown window so the body is not asked to sleep while still activated.",
-    steps: [
-      "Choose one target tonight, not five. Pick the most obvious disruptor from your sleep form.",
-      "Create a 60-minute shutdown window before bed: dim light, reduce scrolling, reduce food/fluid load, and avoid stimulating tasks.",
-      "Replace the habit with a low-effort alternative: shower, quiet reading, gentle breathing, or preparing tomorrow’s tasks.",
-      "If you slip, do not reset the whole plan. Just restart the shutdown window the next night.",
-    ],
-    doNot: [
-      "Do not treat this as punishment. It is a test to see whether your sleep stabilises.",
-      "Do not change everything at once. One consistent change gives cleaner feedback.",
-    ],
-  },
-  {
-    id: "rrsm-rhythm-support",
-    title: "RRSM Rhythm Support Protocol",
-    related: "Context limitation — shift work, jet lag, irregular schedule, pregnancy, chronic illness",
-    bestFor: "Best for: timing constraints that the app cannot fully control, such as shift work, jet lag, irregular work hours, pregnancy, or chronic illness.",
-    focus: "Improve transition quality and recovery stability while recognising real physiological limits.",
-    steps: [
-      "Anchor the most stable part of the day: wake time, first light exposure, first meal, or pre-sleep routine.",
-      "Protect a short shutdown window even if bedtime changes.",
-      "Use the diary to record schedule constraints so SleepFix does not misread them as simple behaviour problems.",
-      "Aim for improvement, not perfection. The goal is less disruption, not miracle sleep under impossible conditions.",
-    ],
-  },
-  {
-    id: "no-protocol-needed",
-    title: "No protocol needed tonight",
-    related: "Stable sleep signal",
-    bestFor: "Best for: nights where the latest sleep record does not show a clear sleep issue.",
-    focus: "Keep the current routine stable and continue logging.",
-    steps: [
-      "Do not add unnecessary interventions tonight.",
-      "Repeat the routine that appears to be working.",
-      "Keep logging sleep so SleepFix can detect if the pattern changes.",
-    ],
-  },
-];
 
 function parseLatency(choice: string | null): number | null {
   if (!choice) return null;
@@ -183,18 +67,6 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocolFollowed?: "
     secondaryDriver: row.secondary_driver ?? null,
     protocolFollowed,
   };
-}
-
-function protocolIdFromTitle(title: string) {
-  const lower = title.toLowerCase();
-  if (lower.includes("quieting")) return "rrsm-quieting";
-  if (lower.includes("body recovery")) return "rrsm-body-recovery";
-  if (lower.includes("body downshift")) return "rrsm-body-downshift";
-  if (lower.includes("environment")) return "sleep-environment-reset";
-  if (lower.includes("shutdown")) return "rrsm-shutdown-ritual";
-  if (lower.includes("rhythm")) return "rrsm-rhythm-support";
-  if (lower.includes("no protocol")) return "no-protocol-needed";
-  return "rrsm-quieting";
 }
 
 function prettyCategory(category: string) {
@@ -281,11 +153,17 @@ export default function ProtocolsPage() {
     };
   }, [supabase]);
 
-  const protocol = useMemo(() => {
-    if (!result) return PROTOCOLS[0];
-    const id = protocolIdFromTitle(result.recommendedProtocol);
-    return PROTOCOLS.find((p) => p.id === id) ?? PROTOCOLS[0];
+  const protocol: SleepFixProtocol | null = useMemo(() => {
+    if (!result) return null;
+    return getStandardProtocolByTitle(result.recommendedProtocol);
   }, [result]);
+
+  const escalatedProtocol: SleepFixProtocol | null = useMemo(() => {
+    if (!result || result.protocolEvaluation !== "case_b_hidden_factor") return null;
+    return getEscalatedProtocolForTitle(result.recommendedProtocol);
+  }, [result]);
+
+  const displayProtocol = escalatedProtocol ?? protocol;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -315,12 +193,20 @@ export default function ProtocolsPage() {
         </div>
       ) : null}
 
-      {result && nightCount > 0 ? (
+      {result && nightCount > 0 && displayProtocol ? (
         <>
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="text-sm font-bold uppercase tracking-wide text-gray-500">Recommended protocol</div>
-            <h2 className="mt-2 text-2xl font-bold text-blue-900">{protocol.title}</h2>
-            <p className="mt-2 text-base text-gray-700">{protocol.bestFor}</p>
+            <h2 className="mt-2 text-2xl font-bold text-blue-900">{displayProtocol.title}</h2>
+            {escalatedProtocol ? (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-bold">Escalated protocol</div>
+                <div className="mt-1">
+                  The standard protocol was followed but the sleep issue remained. SleepFix is showing the deeper version tonight.
+                </div>
+              </div>
+            ) : null}
+            <p className="mt-2 text-base text-gray-700">{displayProtocol.bestFor}</p>
 
             <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
               <div className="font-bold">Why this protocol?</div>
@@ -348,7 +234,7 @@ export default function ProtocolsPage() {
 
             <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
               <div className="font-bold text-gray-900">Related RRSM system</div>
-              <div className="mt-1">{protocol.related}</div>
+              <div className="mt-1">{displayProtocol.related}</div>
             </div>
 
             {result.sleepIssueDetected && result.secondaryFactors.length > 0 ? (
@@ -361,22 +247,36 @@ export default function ProtocolsPage() {
 
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="text-xl font-bold text-gray-900">What to do tonight</h3>
-            <p className="mt-2 text-gray-700">{protocol.focus}</p>
+            <p className="mt-2 text-gray-700">{displayProtocol.focus}</p>
 
             <ol className="mt-4 list-decimal space-y-3 pl-6 text-base text-gray-800">
-              {protocol.steps.map((s, idx) => (
+              {displayProtocol.steps.map((s, idx) => (
                 <li key={idx} className="leading-relaxed">{s}</li>
               ))}
             </ol>
 
-            {protocol.doNot?.length ? (
+            {displayProtocol.doNot?.length ? (
               <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
                 <div className="font-bold text-gray-900">Do not</div>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {protocol.doNot.map((item) => (
+                  {displayProtocol.doNot.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
+              </div>
+            ) : null}
+
+            {displayProtocol.escalationNote ? (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <div className="font-bold">Escalation note</div>
+                <div className="mt-1">{displayProtocol.escalationNote}</div>
+              </div>
+            ) : null}
+
+            {displayProtocol.diaryPrompt ? (
+              <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                <div className="font-bold text-gray-900">Diary follow-up</div>
+                <div className="mt-1">{displayProtocol.diaryPrompt}</div>
               </div>
             ) : null}
           </section>
