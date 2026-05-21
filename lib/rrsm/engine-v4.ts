@@ -57,6 +57,10 @@ type ProtocolFollowedValue =
   | undefined;
 
 type NightWithOptionalProtocol = RRSMMetricsNight & {
+  sleepContext?: string[] | null;
+  workContext?: string[] | null;
+  sleep_context?: string[] | null;
+  work_context?: string[] | null;
   wakeRecoveryMin?: number | null;
   wake_recovery_choice?: string | null;
   wakeRecoveryChoice?: string | null;
@@ -77,6 +81,20 @@ function lowerIncludes(value: string | null | undefined, needles: string[]) {
 
 function joinedNightText(night: RRSMMetricsNight) {
   return [night.primaryDriver, night.secondaryDriver].filter(Boolean).join(" ").toLowerCase();
+}
+
+function joinedProfileText(night: NightWithOptionalProtocol | undefined) {
+  if (!night) return "";
+  const sleepContext = night.sleepContext ?? night.sleep_context ?? [];
+  const workContext = night.workContext ?? night.work_context ?? [];
+
+  return [
+    ...(Array.isArray(sleepContext) ? sleepContext : []),
+    ...(Array.isArray(workContext) ? workContext : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function parseWakeRecoveryToMinutes(night: NightWithOptionalProtocol | undefined): number | null {
@@ -144,13 +162,15 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   if (!night) return scores;
 
   const text = joinedNightText(night);
+  const profileText = joinedProfileText(night);
+  const combinedText = `${text} ${profileText}`;
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
 
   // C1 — Mind / emotional activation: RB2/RB3
   if (
-    lowerIncludes(text, [
+    lowerIncludes(combinedText, [
       "stress",
       "worry",
       "anxious",
@@ -180,7 +200,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
 
   // C2 — Body physiology: RB1
   if (
-    lowerIncludes(text, [
+    lowerIncludes(combinedText, [
       "pain",
       "discomfort",
       "doms",
@@ -209,7 +229,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
 
   // C3 — Environment / room disruption
   if (
-    lowerIncludes(text, [
+    lowerIncludes(combinedText, [
       "hot",
       "cold",
       "noise",
@@ -234,7 +254,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
 
   // C4 — Personal sleep hygiene / behaviour
   if (
-    lowerIncludes(text, [
+    lowerIncludes(combinedText, [
       "caffeine",
       "coffee",
       "alcohol",
@@ -261,7 +281,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
 
   // C5 — Circadian/context limitation
   if (
-    lowerIncludes(text, [
+    lowerIncludes(combinedText, [
       "shift",
       "night shift",
       "jet lag",
@@ -274,6 +294,30 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     ])
   ) {
     scores.circadian_context += 4;
+  }
+
+  // Profile/context modifiers.
+  // These do not diagnose the night by themselves; they bias the engine when nightly signals also point that way.
+  if (lowerIncludes(profileText, ["night shift", "rotating shift", "irregular work", "shift-based", "jet lag", "travel"])) {
+    scores.circadian_context += maintenanceIssue || typeof night.latencyMin === "number" && night.latencyMin >= 30 ? 3 : 1;
+  }
+
+  if (lowerIncludes(profileText, ["pregnancy", "chronic illness"])) {
+    scores.circadian_context += 2;
+    scores.body_physiology += 1;
+  }
+
+  if (lowerIncludes(profileText, ["construction", "physical labour", "machinery", "tools", "mostly standing", "driving"])) {
+    scores.body_physiology += lowerIncludes(text, ["pain", "discomfort", "tense", "restless", "fatigue", "sore", "inflamed"]) ? 2 : 1;
+  }
+
+  if (lowerIncludes(profileText, ["desk work", "screen-heavy", "phone", "mostly sitting"])) {
+    scores.mind_emotional += lowerIncludes(text, ["racing", "thought", "wired", "alert", "stimulated", "foggy"]) ? 2 : 1;
+    scores.sleep_hygiene += lowerIncludes(text, ["screen", "phone", "tv", "scroll"]) ? 2 : 0;
+  }
+
+  if (lowerIncludes(profileText, ["talking", "customer-facing", "high-stress decision"])) {
+    scores.mind_emotional += lowerIncludes(text, ["stress", "worry", "anxious", "upset", "overwhelmed"]) ? 2 : 1;
   }
 
   return {
@@ -336,7 +380,7 @@ function reasonForCategory(category: RRSMContributorCategory) {
     case "sleep_hygiene":
       return "Your sleep form points most strongly toward a personal sleep-rhythm habit, such as late caffeine, screens, alcohol, nicotine, late food, or late exercise.";
     case "circadian_context":
-      return "Your sleep form suggests a rhythm/context limitation. The goal is to improve sleep transition and recovery stability, while recognising that timing constraints may limit results.";
+      return "Your profile context suggests a rhythm or life-context limitation may be affecting sleep. The goal is to improve sleep transition and recovery stability without treating real timing constraints as simple habits.";
     default:
       return "Your sleep form does not show a clear sleep issue tonight.";
   }
