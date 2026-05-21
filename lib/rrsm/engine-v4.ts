@@ -57,6 +57,9 @@ type ProtocolFollowedValue =
   | undefined;
 
 type NightWithOptionalProtocol = RRSMMetricsNight & {
+  wakeRecoveryMin?: number | null;
+  wake_recovery_choice?: string | null;
+  wakeRecoveryChoice?: string | null;
   protocolFollowed?: ProtocolFollowedValue;
   protocol_followed?: ProtocolFollowedValue;
   protocol_used_name?: string | null;
@@ -76,7 +79,41 @@ function joinedNightText(night: RRSMMetricsNight) {
   return [night.primaryDriver, night.secondaryDriver].filter(Boolean).join(" ").toLowerCase();
 }
 
-function detectSleepIssue(night: RRSMMetricsNight | undefined): boolean {
+function parseWakeRecoveryToMinutes(night: NightWithOptionalProtocol | undefined): number | null {
+  if (!night) return null;
+
+  if (typeof night.wakeRecoveryMin === "number") return night.wakeRecoveryMin;
+
+  const raw = String(night.wake_recovery_choice ?? night.wakeRecoveryChoice ?? "").toLowerCase().trim();
+  if (!raw) return null;
+
+  if (raw.includes("60")) return 60;
+  if (raw.includes("30-60") || raw.includes("30–60")) return 30;
+  if (raw.includes("15-30") || raw.includes("15–30")) return 15;
+  if (raw.includes("5-15") || raw.includes("5–15")) return 5;
+  if (raw.includes("0-5") || raw.includes("0–5")) return 0;
+
+  const n = parseInt(raw.replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function hasProlongedWakeRecovery(night: NightWithOptionalProtocol | undefined): boolean {
+  const mins = parseWakeRecoveryToMinutes(night);
+  return typeof mins === "number" && mins >= 15;
+}
+
+function hasMajorWakeRecovery(night: NightWithOptionalProtocol | undefined): boolean {
+  const mins = parseWakeRecoveryToMinutes(night);
+  return typeof mins === "number" && mins >= 30;
+}
+
+function hasMaintenanceIssue(night: NightWithOptionalProtocol | undefined): boolean {
+  if (!night) return false;
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+  return wakeUps >= 2 && hasProlongedWakeRecovery(night);
+}
+
+function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean {
   if (!night) return false;
 
   const qualityIssue = typeof night.quality === "number" && night.quality <= 6;
@@ -84,11 +121,18 @@ function detectSleepIssue(night: RRSMMetricsNight | undefined): boolean {
   const latencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 30;
   const majorLatencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 45;
   const wakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3;
+  const maintenanceIssue = hasMaintenanceIssue(night);
 
-  return Boolean(majorQualityIssue || majorLatencyIssue || wakeIssue || (qualityIssue && latencyIssue));
+  return Boolean(
+    majorQualityIssue ||
+      majorLatencyIssue ||
+      maintenanceIssue ||
+      (wakeIssue && qualityIssue) ||
+      (qualityIssue && latencyIssue)
+  );
 }
 
-function scoreNightCategories(night: RRSMMetricsNight | undefined) {
+function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   const scores = {
     mind_emotional: 0,
     body_physiology: 0,
@@ -100,6 +144,9 @@ function scoreNightCategories(night: RRSMMetricsNight | undefined) {
   if (!night) return scores;
 
   const text = joinedNightText(night);
+  const maintenanceIssue = hasMaintenanceIssue(night);
+  const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
+  const majorWakeRecovery = hasMajorWakeRecovery(night);
 
   // C1 — Mind / emotional activation: RB2/RB3
   if (
@@ -124,6 +171,10 @@ function scoreNightCategories(night: RRSMMetricsNight | undefined) {
   if (typeof night.latencyMin === "number" && night.latencyMin >= 45) {
     scores.mind_emotional += 2;
   } else if (typeof night.latencyMin === "number" && night.latencyMin >= 30) {
+    scores.mind_emotional += 1;
+  }
+
+  if (prolongedWakeRecovery && scores.mind_emotional > 0) {
     scores.mind_emotional += 1;
   }
 
@@ -152,6 +203,10 @@ function scoreNightCategories(night: RRSMMetricsNight | undefined) {
     scores.body_physiology += 1;
   }
 
+  if (maintenanceIssue && scores.body_physiology > 0) {
+    scores.body_physiology += majorWakeRecovery ? 3 : 2;
+  }
+
   // C3 — Environment / room disruption
   if (
     lowerIncludes(text, [
@@ -169,6 +224,12 @@ function scoreNightCategories(night: RRSMMetricsNight | undefined) {
     ])
   ) {
     scores.environment += 4;
+  }
+
+  // Wake-up persistence makes room/body factors much more important.
+  // Example: cold room + repeated long awake periods = real maintenance disruption.
+  if (maintenanceIssue && scores.environment > 0) {
+    scores.environment += majorWakeRecovery ? 3 : 2;
   }
 
   // C4 — Personal sleep hygiene / behaviour
@@ -271,7 +332,7 @@ function reasonForCategory(category: RRSMContributorCategory) {
     case "body_physiology":
       return "Your sleep form points most strongly toward body-based activation such as pain, tension, inflammation, DOMS, illness, or physical discomfort.";
     case "environment":
-      return "Your sleep form points most strongly toward room or environmental disruption. The first aim is to reduce external sleep interference.";
+      return "Your sleep form points most strongly toward room-environment disruption. If wake-ups included longer awake periods, the issue is likely sleep maintenance rather than falling asleep.";
     case "sleep_hygiene":
       return "Your sleep form points most strongly toward a personal sleep-rhythm habit, such as late caffeine, screens, alcohol, nicotine, late food, or late exercise.";
     case "circadian_context":
@@ -279,6 +340,36 @@ function reasonForCategory(category: RRSMContributorCategory) {
     default:
       return "Your sleep form does not show a clear sleep issue tonight.";
   }
+}
+
+
+function detailedReasonForLatestNight(category: RRSMContributorCategory, latestNight: NightWithOptionalProtocol | undefined) {
+  const baseReason = reasonForCategory(category);
+  if (!latestNight) return baseReason;
+
+  const wakeUps = typeof latestNight.wakeUps === "number" ? latestNight.wakeUps : 0;
+  const wakeRecovery = parseWakeRecoveryToMinutes(latestNight);
+  const text = joinedNightText(latestNight);
+
+  if (category === "environment" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
+    if (lowerIncludes(text, ["cold"])) {
+      return "SleepFix detected cold-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stable warmth through the whole night, especially feet and bedding.";
+    }
+    if (lowerIncludes(text, ["hot", "humid"])) {
+      return "SleepFix detected heat/humidity-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is thermal stability without overcooling the body.";
+    }
+    return "SleepFix detected room-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is removing the room factor that kept reactivating you.";
+  }
+
+  if (category === "body_physiology" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
+    return "SleepFix detected body-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is reducing body activation enough that wake-ups do not keep you awake.";
+  }
+
+  if (category === "mind_emotional" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
+    return "SleepFix detected mental/emotional reactivation after waking. The main target is stopping wake-ups from turning into long awake periods.";
+  }
+
+  return baseReason;
 }
 
 function secondaryFactorsFor(scores: ReturnType<typeof scoreNightCategories>, dominant: RRSMContributorCategory) {
@@ -296,7 +387,7 @@ function secondaryFactorsFor(scores: ReturnType<typeof scoreNightCategories>, do
     .map(([cat]) => cat);
 }
 
-function recurringIssue(nights: RRSMMetricsNight[], dominant: RRSMContributorCategory): boolean {
+function recurringIssue(nights: NightWithOptionalProtocol[], dominant: RRSMContributorCategory): boolean {
   if (dominant === "none") return false;
 
   const lastSeven = nights.slice(-7);
@@ -309,7 +400,7 @@ function recurringIssue(nights: RRSMMetricsNight[], dominant: RRSMContributorCat
   return matches.length >= 2;
 }
 
-function confidenceFor(nights: RRSMMetricsNight[], sleepIssueDetected: boolean, recurring: boolean) {
+function confidenceFor(nights: NightWithOptionalProtocol[], sleepIssueDetected: boolean, recurring: boolean) {
   if (!sleepIssueDetected) return "low";
   if (recurring && nights.length >= 5) return "high";
   if (nights.length >= 3) return "moderate";
@@ -398,6 +489,8 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const protocolConfidence = confidenceFor(nights, sleepIssueDetected, recurring);
   const protocolEvaluation = evaluateProtocol(nights);
 
+  const protocolReason = detailedReasonForLatestNight(dominantCategory, latestNight);
+
   const why = [
     ...base.why,
     sleepIssueDetected
@@ -406,7 +499,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     recurring
       ? "This contributor appears to be recurring in recent entries."
       : "This does not yet look like a recurring pattern.",
-    reasonForCategory(dominantCategory),
+    protocolReason,
     protocolEvaluation.reason,
   ];
 
@@ -423,7 +516,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     dominantCategory,
     categoryScores,
     recommendedProtocol,
-    protocolReason: reasonForCategory(dominantCategory),
+    protocolReason,
     secondaryFactors,
     protocolConfidence,
     protocolEvaluation: protocolEvaluation.value,
