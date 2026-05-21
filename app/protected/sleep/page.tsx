@@ -17,9 +17,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 function buildDriverNotes(drivers: string[]) {
-  const selectedDrivers = drivers.filter((d) => d !== "Nothing / no clear driver");
+  const selectedDrivers = drivers.filter((d) => d !== "Nothing / none");
   if (selectedDrivers.length === 0) return null;
-  return "After the night: " + selectedDrivers.join(", ");
+  return "Sleep hygiene: " + selectedDrivers.join(", ");
 }
 const DatePicker = dynamic(
   () => import("react-datepicker").then((m) => m.default as any),
@@ -68,23 +68,32 @@ const WAKE_CHOICES = ["0", "1", "2", "3", "4", "5+"] as const;
 const WAKE_RECOVERY_CHOICES = ["0-5", "5-15", "15-30", "30-60", "60+"] as const;
 const QUALITY_CHOICES = Array.from({ length: 10 }, (_, i) => String(i + 1));
 
-const MIND_TAGS = [
-  "Overstimulated",
-  "anxious",
-  "calm",
-  "racing thoughts",
-  "low / flat",
-  "depressed",
-  "focused",
-  "wired / alert",
-  "foggy",
-  "clear",
+const EMOTIONAL_TAGS = [
+  "Anxious",
+  "Worried",
+  "Upset",
+  "Stressed",
+  "Euphoric",
+  "Depressed",
+  "Low / flat",
+  "Calm",
+] as const;
+
+const MENTAL_TAGS = [
+  "Racing thoughts",
+  "Mentally stimulated",
+  "Mentally alert",
+  "Focused",
+  "Foggy",
+  "Clear",
+  "Calm / quiet mind",
 ] as const;
 
 const ENV_TAGS = ["Hot", "cold", "noisy", "Quiet", "Bright", "Dark", "Humid", "Dry"] as const;
 
 const BODY_TAGS = [
   "Pain",
+  "Discomfort",
   "Restless",
   "Heavy fatigue",
   "Light fatigue",
@@ -196,7 +205,8 @@ export default function SleepPage() {
   const [sleepLatencyChoice, setSleepLatencyChoice] = useState<string>(""); // "5"|"10"|"20"|"30"|"60+"
   const [wakeUpsChoice, setWakeUpsChoice] = useState<string>(""); // "0"|"1".."4"|"5+"
   const [wakeRecoveryChoice, setWakeRecoveryChoice] = useState<string>(""); // total awake time after wake-ups
-  const [mindTags, setMindTags] = useState<string[]>([]);
+  const [emotionalTags, setEmotionalTags] = useState<string[]>([]);
+  const [mentalTags, setMentalTags] = useState<string[]>([]);
   const [environmentTags, setEnvironmentTags] = useState<string[]>([]);
   const [bodyTags, setBodyTags] = useState<string[]>([]);
   const [protocolUsedName, setProtocolUsedName] = useState<string>("");
@@ -207,7 +217,7 @@ export default function SleepPage() {
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
 
   // Driver confirmation (simple fields)
-  const [drivers, setDrivers] = useState<string[]>(["Nothing / no clear driver"]);
+  const [drivers, setDrivers] = useState<string[]>(["Nothing / none"]);
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -218,12 +228,13 @@ export default function SleepPage() {
     setSleepLatencyChoice("");
     setWakeUpsChoice("");
     setWakeRecoveryChoice("");
-    setMindTags([]);
+    setEmotionalTags([]);
+    setMentalTags([]);
     setEnvironmentTags([]);
     setBodyTags([]);
     setProtocolUsedName("");
     setProtocolFollowed("");
-    setDrivers(["Nothing / no clear driver"]);
+    setDrivers(["Nothing / none"]);
 
     // Put dates back to a sensible “last night” default
     // Start = yesterday 11:30 PM, End = today 7:30 AM
@@ -259,7 +270,8 @@ export default function SleepPage() {
     setSleepLatencyChoice("");
     setWakeUpsChoice("");
     setWakeRecoveryChoice("");
-    setMindTags([]);
+    setEmotionalTags([]);
+    setMentalTags([]);
     setEnvironmentTags([]);
     setBodyTags([]);
     setProtocolUsedName("");
@@ -370,8 +382,8 @@ export default function SleepPage() {
         return;
       }
 
-      const primaryDriver = drivers.find((d) => d !== "Nothing / no clear driver") ?? null;
-      const extraDrivers = drivers.filter((d) => d !== primaryDriver && d !== "Nothing / no clear driver");
+      const primaryDriver = drivers.find((d) => d !== "Nothing / none") ?? null;
+      const extraDrivers = drivers.filter((d) => d !== primaryDriver && d !== "Nothing / none");
 
       const payload = {
         user_id: userId,
@@ -383,7 +395,7 @@ export default function SleepPage() {
         sleep_latency_choice: sleepLatencyChoice,
         wake_ups_choice: wakeUpsChoice,
         wake_recovery_choice: wakeRecoveryChoice,
-        mind_tags: mindTags,
+        mind_tags: [...emotionalTags, ...mentalTags],
         environment_tags: environmentTags,
         body_tags: bodyTags,
         primary_driver: primaryDriver,
@@ -427,8 +439,9 @@ if (!sleepQuality) missingRequired.push("Sleep Quality");
 if (!sleepLatencyChoice) missingRequired.push("Sleep Latency");
 if (!wakeUpsChoice) missingRequired.push("Wake Ups");
 if (!wakeRecoveryChoice) missingRequired.push("Total awake time after wake-ups");
-if (!mindTags || mindTags.length === 0) missingRequired.push("Mind tag");
-if (!environmentTags || environmentTags.length === 0) missingRequired.push("Environment tag");
+if (!emotionalTags || emotionalTags.length === 0) missingRequired.push("Emotional state");
+if (!mentalTags || mentalTags.length === 0) missingRequired.push("Mental state");
+if (!environmentTags || environmentTags.length === 0) missingRequired.push("Room environment");
 if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body tag");
 const canSaveNight = missingRequired.length === 0;
 
@@ -524,14 +537,14 @@ const canSaveNight = missingRequired.length === 0;
 
       {/* Required metrics */}
       <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-section-title">Required sleep metrics</div>
-        <div className="sf-help">These are required to save a night and generate RRSM insights. Required fields are marked with <span className="sf-req">*</span>.</div>
+        <div className="sf-section-title">Sleep check-in</div>
+        <div className="sf-help">Fast morning log.</div>
 
 
     <div className="sf-section-title">How was your sleep?</div>
-<div className="sf-help">
-  Complete the fields below.
-</div>
+<div className="sf-help">Tap what applies.</div>
+
+<div className="space-y-5">
 
   {/* Sleep initiation */}
   <div className="rounded-xl border border-gray-200 p-4">
@@ -645,43 +658,69 @@ const canSaveNight = missingRequired.length === 0;
 </div>
 
         <div style={{ marginTop: 14 }}>
-          <MultiCheckGroup title="Mind State" options={["Not sure / none", ...MIND_TAGS]} value={mindTags} onChange={setMindTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
-          <MultiCheckGroup title="Environment" options={["Not sure / none", ...ENV_TAGS]} value={environmentTags} onChange={setEnvironmentTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
-          <MultiCheckGroup title="Body State" options={["Not sure / none", ...BODY_TAGS]} value={bodyTags} onChange={setBodyTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
+          <MultiCheckGroup
+            title="Emotional state"
+            options={["Not sure / none", ...EMOTIONAL_TAGS]}
+            value={emotionalTags}
+            onChange={setEmotionalTags}
+            required
+            help="Choose what best describes your emotional state."
+          />
 
-          
+          <MultiCheckGroup
+            title="Mental state"
+            options={["Not sure / none", ...MENTAL_TAGS]}
+            value={mentalTags}
+            onChange={setMentalTags}
+            required
+            help="Choose what best describes your thinking state."
+          />
 
+          <MultiCheckGroup
+            title="Room environment"
+            options={["Not sure / none", ...ENV_TAGS]}
+            value={environmentTags}
+            onChange={setEnvironmentTags}
+            required
+            help="Choose what affected the room while you slept."
+          />
+
+          <MultiCheckGroup
+            title="Body state"
+            options={["Not sure / none", ...BODY_TAGS]}
+            value={bodyTags}
+            onChange={setBodyTags}
+            required
+            help="Choose what best describes your body state."
+          />
         </div>
       </div>
 
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
-          After the night: what stood out?
+          Sleep hygiene
         </div>
         <div className="sf-help" style={{ marginBottom: 12 }}>
-          This is your best guess about what may have affected the night. This is a quick driver check, not a diary note. Longer reflection belongs in the Diary page.
+          Choose anything that happened before bed.
         </div>
 
         <div style={{ marginBottom: 14 }}>
           <MultiCheckGroup
             title=""
             options={[
-              "Nothing / no clear driver",
-              "Stress / worry",
+              "Nothing / none",
               "Late caffeine",
               "Alcohol",
+              "Nicotine / smoking",
               "Late meal",
               "Screen time",
-              "Noise",
-              "Too hot",
-              "Too cold",
-              "Pain / discomfort",
-              "Exercise late",
+              "Late intense exercise",
+              "Night vitamins / supplements / electrolytes",
               "Other",
             ]}
             value={drivers}
             onChange={(next) => setDrivers(next)}
-            help="Select one or more. If nothing stands out, choose “Nothing / no clear driver”."
+            help="Choose one or more."
           />
         </div>
 
