@@ -63,6 +63,13 @@ export default function ProtectedLayout({
 <Link href="/protected/protocols" style={{ textDecoration: "none" }}>
   Protocols
 </Link>
+
+              <span className="sf-sep">|</span>
+
+              <Link href="/protected/profile" style={{ textDecoration: "none" }}>
+                Profile
+              </Link>
+
               <span className="sf-sep">|</span>
 
               <Link href="/protected/faq" style={{ textDecoration: "none" }}>
