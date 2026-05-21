@@ -93,7 +93,7 @@ const ENV_TAGS = ["Hot", "cold", "noisy", "Quiet", "Bright", "Dark", "Humid", "D
 
 const BODY_TAGS = [
   "Pain",
-  "Discomfort",
+  "Muscle soreness / discomfort",
   "Restless",
   "Heavy fatigue",
   "Light fatigue",
@@ -442,7 +442,7 @@ if (!wakeRecoveryChoice) missingRequired.push("Total awake time after wake-ups")
 if (!emotionalTags || emotionalTags.length === 0) missingRequired.push("Emotional state");
 if (!mentalTags || mentalTags.length === 0) missingRequired.push("Mental state");
 if (!environmentTags || environmentTags.length === 0) missingRequired.push("Room environment");
-if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body tag");
+if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body state");
 const canSaveNight = missingRequired.length === 0;
 
   return (
