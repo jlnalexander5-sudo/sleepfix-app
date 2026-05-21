@@ -13,6 +13,7 @@ type SleepNightRow = {
   sleep_quality: number | string | null;
   sleep_latency_choice: string | null;
   wake_ups_choice: string | null;
+  wake_recovery_choice?: string | null;
   mind_tags?: string[] | null;
   environment_tags?: string[] | null;
   body_tags?: string[] | null;
@@ -32,6 +33,21 @@ function parseLatency(choice: string | null): number | null {
 function parseWakeUps(choice: string | null): number | null {
   if (!choice) return null;
   const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseWakeRecovery(choice: string | null | undefined): number | null {
+  if (!choice) return null;
+
+  const cleaned = choice.toLowerCase().trim();
+
+  if (cleaned.includes("0-5")) return 5;
+  if (cleaned.includes("5-15")) return 15;
+  if (cleaned.includes("15-30")) return 30;
+  if (cleaned.includes("30-60")) return 60;
+  if (cleaned.includes("60+")) return 90;
+
+  const n = parseInt(cleaned.replace(/[^0-9]/g, ""), 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -63,6 +79,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocolFollowed?: "
     quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
     latencyMin: parseLatency(row.sleep_latency_choice),
     wakeUps: parseWakeUps(row.wake_ups_choice),
+    wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
     protocolFollowed,
@@ -76,7 +93,7 @@ function prettyCategory(category: string) {
     case "body_physiology":
       return "Body / physiology activation";
     case "environment":
-      return "Room / environment disruption";
+      return "Room temperature / environment disruption";
     case "sleep_hygiene":
       return "Personal sleep-hygiene disruption";
     case "circadian_context":
@@ -124,7 +141,7 @@ export default function ProtocolsPage() {
 
       const { data, error: rowsErr } = await supabase
         .from("sleep_nights")
-        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,mind_tags,environment_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
+        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,mind_tags,environment_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
         .eq("user_id", authData.user.id)
         .order("local_date", { ascending: true })
         .limit(14);
@@ -169,7 +186,7 @@ export default function ProtocolsPage() {
     <main className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Tonight&apos;s Protocol</h1>
       <p className="mt-2 text-base text-gray-600">
-        SleepFix uses your recent sleep records to recommend the protocol most likely to match tonight&apos;s sleep issue.
+        SleepFix analyses your recent sleep patterns to recommend the best protocol for tonight.
       </p>
 
       {loading ? (
@@ -216,11 +233,11 @@ export default function ProtocolsPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-gray-200 p-3">
                 <div className="text-sm font-bold text-gray-500">Sleep issue?</div>
-                <div className="mt-1 font-semibold text-gray-900">{result.sleepIssueDetected ? "Yes" : "No clear issue"}</div>
+                <div className="mt-1 font-semibold text-gray-900">{result.sleepIssueDetected ? "Sleep issue detected" : "No clear sleep issue"}</div>
               </div>
               <div className="rounded-xl border border-gray-200 p-3">
                 <div className="text-sm font-bold text-gray-500">Recurring?</div>
-                <div className="mt-1 font-semibold text-gray-900">{result.recurringIssue ? "Yes" : "Not yet"}</div>
+                <div className="mt-1 font-semibold text-gray-900">{result.recurringIssue ? "Recurring pattern" : "Still monitoring"}</div>
               </div>
               <div className="rounded-xl border border-gray-200 p-3">
                 <div className="text-sm font-bold text-gray-500">Main factor</div>
@@ -228,7 +245,13 @@ export default function ProtocolsPage() {
               </div>
               <div className="rounded-xl border border-gray-200 p-3">
                 <div className="text-sm font-bold text-gray-500">Confidence</div>
-                <div className="mt-1 font-semibold capitalize text-gray-900">{result.protocolConfidence}</div>
+                <div className="mt-1 font-semibold capitalize text-gray-900">
+  {result.protocolConfidence === "low"
+    ? "Early pattern"
+    : result.protocolConfidence === "moderate"
+    ? "Pattern forming"
+    : "Strong pattern"}
+</div>
               </div>
             </div>
 
