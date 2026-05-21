@@ -65,6 +65,7 @@ function parseLatencyToMinutes(choice: string | null): number | null {
 }
 
 const WAKE_CHOICES = ["0", "1", "2", "3", "4", "5+"] as const;
+const WAKE_RECOVERY_CHOICES = ["0-5", "5-15", "15-30", "30-60", "60+"] as const;
 const QUALITY_CHOICES = Array.from({ length: 10 }, (_, i) => String(i + 1));
 
 const MIND_TAGS = [
@@ -194,6 +195,7 @@ export default function SleepPage() {
   const [sleepQuality, setSleepQuality] = useState<string>(""); // "1".."10"
   const [sleepLatencyChoice, setSleepLatencyChoice] = useState<string>(""); // "5"|"10"|"20"|"30"|"60+"
   const [wakeUpsChoice, setWakeUpsChoice] = useState<string>(""); // "0"|"1".."4"|"5+"
+  const [wakeRecoveryChoice, setWakeRecoveryChoice] = useState<string>(""); // total awake time after wake-ups
   const [mindTags, setMindTags] = useState<string[]>([]);
   const [environmentTags, setEnvironmentTags] = useState<string[]>([]);
   const [bodyTags, setBodyTags] = useState<string[]>([]);
@@ -215,6 +217,7 @@ export default function SleepPage() {
     setSleepQuality("");
     setSleepLatencyChoice("");
     setWakeUpsChoice("");
+    setWakeRecoveryChoice("");
     setMindTags([]);
     setEnvironmentTags([]);
     setBodyTags([]);
@@ -255,6 +258,7 @@ export default function SleepPage() {
     setSleepQuality("");
     setSleepLatencyChoice("");
     setWakeUpsChoice("");
+    setWakeRecoveryChoice("");
     setMindTags([]);
     setEnvironmentTags([]);
     setBodyTags([]);
@@ -378,6 +382,7 @@ export default function SleepPage() {
         sleep_quality: Number(sleepQuality),
         sleep_latency_choice: sleepLatencyChoice,
         wake_ups_choice: wakeUpsChoice,
+        wake_recovery_choice: wakeRecoveryChoice,
         mind_tags: mindTags,
         environment_tags: environmentTags,
         body_tags: bodyTags,
@@ -421,6 +426,7 @@ const missingRequired: string[] = [];
 if (!sleepQuality) missingRequired.push("Sleep Quality");
 if (!sleepLatencyChoice) missingRequired.push("Sleep Latency");
 if (!wakeUpsChoice) missingRequired.push("Wake Ups");
+if (!wakeRecoveryChoice) missingRequired.push("Total awake time after wake-ups");
 if (!mindTags || mindTags.length === 0) missingRequired.push("Mind tag");
 if (!environmentTags || environmentTags.length === 0) missingRequired.push("Environment tag");
 if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body tag");
@@ -526,7 +532,7 @@ const canSaveNight = missingRequired.length === 0;
         <div className="sf-section-title">Quick check-in (powers insights)</div>
         <div className="sf-help">Required fields are marked with <span className="sf-req">*</span>.</div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div>
             <div className="sf-help" style={{ minHeight: 64 }}>How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
@@ -561,6 +567,19 @@ const canSaveNight = missingRequired.length === 0;
               {WAKE_CHOICES.map((v) => (
                 <option key={v} value={v}>
                   {v === "5+" ? "5+" : v}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div className="sf-field-label">Total awake time after wake-ups<span className="sf-req">*</span></div>
+            <div className="sf-help" style={{ minHeight: 64 }}>Total combined time awake after waking during the night.</div>
+            <select className="sf-select" style={{ marginTop: "auto" }} value={wakeRecoveryChoice} onChange={(e) => setWakeRecoveryChoice(e.target.value)}>
+              <option value="">Select…</option>
+              {WAKE_RECOVERY_CHOICES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "60+" ? "60+ mins" : `${v} mins`}
                 </option>
               ))}
             </select>
@@ -623,7 +642,7 @@ const canSaveNight = missingRequired.length === 0;
             <option value="yes">Yes — followed</option>
             <option value="partial">Partially followed</option>
             <option value="no">No — did not follow</option>
-            <option value="not_used">No protocol used</option>
+            <option value="none">No protocol used</option>
           </select>
         </div>
 
