@@ -528,11 +528,10 @@ const canSaveNight = missingRequired.length === 0;
         <div className="sf-help">These are required to save a night and generate RRSM insights. Required fields are marked with <span className="sf-req">*</span>.</div>
 
 
-      <div style={{ marginTop: 6 }}>
-        <div className="sf-section-title">Quick check-in (powers insights)</div>
-        <div className="sf-help">Required fields are marked with <span className="sf-req">*</span>.</div>
-
-      <div className="space-y-5">
+    <div className="sf-section-title">How was your sleep?</div>
+<div className="sf-help">
+  Complete the fields below.
+</div>
 
   {/* Sleep initiation */}
   <div className="rounded-xl border border-gray-200 p-4">
