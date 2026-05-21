@@ -44,6 +44,10 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   protocolEvaluation: RRSMProtocolEvaluation;
   protocolEvaluationLabel: string;
   protocolEvaluationReason: string;
+  hiddenFactorSuspected: boolean;
+  hiddenFactorReason: string | null;
+  patternStability: "stable" | "forming" | "unstable";
+  investigationPrompt: string | null;
 };
 
 type ProtocolFollowedValue =
@@ -565,6 +569,141 @@ function evaluateProtocol(nights: NightWithOptionalProtocol[]): {
   };
 }
 
+
+function latestIssueCategories(nights: NightWithOptionalProtocol[], limit = 5): RRSMContributorCategory[] {
+  return nights
+    .slice(-limit)
+    .filter((night) => detectSleepIssue(night))
+    .map((night) => chooseDominantCategory(scoreNightCategories(night)))
+    .filter((cat) => cat !== "none");
+}
+
+function detectPatternStability(
+  nights: NightWithOptionalProtocol[],
+  dominant: RRSMContributorCategory,
+  protocolEvaluation: RRSMProtocolEvaluation,
+): "stable" | "forming" | "unstable" {
+  const cats = latestIssueCategories(nights, 5);
+  const unique = new Set(cats);
+
+  if (protocolEvaluation === "case_b_hidden_factor") return "unstable";
+  if (cats.length >= 3 && unique.size >= 3) return "unstable";
+  if (dominant !== "none" && cats.filter((cat) => cat === dominant).length >= 2) return "stable";
+
+  return "forming";
+}
+
+function detectHiddenFactor(
+  nights: NightWithOptionalProtocol[],
+  dominant: RRSMContributorCategory,
+  protocolEvaluation: RRSMProtocolEvaluation,
+): {
+  suspected: boolean;
+  reason: string | null;
+} {
+  if (protocolEvaluation !== "case_b_hidden_factor") {
+    return { suspected: false, reason: null };
+  }
+
+  const latest = nights[nights.length - 1];
+  const previous = nights[nights.length - 2];
+
+  if (!latest || !previous) {
+    return {
+      suspected: true,
+      reason: "The protocol was followed but the next night still showed a sleep issue. SleepFix needs more data to identify what changed.",
+    };
+  }
+
+  const latestCat = chooseDominantCategory(scoreNightCategories(latest));
+  const previousCat = chooseDominantCategory(scoreNightCategories(previous));
+
+  if (latestCat !== previousCat && latestCat !== "none" && previousCat !== "none") {
+    return {
+      suspected: true,
+      reason:
+        "The protocol was followed, but the main sleep factor shifted. This suggests the original protocol may not have been targeting the main remaining cause.",
+    };
+  }
+
+  if (dominant === "environment") {
+    return {
+      suspected: true,
+      reason:
+        "The room/environment protocol was followed but sleep still remained disrupted. Check for a hidden body or timing factor, such as illness, body temperature instability, pain, or irregular schedule pressure.",
+    };
+  }
+
+  if (dominant === "mind_emotional") {
+    return {
+      suspected: true,
+      reason:
+        "The mind/emotional protocol was followed but sleep still remained disrupted. Check whether the issue was actually body activation, room disturbance, caffeine/screen stimulation, or a timing constraint.",
+    };
+  }
+
+  if (dominant === "body_physiology") {
+    return {
+      suspected: true,
+      reason:
+        "The body protocol was followed but sleep still remained disrupted. Check for hidden inflammation, illness, room temperature, overtraining, pain position, or schedule strain.",
+    };
+  }
+
+  if (dominant === "sleep_hygiene") {
+    return {
+      suspected: true,
+      reason:
+        "The sleep-hygiene protocol was followed but sleep still remained disrupted. Check whether another factor, such as emotion, pain, room temperature, or circadian timing, was stronger than the habit factor.",
+    };
+  }
+
+  return {
+    suspected: true,
+    reason:
+      "The protocol was followed but the sleep issue remained. SleepFix suspects another hidden factor may be contributing.",
+  };
+}
+
+function investigationPromptFor(
+  dominant: RRSMContributorCategory,
+  hiddenFactorSuspected: boolean,
+  patternStability: "stable" | "forming" | "unstable",
+): string | null {
+  if (!hiddenFactorSuspected && patternStability !== "unstable") return null;
+
+  switch (dominant) {
+    case "environment":
+      return "Tonight, check one room factor only: temperature, bedding, light, noise, humidity, or airflow. Do not change several things at once.";
+    case "mind_emotional":
+      return "Tonight, note whether the problem is thoughts, emotion, body activation, or outside disturbance. Do not assume they are the same issue.";
+    case "body_physiology":
+      return "Tonight, note the exact body factor: pain area, soreness, inflammation, illness, tension, or restless body. Also check whether room temperature worsened it.";
+    case "sleep_hygiene":
+      return "Tonight, track one habit variable only: caffeine, alcohol, nicotine, late food, screens, supplements, or late exercise.";
+    case "circadian_context":
+      return "Tonight, note whether timing pressure is unavoidable: shift work, irregular hours, travel, pregnancy, chronic illness, or a disrupted routine.";
+    default:
+      return "Tonight, record what changed from the previous night. SleepFix needs a cleaner signal before changing the protocol.";
+  }
+}
+
+function confidenceForWithStability(
+  nights: NightWithOptionalProtocol[],
+  sleepIssueDetected: boolean,
+  recurring: boolean,
+  patternStability: "stable" | "forming" | "unstable",
+  protocolEvaluation: RRSMProtocolEvaluation,
+): "low" | "moderate" | "high" {
+  if (!sleepIssueDetected) return "low";
+  if (patternStability === "unstable") return "low";
+  if (protocolEvaluation === "case_b_hidden_factor") return "low";
+  if (recurring && nights.length >= 5) return "high";
+  if (nights.length >= 3) return "moderate";
+  return "low";
+}
+
+
 export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtocolResult {
   const base = runRRSMEngineV2(nights);
 
@@ -575,8 +714,19 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const recommendedProtocol = protocolForCategory(dominantCategory, categoryScores, latestNight);
   const recurring = recurringIssue(nights, dominantCategory);
   const secondaryFactors = secondaryFactorsFor(categoryScores, dominantCategory);
-  const protocolConfidence = confidenceFor(nights, sleepIssueDetected, recurring);
   const protocolEvaluation = evaluateProtocol(nights);
+  const patternStability = detectPatternStability(nights, dominantCategory, protocolEvaluation.value);
+  const hiddenFactor = detectHiddenFactor(nights, dominantCategory, protocolEvaluation.value);
+  const hiddenFactorSuspected = hiddenFactor.suspected;
+  const hiddenFactorReason = hiddenFactor.reason;
+  const investigationPrompt = investigationPromptFor(dominantCategory, hiddenFactorSuspected, patternStability);
+  const protocolConfidence = confidenceForWithStability(
+    nights,
+    sleepIssueDetected,
+    recurring,
+    patternStability,
+    protocolEvaluation.value,
+  );
 
   const protocolReason = detailedReasonForLatestNight(dominantCategory, latestNight);
 
@@ -590,12 +740,18 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
       : "This does not yet look like a recurring pattern.",
     protocolReason,
     protocolEvaluation.reason,
-  ];
+    hiddenFactorReason ? hiddenFactorReason : null,
+    investigationPrompt ? investigationPrompt : null,
+  ].filter(Boolean) as string[];
 
   const actions = [`Tonight's recommended protocol: ${recommendedProtocol}`, ...base.actions];
 
   if (secondaryFactors.length > 0) {
     actions.push(`Secondary factors to watch: ${secondaryFactors.join(", ")}.`);
+  }
+
+  if (hiddenFactorSuspected && investigationPrompt) {
+    actions.push(`Hidden-factor check: ${investigationPrompt}`);
   }
 
   return {
@@ -611,6 +767,10 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     protocolEvaluation: protocolEvaluation.value,
     protocolEvaluationLabel: protocolEvaluation.label,
     protocolEvaluationReason: protocolEvaluation.reason,
+    hiddenFactorSuspected,
+    hiddenFactorReason,
+    patternStability,
+    investigationPrompt,
     why,
     actions,
   };
