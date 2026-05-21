@@ -654,8 +654,6 @@ const canSaveNight = missingRequired.length === 0;
         </div>
       </div>
 
-            </div>
-
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
           After the night: what stood out?
