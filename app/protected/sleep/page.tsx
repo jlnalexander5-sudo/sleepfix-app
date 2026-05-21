@@ -679,7 +679,9 @@ const canSaveNight = missingRequired.length === 0;
       </div>
 
       <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-section-title">Sleep hygiene</div>
+       <div className="sf-section-title">
+  Sleep hygiene<span className="sf-req">*</span>
+</div>
         <div className="sf-help" style={{ marginBottom: 12 }}>
           Choose anything that happened before bed.
         </div>
