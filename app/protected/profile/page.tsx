@@ -13,6 +13,20 @@ const SLEEP_CONTEXT_OPTIONS = [
   "Other",
 ] as const;
 
+const WORK_CONTEXT_OPTIONS = [
+  "Desk work",
+  "Phone / screen-heavy work",
+  "Driving most of the day",
+  "Construction / physical labour",
+  "Machinery / tools",
+  "Talking / customer-facing work",
+  "High-stress decision work",
+  "Shift-based work",
+  "Mostly standing",
+  "Mostly sitting",
+  "Other",
+] as const;
+
 function toggleOption(list: string[], option: string) {
   if (option === "Regular schedule") {
     return list.includes(option) ? [] : ["Regular schedule"];
@@ -28,6 +42,7 @@ export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
   const [userId, setUserId] = useState<string | null>(null);
   const [sleepContext, setSleepContext] = useState<string[]>([]);
+  const [workContext, setWorkContext] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -54,7 +69,7 @@ export default function ProfilePage() {
 
       const { data, error: profileErr } = await supabase
         .from("rrsm_profiles")
-        .select("sleep_context")
+        .select("sleep_context, work_context")
         .eq("user_id", uid)
         .maybeSingle();
 
@@ -70,6 +85,7 @@ export default function ProfilePage() {
       if (!cancelled) {
         setUserId(uid);
         setSleepContext(Array.isArray(data?.sleep_context) ? data.sleep_context : []);
+        setWorkContext(Array.isArray(data?.work_context) ? data.work_context : []);
         setLoading(false);
       }
     }
@@ -91,6 +107,7 @@ export default function ProfilePage() {
     const payload = {
       user_id: userId,
       sleep_context: sleepContext,
+      work_context: workContext,
       updated_at: new Date().toISOString(),
     };
 
@@ -151,6 +168,49 @@ export default function ProfilePage() {
             })}
           </div>
         )}
+
+
+      <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-gray-900">Daily work / activity pattern</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Choose what best describes your normal day. This helps SleepFix understand body load, mental load, screen load, and fatigue patterns.
+        </p>
+
+        {loading ? (
+          <div className="mt-4 text-gray-600">Loading...</div>
+        ) : (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {WORK_CONTEXT_OPTIONS.map((option) => {
+              const checked = workContext.includes(option);
+
+              return (
+                <label
+                  key={option}
+                  className={`rounded-xl border p-3 font-semibold ${
+                    checked
+                      ? "border-blue-700 bg-blue-50 text-blue-900"
+                      : "border-gray-200 bg-white text-gray-900"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setWorkContext((current) =>
+                        current.includes(option)
+                          ? current.filter((item) => item !== option)
+                          : [...current, option]
+                      )
+                    }
+                    className="mr-2"
+                  />
+                  {option}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
         <button
           type="button"
