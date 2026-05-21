@@ -537,125 +537,107 @@ const canSaveNight = missingRequired.length === 0;
 
       {/* Required metrics */}
       <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-section-title">Sleep check-in</div>
-        <div className="sf-help">Fast morning log.</div>
+        <div className="sf-section-title">Sleep Check-In — How Was Your Sleep?</div>
+        <div className="sf-help">Tap what applies.</div>
 
+        <div className="space-y-5 mt-4">
+          {/* Sleep initiation + result */}
+          <div className="rounded-xl border border-gray-200 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="sf-field-label" style={{ marginBottom: 10 }}>
+                  Sleep latency<span className="sf-req">*</span>
+                </div>
+                <div className="sf-help" style={{ marginBottom: 12 }}>
+                  How long did it take to fall asleep?
+                </div>
+                <select
+                  className="sf-select"
+                  value={sleepLatencyChoice}
+                  onChange={(e) => setSleepLatencyChoice(e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {LATENCY_CHOICES.map((v) => (
+                    <option key={v} value={v}>
+                      {v === "60+" ? "60+ mins" : `${v} mins`}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-    <div className="sf-section-title">How was your sleep?</div>
-<div className="sf-help">Tap what applies.</div>
+              <div>
+                <div className="sf-field-label" style={{ marginBottom: 10 }}>
+                  Sleep quality<span className="sf-req">*</span>
+                </div>
+                <div className="sf-help" style={{ marginBottom: 12 }}>
+                  Overall sleep quality.
+                </div>
+                <select
+                  className="sf-select"
+                  value={sleepQuality}
+                  onChange={(e) => setSleepQuality(e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {QUALITY_CHOICES.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
 
-<div className="space-y-5">
+          {/* Sleep maintenance */}
+          <div className="rounded-xl border border-gray-200 p-4">
+            <div className="sf-field-label" style={{ marginBottom: 14 }}>
+              Sleep maintenance
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="sf-field-label">
+                  Wake ups<span className="sf-req">*</span>
+                </div>
+                <div className="sf-help" style={{ marginBottom: 12 }}>
+                  How many times did you wake up?
+                </div>
+                <select
+                  className="sf-select"
+                  value={wakeUpsChoice}
+                  onChange={(e) => setWakeUpsChoice(e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {WAKE_CHOICES.map((v) => (
+                    <option key={v} value={v}>
+                      {v === "5+" ? "5+" : v}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-  {/* Sleep initiation */}
-  <div className="rounded-xl border border-gray-200 p-4">
-    <div className="sf-field-label" style={{ marginBottom: 10 }}>
-      Sleep latency<span className="sf-req">*</span>
-    </div>
-
-    <div className="sf-help" style={{ marginBottom: 12 }}>
-      How long did it take to fall asleep?
-    </div>
-
-    <select
-      className="sf-select"
-      value={sleepLatencyChoice}
-      onChange={(e) => setSleepLatencyChoice(e.target.value)}
-    >
-      <option value="">Select…</option>
-
-      {LATENCY_CHOICES.map((v) => (
-        <option key={v} value={v}>
-          {v === "60+" ? "60+ mins" : `${v} mins`}
-        </option>
-      ))}
-    </select>
-  </div>
-
-  {/* Sleep maintenance */}
-  <div className="rounded-xl border border-gray-200 p-4">
-    <div className="sf-field-label" style={{ marginBottom: 14 }}>
-      Sleep maintenance
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-      <div>
-        <div className="sf-field-label">
-          Wake ups<span className="sf-req">*</span>
+              <div>
+                <div className="sf-field-label">
+                  Total time awake during the night<span className="sf-req">*</span>
+                </div>
+                <div className="sf-help" style={{ marginBottom: 12 }}>
+                  Combined awake time after waking up.
+                </div>
+                <select
+                  className="sf-select"
+                  value={wakeRecoveryChoice}
+                  onChange={(e) => setWakeRecoveryChoice(e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {WAKE_RECOVERY_CHOICES.map((v) => (
+                    <option key={v} value={v}>
+                      {v === "60+" ? "60+ mins" : `${v.replace("-", "–")} mins`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <div className="sf-help" style={{ marginBottom: 12 }}>
-          How many times did you wake up?
-        </div>
-
-        <select
-          className="sf-select"
-          value={wakeUpsChoice}
-          onChange={(e) => setWakeUpsChoice(e.target.value)}
-        >
-          <option value="">Select…</option>
-
-          {WAKE_CHOICES.map((v) => (
-            <option key={v} value={v}>
-              {v === "5+" ? "5+" : v}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <div className="sf-field-label">
-          Total time awake during the night<span className="sf-req">*</span>
-        </div>
-
-        <div className="sf-help" style={{ marginBottom: 12 }}>
-          Combined awake time after waking up.
-        </div>
-
-        <select
-          className="sf-select"
-          value={wakeRecoveryChoice}
-          onChange={(e) => setWakeRecoveryChoice(e.target.value)}
-        >
-          <option value="">Select…</option>
-
-          <option value="0-5">0–5 mins</option>
-          <option value="5-15">5–15 mins</option>
-          <option value="15-30">15–30 mins</option>
-          <option value="30-60">30–60 mins</option>
-          <option value="60+">60+ mins</option>
-        </select>
-      </div>
-
-    </div>
-  </div>
-
-  {/* Overall result */}
-  <div className="rounded-xl border border-gray-200 p-4">
-    <div className="sf-field-label" style={{ marginBottom: 10 }}>
-      Sleep quality<span className="sf-req">*</span>
-    </div>
-
-    <div className="sf-help" style={{ marginBottom: 12 }}>
-      Overall sleep quality.
-    </div>
-
-    <select
-      className="sf-select"
-      value={sleepQuality}
-      onChange={(e) => setSleepQuality(e.target.value)}
-    >
-      <option value="">Select…</option>
-
-      {QUALITY_CHOICES.map((v) => (
-        <option key={v} value={v}>
-          {v}
-        </option>
-      ))}
-    </select>
-  </div>
-
-</div>
 
         <div style={{ marginTop: 14 }}>
           <MultiCheckGroup
@@ -696,61 +678,56 @@ const canSaveNight = missingRequired.length === 0;
         </div>
       </div>
 
-      <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
-          Sleep hygiene
-        </div>
+      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="sf-section-title">Sleep hygiene</div>
         <div className="sf-help" style={{ marginBottom: 12 }}>
           Choose anything that happened before bed.
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <MultiCheckGroup
-            title=""
-            options={[
-              "Nothing / none",
-              "Late caffeine",
-              "Alcohol",
-              "Nicotine / smoking",
-              "Late meal",
-              "Screen time",
-              "Late intense exercise",
-              "Night vitamins / supplements / electrolytes",
-              "Other",
-            ]}
-            value={drivers}
-            onChange={(next) => setDrivers(next)}
-            help="Choose one or more."
-          />
-        </div>
+        <MultiCheckGroup
+          title=""
+          options={[
+            "Nothing / none",
+            "Late caffeine",
+            "Alcohol",
+            "Nicotine / smoking",
+            "Late meal",
+            "Screen time",
+            "Late intense exercise",
+            "Night vitamins / supplements / electrolytes",
+            "Other",
+          ]}
+          value={drivers}
+          onChange={(next) => setDrivers(next)}
+          help="Choose one or more."
+        />
+      </div>
 
+      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="sf-field-label">Was last night's recommended protocol followed?</div>
+        <div className="sf-help">This helps SleepFix learn whether the recommendation worked, partly worked, or was not tested.</div>
+        <select
+          className="sf-select"
+          value={protocolFollowed}
+          onChange={(e) => setProtocolFollowed(e.target.value)}
+        >
+          <option value="">Select…</option>
+          <option value="yes">Yes — followed</option>
+          <option value="partial">Partially followed</option>
+          <option value="no">No — did not follow</option>
+          <option value="none">No protocol used</option>
+        </select>
+      </div>
 
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-          <div className="sf-field-label">Was last night's recommended protocol followed?</div>
-          <div className="sf-help">This helps SleepFix learn whether the recommendation worked, partly worked, or was not tested.</div>
-          <select
-            className="sf-select"
-            value={protocolFollowed}
-            onChange={(e) => setProtocolFollowed(e.target.value)}
-          >
-            <option value="">Select…</option>
-            <option value="yes">Yes — followed</option>
-            <option value="partial">Partially followed</option>
-            <option value="no">No — did not follow</option>
-            <option value="none">No protocol used</option>
-          </select>
-        </div>
-
-        <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
-          {isSavingNight ? "Saving…" : saveNotice === "Saved" ? "Saved" : "Save night"}
-        </button>
+      <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
+        {isSavingNight ? "Saving…" : saveNotice === "Saved" ? "Saved" : "Save night"}
+      </button>
       {saveNotice && (
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#000080" }}>{saveNotice}</div>
       )}
       {saveError && (
         <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600, color: "#B00020" }}>{saveError}</div>
       )}
-
       </div>
       </div>
   );
