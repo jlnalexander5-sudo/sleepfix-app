@@ -55,7 +55,10 @@ function textFromArray(value?: string[] | null) {
   return Array.isArray(value) ? value.join(", ") : "";
 }
 
-function mapNight(row: SleepNightRow): RRSMMetricsNight & { protocolFollowed?: "yes" | "partial" | "no" | "none" | null } {
+function mapNight(row: SleepNightRow): RRSMMetricsNight & {
+  wakeRecoveryMin?: number | null;
+  protocolFollowed?: "yes" | "partial" | "no" | "none" | null;
+} {
   const drivers = [
     row.primary_driver,
     row.secondary_driver,
