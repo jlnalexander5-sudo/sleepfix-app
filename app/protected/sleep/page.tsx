@@ -532,59 +532,118 @@ const canSaveNight = missingRequired.length === 0;
         <div className="sf-section-title">Quick check-in (powers insights)</div>
         <div className="sf-help">Required fields are marked with <span className="sf-req">*</span>.</div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div className="sf-field-label">Sleep quality (1–10)<span className="sf-req">*</span></div>
-            <div className="sf-help" style={{ minHeight: 64 }}>How good was your sleep overall? (1 = terrible, 10 = amazing)</div>
-            <select className="sf-select" style={{ marginTop: "auto" }} value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)}>
-              <option value="">Select…</option>
-              {QUALITY_CHOICES.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
+      <div className="space-y-5">
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div className="sf-field-label">Sleep latency<span className="sf-req">*</span></div>
-            <div className="sf-help" style={{ minHeight: 64 }}>How long did it take to fall asleep?</div>
-            <select className="sf-select" style={{ marginTop: "auto" }} value={sleepLatencyChoice} onChange={(e) => setSleepLatencyChoice(e.target.value)}>
-              <option value="">Select…</option>
-              {LATENCY_CHOICES.map((v) => (
-                <option key={v} value={v}>
-                  {v === "60+" ? "60+ mins" : `${v} mins`}
-                </option>
-              ))}
-            </select>
-          </div>
+  {/* Sleep initiation */}
+  <div className="rounded-xl border border-gray-200 p-4">
+    <div className="sf-field-label" style={{ marginBottom: 10 }}>
+      Sleep latency<span className="sf-req">*</span>
+    </div>
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div className="sf-field-label">Wake ups<span className="sf-req">*</span></div>
-            <div className="sf-help" style={{ minHeight: 64 }}>How many times did you wake up?</div>
-            <select className="sf-select" style={{ marginTop: "auto" }} value={wakeUpsChoice} onChange={(e) => setWakeUpsChoice(e.target.value)}>
-              <option value="">Select…</option>
-              {WAKE_CHOICES.map((v) => (
-                <option key={v} value={v}>
-                  {v === "5+" ? "5+" : v}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="sf-help" style={{ marginBottom: 12 }}>
+      How long did it take to fall asleep?
+    </div>
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div className="sf-field-label">Total awake time after wake-ups<span className="sf-req">*</span></div>
-            <div className="sf-help" style={{ minHeight: 64 }}>Total combined time awake after waking during the night.</div>
-            <select className="sf-select" style={{ marginTop: "auto" }} value={wakeRecoveryChoice} onChange={(e) => setWakeRecoveryChoice(e.target.value)}>
-              <option value="">Select…</option>
-              {WAKE_RECOVERY_CHOICES.map((v) => (
-                <option key={v} value={v}>
-                  {v === "60+" ? "60+ mins" : `${v} mins`}
-                </option>
-              ))}
-            </select>
-          </div>
+    <select
+      className="sf-select"
+      value={sleepLatencyChoice}
+      onChange={(e) => setSleepLatencyChoice(e.target.value)}
+    >
+      <option value="">Select…</option>
+
+      {LATENCY_CHOICES.map((v) => (
+        <option key={v} value={v}>
+          {v === "60+" ? "60+ mins" : `${v} mins`}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  {/* Sleep maintenance */}
+  <div className="rounded-xl border border-gray-200 p-4">
+    <div className="sf-field-label" style={{ marginBottom: 14 }}>
+      Sleep maintenance
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <div>
+        <div className="sf-field-label">
+          Wake ups<span className="sf-req">*</span>
         </div>
+
+        <div className="sf-help" style={{ marginBottom: 12 }}>
+          How many times did you wake up?
+        </div>
+
+        <select
+          className="sf-select"
+          value={wakeUpsChoice}
+          onChange={(e) => setWakeUpsChoice(e.target.value)}
+        >
+          <option value="">Select…</option>
+
+          {WAKE_CHOICES.map((v) => (
+            <option key={v} value={v}>
+              {v === "5+" ? "5+" : v}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <div className="sf-field-label">
+          Total time awake during the night<span className="sf-req">*</span>
+        </div>
+
+        <div className="sf-help" style={{ marginBottom: 12 }}>
+          Combined awake time after waking up.
+        </div>
+
+        <select
+          className="sf-select"
+          value={wakeRecoveryChoice}
+          onChange={(e) => setWakeRecoveryChoice(e.target.value)}
+        >
+          <option value="">Select…</option>
+
+          <option value="0-5">0–5 mins</option>
+          <option value="5-15">5–15 mins</option>
+          <option value="15-30">15–30 mins</option>
+          <option value="30-60">30–60 mins</option>
+          <option value="60+">60+ mins</option>
+        </select>
+      </div>
+
+    </div>
+  </div>
+
+  {/* Overall result */}
+  <div className="rounded-xl border border-gray-200 p-4">
+    <div className="sf-field-label" style={{ marginBottom: 10 }}>
+      Sleep quality<span className="sf-req">*</span>
+    </div>
+
+    <div className="sf-help" style={{ marginBottom: 12 }}>
+      Overall sleep quality.
+    </div>
+
+    <select
+      className="sf-select"
+      value={sleepQuality}
+      onChange={(e) => setSleepQuality(e.target.value)}
+    >
+      <option value="">Select…</option>
+
+      {QUALITY_CHOICES.map((v) => (
+        <option key={v} value={v}>
+          {v}
+        </option>
+      ))}
+    </select>
+  </div>
+
+</div>
 
         <div style={{ marginTop: 14 }}>
           <MultiCheckGroup title="Mind State" options={["Not sure / none", ...MIND_TAGS]} value={mindTags} onChange={setMindTags} required help="Required. Choose one or more tags. If unsure, pick “Not sure / none”." />
