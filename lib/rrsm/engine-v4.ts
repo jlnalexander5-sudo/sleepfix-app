@@ -351,10 +351,47 @@ function chooseDominantCategory(scores: ReturnType<typeof scoreNightCategories>)
   return priority.find((cat) => scores[cat as keyof typeof scores] === maxScore) ?? "none";
 }
 
-function protocolForCategory(category: RRSMContributorCategory, scores: ReturnType<typeof scoreNightCategories>) {
+function mindProtocolForNight(night: NightWithOptionalProtocol | undefined) {
+  const text = `${joinedNightText(night as RRSMMetricsNight)} ${joinedProfileText(night)}`;
+
+  const hasMentalActivation = lowerIncludes(text, [
+    "racing",
+    "thought",
+    "thoughts",
+    "mentally stimulated",
+    "mental",
+    "wired",
+    "alert",
+    "focused",
+    "overstimulated",
+  ]);
+
+  const hasEmotionalActivation = lowerIncludes(text, [
+    "anxious",
+    "anxiety",
+    "worried",
+    "worry",
+    "upset",
+    "stress",
+    "stressed",
+    "euphoric",
+    "depressed",
+    "low",
+    "flat",
+    "emotional",
+  ]);
+
+  if (hasMentalActivation) return "RRSM Quieting Protocol";
+  if (hasEmotionalActivation) return "RRSM Body Downshift Protocol";
+
+  return "RRSM Quieting Protocol";
+}
+
+
+function protocolForCategory(category: RRSMContributorCategory, scores: ReturnType<typeof scoreNightCategories>, night?: NightWithOptionalProtocol) {
   switch (category) {
     case "mind_emotional":
-      return "RRSM Quieting Protocol";
+      return mindProtocolForNight(night);
     case "body_physiology":
       if (scores.body_physiology >= 5) return "RRSM Body Recovery Protocol";
       return "RRSM Body Downshift Protocol";
@@ -372,7 +409,7 @@ function protocolForCategory(category: RRSMContributorCategory, scores: ReturnTy
 function reasonForCategory(category: RRSMContributorCategory) {
   switch (category) {
     case "mind_emotional":
-      return "Your sleep form points most strongly toward mind/emotional activation. This commonly affects falling asleep and can reappear as wake-ups later in the night.";
+      return "Your sleep form points toward mind or emotional activation. Mental activation usually needs quieting; emotional activation often needs body downshifting first.";
     case "body_physiology":
       return "Your sleep form points most strongly toward body-based activation such as pain, tension, inflammation, DOMS, illness, or physical discomfort.";
     case "environment":
@@ -410,7 +447,15 @@ function detailedReasonForLatestNight(category: RRSMContributorCategory, latestN
   }
 
   if (category === "mind_emotional" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
-    return "SleepFix detected mental/emotional reactivation after waking. The main target is stopping wake-ups from turning into long awake periods.";
+    if (lowerIncludes(text, ["racing", "thought", "mentally stimulated", "wired", "alert"])) {
+      return "SleepFix detected mental reactivation after waking. The main target is stopping wake-ups from turning into long awake periods.";
+    }
+
+    if (lowerIncludes(text, ["anxious", "worried", "upset", "stress", "stressed", "euphoric", "depressed", "low", "flat"])) {
+      return "SleepFix detected emotional activation affecting sleep maintenance. The main target is reducing emotional charge through body downshifting before trying to sleep again.";
+    }
+
+    return "SleepFix detected mind/emotional reactivation after waking. The main target is stopping wake-ups from turning into long awake periods.";
   }
 
   return baseReason;
@@ -527,7 +572,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const sleepIssueDetected = detectSleepIssue(latestNight);
   const categoryScores = scoreNightCategories(latestNight);
   const dominantCategory = sleepIssueDetected ? chooseDominantCategory(categoryScores) : "none";
-  const recommendedProtocol = protocolForCategory(dominantCategory, categoryScores);
+  const recommendedProtocol = protocolForCategory(dominantCategory, categoryScores, latestNight);
   const recurring = recurringIssue(nights, dominantCategory);
   const secondaryFactors = secondaryFactorsFor(categoryScores, dominantCategory);
   const protocolConfidence = confidenceFor(nights, sleepIssueDetected, recurring);
