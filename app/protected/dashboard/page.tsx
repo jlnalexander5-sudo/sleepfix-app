@@ -596,8 +596,8 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
                       <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>AVE</span>
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {totalLatency}
-                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>SUM</span>
+                     {round1(totalLatency / 60)}
+                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>HRS</span>
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       {totalWakeups}
