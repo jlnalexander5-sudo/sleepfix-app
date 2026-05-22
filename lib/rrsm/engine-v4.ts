@@ -160,17 +160,13 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const majorWakeRecovery = hasMajorWakeRecovery(night);
 
 return Boolean(
-  severeLatency ||
-    severeWakeUps ||
+  majorLatencyIssue ||
+    wakeIssue ||
     maintenanceIssue ||
     prolongedWakeRecovery ||
     majorWakeRecovery ||
-    severeQuality ||
-    environmentIssue ||
-    hygieneIssue ||
-    emotionalIssue ||
-    bodyIssue ||
-    circadianIssue
+    majorQualityIssue ||
+    (qualityIssue && latencyIssue)
 );
 }
 
