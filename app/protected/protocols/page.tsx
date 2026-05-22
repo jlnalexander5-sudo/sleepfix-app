@@ -58,6 +58,7 @@ function textFromArray(value?: string[] | null) {
 
 function mapNight(row: SleepNightRow): RRSMMetricsNight & {
   wakeRecoveryMin?: number | null;
+  primaryTrigger?: string | null;
   protocolFollowed?: "yes" | "partial" | "no" | "none" | null;
 } {
   const drivers = [
