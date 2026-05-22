@@ -237,7 +237,14 @@ function dateKey(r: NightRow) {
 function dedupeByNightDate(rows: NightRow[], maxUnique: number) {
   const out: NightRow[] = [];
   const seen = new Set<string>();
-  for (const r of rows) {
+
+  const sorted = [...rows].sort((a, b) => {
+    const ak = dateKey(a);
+    const bk = dateKey(b);
+    return bk.localeCompare(ak);
+  });
+
+  for (const r of sorted) {
     const k = dateKey(r);
     if (!k) continue;
     if (seen.has(k)) continue;
@@ -245,7 +252,33 @@ function dedupeByNightDate(rows: NightRow[], maxUnique: number) {
     out.push(r);
     if (out.length >= maxUnique) break;
   }
+
   return out;
+}
+
+function addDaysYMD(ymd: string, days: number) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
+  date.setDate(date.getDate() + days);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function filterToLatest7CalendarDays(rows: NightRow[]) {
+  const unique = dedupeByNightDate(rows, 30);
+  const latestDate = unique.map(dateKey).filter(Boolean).sort().at(-1);
+  if (!latestDate) return [];
+
+  const earliestAllowed = addDaysYMD(latestDate, -6);
+
+  return unique
+    .filter((r) => {
+      const k = dateKey(r);
+      return k >= earliestAllowed && k <= latestDate;
+    })
+    .slice(0, 7);
 }
 
 export default function DashboardPage() {
@@ -324,7 +357,7 @@ const nextRows: NightRow[] = (data ?? []).map((r: any) => {
     notes: r.notes ?? null,
   };
 });
-const uniqueRows = dedupeByNightDate(nextRows, 7);
+const uniqueRows = filterToLatest7CalendarDays(nextRows);
       setRows(uniqueRows);
 
       setLoading(false);
@@ -441,7 +474,7 @@ const uniqueRows = dedupeByNightDate(nextRows, 7);
         <div>
           <div style={{ fontSize: 30, fontWeight: 800 , color: 'var(--sf-brand)'}}>Dashboard</div>
          <div style={{ marginTop: 6, color: "#444" }}>
-            Last 7 nights snapshot (baseline unlock at 3 valid nights).
+            Latest 7 calendar days snapshot (baseline unlock at 3 valid nights).
           </div>
         </div>
       </div>
