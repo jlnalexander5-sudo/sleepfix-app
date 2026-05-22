@@ -156,7 +156,6 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const majorLatencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 45;
   const wakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3;
   const maintenanceIssue = hasMaintenanceIssue(night);
-  const primaryTrigger = getPrimaryTrigger(night);
 
   return Boolean(
     majorQualityIssue ||
@@ -184,6 +183,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
+  const primaryTrigger = getPrimaryTrigger(night);
 
   // C1 — Mind / emotional activation: RB2/RB3
   if (
@@ -336,45 +336,32 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   if (lowerIncludes(profileText, ["talking", "customer-facing", "high-stress decision"])) {
     scores.mind_emotional += lowerIncludes(text, ["stress", "worry", "anxious", "upset", "overwhelmed"]) ? 2 : 1;
   }
-// User-perceived dominant trigger weighting.
-// This is NOT absolute truth.
-// It is a weighting boost only.
+  // User-perceived dominant trigger weighting.
+  // This is NOT absolute truth. It is a weighting boost only.
+  if (primaryTrigger.includes("emotional")) {
+    scores.mind_emotional += 2;
+  }
 
-if (primaryTrigger.includes("emotional")) {
-  scores.mind_emotional += 2;
-}
+  if (primaryTrigger.includes("mental")) {
+    scores.mind_emotional += 2;
+  }
 
-if (primaryTrigger.includes("mental")) {
-  scores.mind_emotional += 2;
-}
+  if (primaryTrigger.includes("body") || primaryTrigger.includes("pain")) {
+    scores.body_physiology += 2;
+  }
 
-if (
-  primaryTrigger.includes("body") ||
-  primaryTrigger.includes("pain")
-) {
-  scores.body_physiology += 2;
-}
+  if (primaryTrigger.includes("room") || primaryTrigger.includes("environment")) {
+    scores.environment += 2;
+  }
 
-if (
-  primaryTrigger.includes("room") ||
-  primaryTrigger.includes("environment")
-) {
-  scores.environment += 2;
-}
+  if (primaryTrigger.includes("hygiene") || primaryTrigger.includes("habit")) {
+    scores.sleep_hygiene += 2;
+  }
 
-if (
-  primaryTrigger.includes("hygiene") ||
-  primaryTrigger.includes("habit")
-) {
-  scores.sleep_hygiene += 2;
-}
+  if (primaryTrigger.includes("circadian") || primaryTrigger.includes("schedule")) {
+    scores.circadian_context += 2;
+  }
 
-if (
-  primaryTrigger.includes("circadian") ||
-  primaryTrigger.includes("schedule")
-) {
-  scores.circadian_context += 2;
-}
   return {
     mind_emotional: clamp7(scores.mind_emotional),
     body_physiology: clamp7(scores.body_physiology),
@@ -747,10 +734,11 @@ function confidenceForWithStability(
   protocolEvaluation: RRSMProtocolEvaluation,
 ): "low" | "moderate" | "high" {
   if (!sleepIssueDetected) return "low";
-  const latest = nights[nights.length - 1];
-const primaryTrigger = getPrimaryTrigger(latest);
 
-if (primaryTrigger) {
+  const latest = nights[nights.length - 1];
+  const primaryTrigger = getPrimaryTrigger(latest);
+
+  if (primaryTrigger) {
   const dominant = chooseDominantCategory(
     scoreNightCategories(latest)
   );
@@ -765,8 +753,9 @@ if (primaryTrigger) {
     (primaryTrigger.includes("schedule") && dominant === "circadian_context") ||
     (primaryTrigger.includes("circadian") && dominant === "circadian_context");
 
-  if (!aligned) return "low";
-}
+    if (!aligned) return "low";
+  }
+
   if (patternStability === "unstable") return "low";
   if (protocolEvaluation === "case_b_hidden_factor") return "low";
   if (recurring && nights.length >= 5) return "high";
