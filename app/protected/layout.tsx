@@ -92,7 +92,27 @@ export default function ProtectedLayout({
             fontWeight: 400,
           }}
         >
-          All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
+          <div>
+            All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
+          </div>
+
+          <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/terms" style={{ textDecoration: "none" }}>
+              Terms
+            </Link>
+
+            <span>|</span>
+
+            <Link href="/privacy" style={{ textDecoration: "none" }}>
+              Privacy
+            </Link>
+
+            <span>|</span>
+
+            <Link href="/medical-disclaimer" style={{ textDecoration: "none" }}>
+              Medical Disclaimer
+            </Link>
+          </div>
         </footer>
       </div>
     </>
