@@ -156,14 +156,22 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const majorLatencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 45;
   const wakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3;
   const maintenanceIssue = hasMaintenanceIssue(night);
+  const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
+  const majorWakeRecovery = hasMajorWakeRecovery(night);
 
-  return Boolean(
-    majorQualityIssue ||
-      majorLatencyIssue ||
-      maintenanceIssue ||
-      (wakeIssue && qualityIssue) ||
-      (qualityIssue && latencyIssue)
-  );
+return Boolean(
+  severeLatency ||
+    severeWakeUps ||
+    maintenanceIssue ||
+    prolongedWakeRecovery ||
+    majorWakeRecovery ||
+    severeQuality ||
+    environmentIssue ||
+    hygieneIssue ||
+    emotionalIssue ||
+    bodyIssue ||
+    circadianIssue
+);
 }
 
 function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
