@@ -84,7 +84,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
     latencyMin: parseLatency(row.sleep_latency_choice),
     wakeUps: parseWakeUps(row.wake_ups_choice),
     wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
-    primary_trigger: row.primary_trigger ?? null,
+    primary_trigger,
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
     protocolFollowed,
