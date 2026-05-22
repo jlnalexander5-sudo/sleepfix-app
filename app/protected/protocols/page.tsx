@@ -14,6 +14,7 @@ type SleepNightRow = {
   sleep_latency_choice: string | null;
   wake_ups_choice: string | null;
   wake_recovery_choice?: string | null;
+  primary_trigger?: string | null;
   mind_tags?: string[] | null;
   environment_tags?: string[] | null;
   body_tags?: string[] | null;
@@ -83,6 +84,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
     latencyMin: parseLatency(row.sleep_latency_choice),
     wakeUps: parseWakeUps(row.wake_ups_choice),
     wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
+    primary_trigger: row.primary_trigger ?? null,
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
     protocolFollowed,
