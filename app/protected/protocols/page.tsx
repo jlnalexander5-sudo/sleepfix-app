@@ -110,7 +110,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
     quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
     latencyMin: parseLatency(row.sleep_latency_choice),
     wakeUps: parseWakeUps(row.wake_ups_choice),
-    durationMin: deriveDurationMin(row),
+    duration_min: deriveDurationMin(row),
     wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
     primaryTrigger: row.primary_trigger ?? null,
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
