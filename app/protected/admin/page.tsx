@@ -185,7 +185,7 @@ export default function AdminPage() {
           setError(rowsErr.message);
           setRows([]);
         } else {
-          setRows((data ?? []) as SleepNightAdminRow[]);
+         setRows((data ?? []) as unknown as SleepNightAdminRow[]);
         }
         setLoading(false);
       }
