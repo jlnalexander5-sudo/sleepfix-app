@@ -45,6 +45,13 @@ export type RRSMWakeCause =
   | "circadian_timing"
   | "unknown";
 
+export type RRSMThermalSystemState =
+  | "heat_load"
+  | "cold_exposure"
+  | "thermal_oscillation"
+  | "mixed_or_unclear"
+  | "none";
+
 export type RRSMProtocolResult = RRSMV2Insight & {
   sleepIssueDetected: boolean;
   recurringIssue: boolean;
@@ -73,6 +80,8 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   wakeCause: RRSMWakeCause;
   wakeCauseConfidence: "low" | "moderate" | "high";
   wakeCauseSummary: string;
+  thermalSystemState: RRSMThermalSystemState;
+  thermalSystemSummary: string;
 };
 
 type ProtocolFollowedValue =
@@ -159,8 +168,11 @@ function hasBedThermalSignal(night: NightWithOptionalProtocol | undefined) {
     "partner body heat",
     "sleepwear too warm",
     "sleepwear too light",
+    "pillow too warm",
+    "pillow too cold",
     "pillow / position issue",
     "pillow",
+    "bedding needed adjustment",
     "bedding",
     "bed factor",
   ]);
@@ -209,6 +221,7 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const majorLatencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 45;
   const wakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3;
   const bedThermalSignal = hasBedThermalSignal(night);
+  const thermalSystemSignal = hasThermalSystemSignal(night);
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
@@ -220,6 +233,7 @@ return Boolean(
     prolongedWakeRecovery ||
     majorWakeRecovery ||
     bedThermalSignal ||
+    thermalSystemSignal ||
     majorQualityIssue ||
     (qualityIssue && latencyIssue)
 );
@@ -300,7 +314,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.body_physiology += 1;
   }
 
-  if (maintenanceIssue && scores.body_physiology > 0) {
+  if (maintenanceIssue && scores.body_physiology > 0 && !hasThermalSystemSignal(night)) {
     scores.body_physiology += majorWakeRecovery ? 3 : 2;
   }
 
@@ -325,7 +339,10 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
       "bed felt",
       "partner body heat",
       "sleepwear",
+      "pillow too warm",
+      "pillow too cold",
       "pillow",
+      "bedding needed adjustment",
     ])
   ) {
     scores.environment += 4;
@@ -411,12 +428,22 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 3;
   }
 
-  if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow"])) {
+  if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow too warm", "pillow"])) {
     scores.environment += 2;
   }
 
-  if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light", "pillow / position"])) {
+  if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light", "pillow too cold", "pillow / position"])) {
     scores.environment += 2;
+  }
+
+  const thermalSystem = classifyThermalSystem(night);
+  if (thermalSystem.state !== "none") {
+    scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 2;
+
+    // Thermal system problems should not be mistaken for generic body discomfort.
+    if (scores.body_physiology > 0 && !lowerIncludes(combinedText, ["pain", "sore", "doms", "inflamed", "inflammation"])) {
+      scores.body_physiology = Math.max(0, scores.body_physiology - 2);
+    }
   }
 
   // User-perceived dominant trigger weighting.
@@ -585,11 +612,11 @@ function detailedReasonForLatestNight(category: RRSMContributorCategory, latestN
   const bedText = joinedBedText(latestNight);
 
   if (category === "environment" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
-    if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow"])) {
+    if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow too warm", "pillow"])) {
       return "SleepFix detected bed/bedding heat-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stabilising bed temperature without overcooling or overcorrecting.";
     }
 
-    if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light", "pillow / position"])) {
+    if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light", "pillow too cold", "pillow / position"])) {
       return "SleepFix detected bed/bedding cold-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stable warmth across the whole night without needing mid-night corrections.";
     }
 
@@ -886,6 +913,101 @@ function confidenceForWithStability(
 
 
 
+
+function classifyThermalSystem(night: NightWithOptionalProtocol | undefined): {
+  state: RRSMThermalSystemState;
+  summary: string;
+} {
+  if (!night) {
+    return {
+      state: "none",
+      summary: "No thermal sleep-system data available yet.",
+    };
+  }
+
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+  const wakeRecovery = parseWakeRecoveryToMinutes(night);
+  const text = joinedNightText(night);
+  const bedText = joinedBedText(night);
+  const combinedText = `${text} ${bedText}`;
+
+  const heatSignals = lowerIncludes(combinedText, [
+    "hot",
+    "bed felt hot",
+    "mattress too hard",
+    "too many blankets",
+    "partner body heat",
+    "sleepwear too warm",
+    "pillow too warm",
+    "pillow",
+  ]);
+
+  const coldSignals = lowerIncludes(combinedText, [
+    "cold",
+    "bed felt cold",
+    "mattress too soft",
+    "too few blankets",
+    "sleepwear too light",
+    "pillow too cold",
+  ]);
+
+  const adjustmentSignals = lowerIncludes(combinedText, [
+    "bedding needed adjustment",
+    "bedding",
+    "blanket",
+    "blankets",
+    "pillow",
+    "mattress",
+    "bed factor",
+  ]);
+
+  const maintenanceSignal =
+    wakeUps >= 3 || (typeof wakeRecovery === "number" && wakeRecovery >= 15);
+
+  if (!heatSignals && !coldSignals && !adjustmentSignals) {
+    return {
+      state: "none",
+      summary: "No strong bed/room thermal signal was detected from the latest record.",
+    };
+  }
+
+  if ((heatSignals && coldSignals) || (maintenanceSignal && adjustmentSignals && heatSignals && coldSignals)) {
+    return {
+      state: "thermal_oscillation",
+      summary:
+        "Thermal sleep system: unstable. Your record points to hot/cold switching or repeated bedding adjustment. SleepFix treats this as a maintenance problem, not just a comfort issue.",
+    };
+  }
+
+  if (heatSignals) {
+    return {
+      state: "heat_load",
+      summary:
+        "Thermal sleep system: heat load. Mattress, pillow, blankets, sleepwear, partner heat, or room conditions may be building heat during the night and triggering wake-ups.",
+    };
+  }
+
+  if (coldSignals) {
+    return {
+      state: "cold_exposure",
+      summary:
+        "Thermal sleep system: cold exposure. Mattress, bedding, sleepwear, pillow, or room conditions may be failing to hold stable warmth through the night.",
+    };
+  }
+
+  return {
+    state: "mixed_or_unclear",
+    summary:
+      "Thermal sleep system: mixed or unclear. There are bed/room signals, but SleepFix needs another night to separate heat, cold, and adjustment effects.",
+  };
+}
+
+function hasThermalSystemSignal(night: NightWithOptionalProtocol | undefined) {
+  const thermal = classifyThermalSystem(night);
+  return thermal.state !== "none";
+}
+
+
 function classifyWakeCause(night: NightWithOptionalProtocol | undefined): {
   cause: RRSMWakeCause;
   confidence: "low" | "moderate" | "high";
@@ -926,6 +1048,7 @@ function classifyWakeCause(night: NightWithOptionalProtocol | undefined): {
       "too many blankets",
       "partner body heat",
       "sleepwear too warm",
+      "pillow too warm",
       "pillow",
     ]);
 
@@ -934,6 +1057,7 @@ function classifyWakeCause(night: NightWithOptionalProtocol | undefined): {
       "bed felt cold",
       "too few blankets",
       "sleepwear too light",
+      "pillow too cold",
     ]);
 
     return {
@@ -1163,6 +1287,8 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
       recoveryPenalty
   );
 
+  const thermalSystem = classifyThermalSystem(night);
+
   const thermalSignal = lowerIncludes(combinedText, [
     "hot",
     "cold",
@@ -1183,6 +1309,7 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
     100 -
       (thermalSignal ? 35 : 0) -
       (hasBedThermalSignal(night) ? 25 : 0) -
+      (thermalSystem.state !== "none" ? 20 : 0) -
       (wakeUps >= 3 ? 12 : 0) -
       (wakeRecovery !== null && wakeRecovery >= 30 ? 18 : 0)
   );
@@ -1190,6 +1317,7 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
   const environmentStress = clamp100(
     (thermalSignal ? 40 : 0) +
       (hasBedThermalSignal(night) ? 30 : 0) +
+      (thermalSystem.state !== "none" ? 20 : 0) +
       (lowerIncludes(combinedText, ["noise", "noisy", "bright", "light", "room"]) ? 20 : 0) +
       (wakeUps >= 3 ? 10 : 0) +
       (wakeRecovery !== null && wakeRecovery >= 30 ? 10 : 0)
@@ -1236,12 +1364,18 @@ function buildUserSummary(
   const bedText = joinedBedText(latestNight);
   const primaryTrigger = getPrimaryTrigger(latestNight);
 
-  if (dominant === "environment" && hasBedThermalSignal(latestNight)) {
-    if (lowerIncludes(bedText, ["hot", "too many blankets", "partner body heat", "too warm", "mattress too hard", "pillow"])) {
+  const thermalSystem = classifyThermalSystem(latestNight);
+
+  if (dominant === "environment" && thermalSystem.state !== "none") {
+    if (thermalSystem.state === "thermal_oscillation") {
+      return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your thermal sleep system appears unstable. This means bed, pillow, blankets, room, or body heat may be swinging between too hot and too cold. Tonight's match is ${recommendedProtocol}.`;
+    }
+
+    if (lowerIncludes(bedText, ["hot", "too many blankets", "partner body heat", "too warm", "mattress too hard", "pillow too warm", "pillow"])) {
       return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your bed/bedding signals point to heat build-up or thermal instability. Tonight's match is ${recommendedProtocol}.`;
     }
 
-    if (lowerIncludes(bedText, ["cold", "too few blankets", "too light", "mattress too soft"])) {
+    if (lowerIncludes(bedText, ["cold", "too few blankets", "too light", "mattress too soft", "pillow too cold"])) {
       return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your bed/bedding signals point to cold exposure or thermal instability. Tonight's match is ${recommendedProtocol}.`;
     }
 
@@ -1299,6 +1433,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const sleepDimensions = calculateSleepDimensions(latestNight);
   const sleepDimensionSummary = buildSleepDimensionSummary(sleepDimensions);
   const wakeCauseResult = classifyWakeCause(latestNight);
+  const thermalSystem = classifyThermalSystem(latestNight);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
   const why = [
@@ -1348,6 +1483,8 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     wakeCause: wakeCauseResult.cause,
     wakeCauseConfidence: wakeCauseResult.confidence,
     wakeCauseSummary: wakeCauseResult.summary,
+    thermalSystemState: thermalSystem.state,
+    thermalSystemSummary: thermalSystem.summary,
     why,
     actions,
   };
