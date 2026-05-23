@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client"; durationMin?: number | null;
 import { runRRSMEngineV4, type RRSMProtocolResult } from "@/lib/rrsm/engine-v4";
 import type { RRSMMetricsNight } from "@/lib/rrsm/engine-v2";
 import { getStandardProtocolByTitle, getEscalatedProtocolForTitle, type SleepFixProtocol } from "@/lib/protocols";
@@ -110,7 +110,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
     quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
     latencyMin: parseLatency(row.sleep_latency_choice),
     wakeUps: parseWakeUps(row.wake_ups_choice),
-    duration_min: deriveDurationMin(row),
+    durationMin: deriveDurationMin(row),
     wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
     primaryTrigger: row.primary_trigger ?? null,
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
