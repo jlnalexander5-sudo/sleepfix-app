@@ -17,6 +17,7 @@ type SleepNightRow = {
   primary_trigger?: string | null;
   mind_tags?: string[] | null;
   environment_tags?: string[] | null;
+  bed_tags?: string[] | null;
   body_tags?: string[] | null;
   primary_driver?: string | null;
   secondary_driver?: string | null;
@@ -66,6 +67,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
     row.secondary_driver,
     textFromArray(row.mind_tags),
     textFromArray(row.environment_tags),
+    textFromArray(row.bed_tags),
     textFromArray(row.body_tags),
   ]
     .filter(Boolean)
@@ -147,9 +149,10 @@ export default function ProtocolsPage() {
 
       const { data, error: rowsErr } = await supabase
         .from("sleep_nights")
-        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,mind_tags,environment_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
+        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
         .eq("user_id", authData.user.id)
-        .order("local_date", { ascending: true })
+        .order("local_date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
         .limit(14);
 
       if (rowsErr) {
@@ -160,7 +163,9 @@ export default function ProtocolsPage() {
         return;
       }
 
-      const mapped = (data ?? []).map((row) => mapNight(row as SleepNightRow));
+      const mapped = [...(data ?? [])]
+        .reverse()
+        .map((row) => mapNight(row as SleepNightRow));
       const protocolResult = runRRSMEngineV4(mapped);
 
       if (!cancelled) {
