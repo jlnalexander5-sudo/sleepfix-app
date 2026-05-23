@@ -52,6 +52,13 @@ export type RRSMThermalSystemState =
   | "mixed_or_unclear"
   | "none";
 
+export type RRSMAdaptationState =
+  | "new_setup_adaptation"
+  | "active_self_correction"
+  | "overcorrection"
+  | "unresolved_instability"
+  | "none";
+
 export type RRSMProtocolResult = RRSMV2Insight & {
   sleepIssueDetected: boolean;
   recurringIssue: boolean;
@@ -82,6 +89,8 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   wakeCauseSummary: string;
   thermalSystemState: RRSMThermalSystemState;
   thermalSystemSummary: string;
+  adaptationState: RRSMAdaptationState;
+  adaptationSummary: string;
 };
 
 type ProtocolFollowedValue =
@@ -173,6 +182,14 @@ function hasBedThermalSignal(night: NightWithOptionalProtocol | undefined) {
     "pillow / position issue",
     "pillow",
     "bedding needed adjustment",
+    "new mattress",
+    "new pillow",
+    "changed blankets",
+    "removed covers",
+    "added covers",
+    "changed pillow",
+    "got out of bed",
+    "overcorrected",
     "bedding",
     "bed factor",
   ]);
@@ -437,6 +454,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   }
 
   const thermalSystem = classifyThermalSystem(night);
+  const adaptation = classifyAdaptationAndCompensation(night);
   if (thermalSystem.state !== "none") {
     scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 2;
 
@@ -444,6 +462,18 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     if (scores.body_physiology > 0 && !lowerIncludes(combinedText, ["pain", "sore", "doms", "inflamed", "inflammation"])) {
       scores.body_physiology = Math.max(0, scores.body_physiology - 2);
     }
+  }
+
+  if (adaptation.state === "new_setup_adaptation" || adaptation.state === "active_self_correction") {
+    scores.environment += 2;
+
+    if (!lowerIncludes(combinedText, ["pain", "sore", "doms", "inflamed", "inflammation"])) {
+      scores.body_physiology = Math.max(0, scores.body_physiology - 1);
+    }
+  }
+
+  if (adaptation.state === "overcorrection") {
+    scores.environment += 2;
   }
 
   // User-perceived dominant trigger weighting.
@@ -914,6 +944,98 @@ function confidenceForWithStability(
 
 
 
+
+function classifyAdaptationAndCompensation(night: NightWithOptionalProtocol | undefined): {
+  state: RRSMAdaptationState;
+  summary: string;
+} {
+  if (!night) {
+    return {
+      state: "none",
+      summary: "No adaptation or compensation signal detected yet.",
+    };
+  }
+
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+  const wakeRecovery = parseWakeRecoveryToMinutes(night);
+  const text = joinedNightText(night);
+  const bedText = joinedBedText(night);
+  const combinedText = `${text} ${bedText}`;
+
+  const newSetup = lowerIncludes(combinedText, [
+    "new mattress",
+    "new pillow",
+    "still adjusting",
+    "adjusting",
+  ]);
+
+  const selfCorrection = lowerIncludes(combinedText, [
+    "removed covers and improved",
+    "added covers and improved",
+    "changed pillow and improved",
+    "got out of bed and reset",
+    "bedding needed adjustment",
+    "changed blankets during night",
+  ]);
+
+  const overcorrection = lowerIncludes(combinedText, [
+    "overcorrected",
+    "too many blankets",
+    "too few blankets",
+    "too warm",
+    "too light",
+  ]);
+
+  const unresolved =
+    wakeUps >= 3 || (typeof wakeRecovery === "number" && wakeRecovery >= 30);
+
+  if (newSetup && selfCorrection) {
+    return {
+      state: "active_self_correction",
+      summary:
+        "Active management detected: you appear to be adjusting to a new sleep setup while also correcting the problem during the night. SleepFix treats this as adaptation instability, not simple protocol failure.",
+    };
+  }
+
+  if (newSetup) {
+    return {
+      state: "new_setup_adaptation",
+      summary:
+        "Adaptation phase detected: a new mattress, pillow, or sleep setup may be causing temporary wake-ups while your body adjusts. Track this for several nights before treating it as a chronic pattern.",
+    };
+  }
+
+  if (selfCorrection) {
+    return {
+      state: "active_self_correction",
+      summary:
+        "Active self-correction detected: you changed the sleep setup during the night and the record suggests the adjustment helped. This is different from an unresolved sleep problem.",
+    };
+  }
+
+  if (overcorrection) {
+    return {
+      state: "overcorrection",
+      summary:
+        "Possible overcorrection detected: the sleep setup may have swung too far toward heat or cold. Tonight, change only one variable so SleepFix can read the response clearly.",
+    };
+  }
+
+  if (unresolved && hasThermalSystemSignal(night)) {
+    return {
+      state: "unresolved_instability",
+      summary:
+        "Unresolved instability detected: wake-ups and thermal signals are present, but SleepFix does not see a clear successful correction yet.",
+    };
+  }
+
+  return {
+    state: "none",
+    summary: "No clear adaptation or compensation pattern was detected from the latest record.",
+  };
+}
+
+
 function classifyThermalSystem(night: NightWithOptionalProtocol | undefined): {
   state: RRSMThermalSystemState;
   summary: string;
@@ -1365,6 +1487,19 @@ function buildUserSummary(
   const primaryTrigger = getPrimaryTrigger(latestNight);
 
   const thermalSystem = classifyThermalSystem(latestNight);
+  const adaptation = classifyAdaptationAndCompensation(latestNight);
+
+  if (adaptation.state === "active_self_correction") {
+    return `SleepFix detected an unstable night that was actively managed: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, but your record suggests you adjusted the bed, pillow, covers, or sleep setup and partially corrected the issue. Tonight's match is ${recommendedProtocol}.`;
+  }
+
+  if (adaptation.state === "new_setup_adaptation") {
+    return `SleepFix detected adaptation instability: the night may be affected by a new mattress, pillow, bedding, or sleep setup. This can cause wake-ups even when recovery is still good. Tonight's match is ${recommendedProtocol}.`;
+  }
+
+  if (adaptation.state === "overcorrection") {
+    return `SleepFix detected possible overcorrection: the sleep setup may have shifted too far toward heat or cold. Tonight's match is ${recommendedProtocol}.`;
+  }
 
   if (dominant === "environment" && thermalSystem.state !== "none") {
     if (thermalSystem.state === "thermal_oscillation") {
@@ -1434,6 +1569,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const sleepDimensionSummary = buildSleepDimensionSummary(sleepDimensions);
   const wakeCauseResult = classifyWakeCause(latestNight);
   const thermalSystem = classifyThermalSystem(latestNight);
+  const adaptation = classifyAdaptationAndCompensation(latestNight);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
   const why = [
@@ -1485,6 +1621,8 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     wakeCauseSummary: wakeCauseResult.summary,
     thermalSystemState: thermalSystem.state,
     thermalSystemSummary: thermalSystem.summary,
+    adaptationState: adaptation.state,
+    adaptationSummary: adaptation.summary,
     why,
     actions,
   };
