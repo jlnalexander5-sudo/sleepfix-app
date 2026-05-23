@@ -124,6 +124,31 @@ function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
   }
 }
 
+
+function DimensionBox({
+  label,
+  score,
+  status,
+}: {
+  label: string;
+  score: number;
+  status: string;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 p-3">
+      <div className="text-sm font-bold text-gray-500">{label}</div>
+      <div className="mt-1 text-xl font-extrabold text-gray-900">{score}/100</div>
+      <div className="mt-1 text-sm font-semibold text-gray-700">{status}</div>
+    </div>
+  );
+}
+
+function statusFor(score: number, good: string, mid: string, low: string) {
+  if (score >= 75) return good;
+  if (score >= 50) return mid;
+  return low;
+}
+
 export default function ProtocolsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
@@ -236,6 +261,52 @@ export default function ProtocolsPage() {
             <div className="mt-4 rounded-xl bg-blue-50 p-4 text-base text-blue-900">
               {result.userSummary ?? result.protocolReason}
             </div>
+
+            {result.sleepDimensions ? (
+              <div className="mt-4">
+                <div className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">
+                  Sleep state breakdown
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <DimensionBox
+                    label="Recovery"
+                    score={result.sleepDimensions.sleepRecovery}
+                    status={statusFor(result.sleepDimensions.sleepRecovery, "Good", "Mixed", "Low")}
+                  />
+
+                  <DimensionBox
+                    label="Night stability"
+                    score={result.sleepDimensions.sleepStability}
+                    status={statusFor(result.sleepDimensions.sleepStability, "Stable", "Mixed", "Unstable")}
+                  />
+
+                  <DimensionBox
+                    label="Wake maintenance"
+                    score={result.sleepDimensions.wakeMaintenance}
+                    status={statusFor(result.sleepDimensions.wakeMaintenance, "Stable", "Disrupted", "Strongly disrupted")}
+                  />
+
+                  <DimensionBox
+                    label="Thermal stability"
+                    score={result.sleepDimensions.thermalStability}
+                    status={statusFor(result.sleepDimensions.thermalStability, "Stable", "Mixed", "Unstable")}
+                  />
+
+                  <DimensionBox
+                    label="Sleep onset"
+                    score={result.sleepDimensions.sleepOnset}
+                    status={statusFor(result.sleepDimensions.sleepOnset, "Settled", "Delayed", "Strongly delayed")}
+                  />
+
+                  <DimensionBox
+                    label="Environment stress"
+                    score={result.sleepDimensions.environmentStress}
+                    status={statusFor(100 - result.sleepDimensions.environmentStress, "Low", "Moderate", "High")}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-gray-200 p-3">
