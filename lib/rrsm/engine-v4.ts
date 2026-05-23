@@ -615,7 +615,7 @@ function recurringIssue(nights: NightWithOptionalProtocol[], dominant: RRSMContr
   const lastSeven = nights.slice(-7);
   const matches = lastSeven.filter((night) => {
     const scores = scoreNightCategories(night);
-    const cat = chooseDominantCategory(scores, latest);
+    const cat = chooseDominantCategory(scores, night);
     return cat === dominant && detectSleepIssue(night);
   });
 
