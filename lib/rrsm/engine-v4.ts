@@ -35,6 +35,16 @@ export type RRSMSleepDimensionScores = {
   environmentStress: number;
 };
 
+export type RRSMWakeCause =
+  | "thermal_bed"
+  | "room_environment"
+  | "body_discomfort"
+  | "mental_reactivation"
+  | "emotional_activation"
+  | "sleep_hygiene"
+  | "circadian_timing"
+  | "unknown";
+
 export type RRSMProtocolResult = RRSMV2Insight & {
   sleepIssueDetected: boolean;
   recurringIssue: boolean;
@@ -60,6 +70,9 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   userSummary: string;
   sleepDimensions: RRSMSleepDimensionScores;
   sleepDimensionSummary: string;
+  wakeCause: RRSMWakeCause;
+  wakeCauseConfidence: "low" | "moderate" | "high";
+  wakeCauseSummary: string;
 };
 
 type ProtocolFollowedValue =
@@ -872,6 +885,219 @@ function confidenceForWithStability(
 
 
 
+
+function classifyWakeCause(night: NightWithOptionalProtocol | undefined): {
+  cause: RRSMWakeCause;
+  confidence: "low" | "moderate" | "high";
+  summary: string;
+} {
+  if (!night) {
+    return {
+      cause: "unknown",
+      confidence: "low",
+      summary: "SleepFix does not have enough data to classify wake-ups yet.",
+    };
+  }
+
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+  const wakeRecovery = parseWakeRecoveryToMinutes(night);
+  const text = joinedNightText(night);
+  const bedText = joinedBedText(night);
+  const profileText = joinedProfileText(night);
+  const primaryTrigger = getPrimaryTrigger(night);
+  const combinedText = `${text} ${bedText} ${profileText} ${primaryTrigger}`;
+
+  const repeatedWakeups = wakeUps >= 3;
+  const longAwake = typeof wakeRecovery === "number" && wakeRecovery >= 30;
+  const moderateAwake = typeof wakeRecovery === "number" && wakeRecovery >= 15;
+
+  if (!repeatedWakeups && !moderateAwake) {
+    return {
+      cause: "unknown",
+      confidence: "low",
+      summary: "Wake-ups were not strong enough to classify a clear wake-up cause yet.",
+    };
+  }
+
+  if (hasBedThermalSignal(night)) {
+    const heat = lowerIncludes(bedText, [
+      "mattress too hard",
+      "bed felt hot",
+      "too many blankets",
+      "partner body heat",
+      "sleepwear too warm",
+      "pillow",
+    ]);
+
+    const cold = lowerIncludes(bedText, [
+      "mattress too soft",
+      "bed felt cold",
+      "too few blankets",
+      "sleepwear too light",
+    ]);
+
+    return {
+      cause: "thermal_bed",
+      confidence: longAwake || repeatedWakeups ? "high" : "moderate",
+      summary: heat
+        ? "Likely wake-up cause: bed or bedding heat build-up. Repeated wake-ups plus bed/pillow/blanket heat signals suggest thermal overload during sleep."
+        : cold
+        ? "Likely wake-up cause: bed or bedding cold exposure. Repeated wake-ups plus bed/blanket cold signals suggest unstable warmth during sleep."
+        : "Likely wake-up cause: bed or bedding instability. Repeated wake-ups suggest the sleeping setup may be disturbing temperature or comfort.",
+    };
+  }
+
+  if (
+    lowerIncludes(combinedText, [
+      "hot",
+      "cold",
+      "noise",
+      "noisy",
+      "bright",
+      "light",
+      "humid",
+      "dry",
+      "room",
+      "temperature",
+    ])
+  ) {
+    return {
+      cause: "room_environment",
+      confidence: longAwake || repeatedWakeups ? "high" : "moderate",
+      summary:
+        "Likely wake-up cause: room environment. The wake pattern lines up with temperature, noise, light, humidity, or room disturbance.",
+    };
+  }
+
+  if (
+    lowerIncludes(combinedText, [
+      "pain",
+      "discomfort",
+      "sore",
+      "doms",
+      "inflammation",
+      "inflamed",
+      "tense",
+      "restless",
+      "ill",
+      "sick",
+      "heavy fatigue",
+      "body",
+    ])
+  ) {
+    return {
+      cause: "body_discomfort",
+      confidence: longAwake ? "high" : "moderate",
+      summary:
+        "Likely wake-up cause: body discomfort or physiological activation. The wake pattern lines up with pain, soreness, tension, restlessness, illness, or body load.",
+    };
+  }
+
+  if (
+    lowerIncludes(combinedText, [
+      "racing",
+      "thought",
+      "thoughts",
+      "mentally stimulated",
+      "mental",
+      "wired",
+      "alert",
+      "focused",
+      "overstimulated",
+    ])
+  ) {
+    return {
+      cause: "mental_reactivation",
+      confidence: longAwake ? "high" : "moderate",
+      summary:
+        "Likely wake-up cause: mental reactivation. Wake-ups may be turning into longer awake periods because thinking or alertness restarts after waking.",
+    };
+  }
+
+  if (
+    lowerIncludes(combinedText, [
+      "anxious",
+      "anxiety",
+      "worried",
+      "worry",
+      "upset",
+      "stress",
+      "stressed",
+      "euphoric",
+      "depressed",
+      "low",
+      "flat",
+      "emotional",
+    ])
+  ) {
+    return {
+      cause: "emotional_activation",
+      confidence: longAwake ? "high" : "moderate",
+      summary:
+        "Likely wake-up cause: emotional activation. Wake-ups may be prolonged because emotional charge remains active after waking.",
+    };
+  }
+
+  if (
+    lowerIncludes(combinedText, [
+      "caffeine",
+      "coffee",
+      "alcohol",
+      "nicotine",
+      "smoking",
+      "screen",
+      "phone",
+      "tv",
+      "scroll",
+      "late meal",
+      "food",
+      "exercise late",
+      "gym",
+      "supplement",
+      "electrolyte",
+    ])
+  ) {
+    return {
+      cause: "sleep_hygiene",
+      confidence: repeatedWakeups || longAwake ? "moderate" : "low",
+      summary:
+        "Possible wake-up cause: pre-sleep habit load. Caffeine, alcohol, nicotine, screens, food, supplements, or late exercise may be contributing.",
+    };
+  }
+
+  if (
+    lowerIncludes(combinedText, [
+      "shift",
+      "night shift",
+      "rotating",
+      "irregular",
+      "jet lag",
+      "travel",
+      "pregnant",
+      "pregnancy",
+      "chronic",
+      "illness",
+      "schedule",
+      "circadian",
+    ])
+  ) {
+    return {
+      cause: "circadian_timing",
+      confidence: repeatedWakeups || longAwake ? "moderate" : "low",
+      summary:
+        "Possible wake-up cause: timing or life-context pressure. Shift work, irregular schedule, travel, pregnancy, or chronic illness may be affecting sleep maintenance.",
+    };
+  }
+
+  return {
+    cause: "unknown",
+    confidence: repeatedWakeups || longAwake ? "moderate" : "low",
+    summary:
+      "Wake-ups are present, but SleepFix cannot identify a clear cause yet. Track what changed tonight, especially bed setup, room temperature, body state, and mental/emotional activation.",
+  };
+}
+
+
 function clamp100(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
@@ -1072,6 +1298,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const protocolReason = detailedReasonForLatestNight(dominantCategory, latestNight);
   const sleepDimensions = calculateSleepDimensions(latestNight);
   const sleepDimensionSummary = buildSleepDimensionSummary(sleepDimensions);
+  const wakeCauseResult = classifyWakeCause(latestNight);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
   const why = [
@@ -1118,6 +1345,9 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     userSummary,
     sleepDimensions,
     sleepDimensionSummary,
+    wakeCause: wakeCauseResult.cause,
+    wakeCauseConfidence: wakeCauseResult.confidence,
+    wakeCauseSummary: wakeCauseResult.summary,
     why,
     actions,
   };
