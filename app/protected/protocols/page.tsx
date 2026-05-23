@@ -171,6 +171,35 @@ function statusFor(score: number, good: string, mid: string, low: string) {
   return low;
 }
 
+function simpleStatus(score: number, good: string, mid: string, low: string) {
+  if (score >= 75) return good;
+  if (score >= 50) return mid;
+  return low;
+}
+
+function getStabilityHeadline(result: RRSMProtocolResult) {
+  const d = result.sleepDimensions;
+  if (!d) return result.sleepIssueDetected ? "Sleep issue detected" : "No strong sleep issue detected";
+
+  const recovery = simpleStatus(d.sleepRecovery, "Good recovery", "Mixed recovery", "Low recovery");
+  const stability = simpleStatus(d.sleepStability, "stable night", "mixed night", "unstable night");
+
+  return `${recovery}, ${stability}`;
+}
+
+function getStabilitySentence(result: RRSMProtocolResult) {
+  const d = result.sleepDimensions;
+  if (!d) return result.userSummary ?? result.protocolReason;
+
+  const recovery = simpleStatus(d.sleepRecovery, "good", "mixed", "low");
+  const nightStability = simpleStatus(d.sleepStability, "stable", "mixed", "unstable");
+  const wakeMaintenance = simpleStatus(d.wakeMaintenance, "stable", "disrupted", "strongly disrupted");
+  const thermal = simpleStatus(d.thermalStability, "stable", "mixed", "unstable");
+  const onset = simpleStatus(d.sleepOnset, "settled", "delayed", "strongly delayed");
+
+  return `Your recovery looks ${recovery}, but the night pattern was ${nightStability}. Wake maintenance was ${wakeMaintenance}, thermal stability was ${thermal}, and sleep onset was ${onset}.`;
+}
+
 export default function ProtocolsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
@@ -277,17 +306,17 @@ export default function ProtocolsPage() {
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="text-sm font-bold uppercase tracking-wide text-gray-500">SleepFix summary</div>
             <h2 className="mt-2 text-2xl font-bold text-blue-900">
-              {result.sleepIssueDetected ? "Sleep issue detected" : "No strong sleep issue detected"}
+              {getStabilityHeadline(result)}
             </h2>
 
             <div className="mt-4 rounded-xl bg-blue-50 p-4 text-base text-blue-900">
-              {result.userSummary ?? result.protocolReason}
+              {getStabilitySentence(result)}
             </div>
 
             {result.sleepDimensions ? (
               <div className="mt-4">
                 <div className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">
-                  Sleep state breakdown
+                  Sleep stability breakdown
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -333,7 +362,7 @@ export default function ProtocolsPage() {
             {result.wakeCauseSummary ? (
               <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
                 <div className="text-sm font-bold uppercase tracking-wide text-indigo-700">
-                  Likely wake-up cause
+                  Why you may have woken up
                 </div>
 
                 <div className="mt-2 text-lg font-extrabold text-indigo-950">
@@ -353,6 +382,13 @@ export default function ProtocolsPage() {
                 </div>
               </div>
             ) : null}
+
+            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+              <div className="text-sm font-bold text-gray-500">Plain-English read</div>
+              <div className="mt-1 text-base font-semibold text-gray-900">
+                SleepFix is separating how recovered you feel from how stable the night was.
+              </div>
+            </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-gray-200 p-3">
