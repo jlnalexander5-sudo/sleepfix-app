@@ -82,6 +82,7 @@ function textFromArray(value?: string[] | null) {
 }
 
 function mapNight(row: SleepNightRow): RRSMMetricsNight & {
+  durationMin?: number | null;
   wakeRecoveryMin?: number | null;
   primaryTrigger?: string | null;
   protocolFollowed?: "yes" | "partial" | "no" | "none" | null;
