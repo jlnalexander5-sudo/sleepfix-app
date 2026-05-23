@@ -23,21 +23,31 @@ type SleepNightAdminRow = {
   protocol_followed: string | null;
 };
 
-function todayYMD() {
-  const d = new Date();
+type DateWindow = {
+  today: string;
+  weekStart: string;
+  monthStart: string;
+};
+
+function ymdFromDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function addDaysYMD(ymd: string, days: number) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
-  date.setDate(date.getDate() + days);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+function buildDateWindow(): DateWindow {
+  const now = new Date(Date.now());
+  const today = ymdFromDate(now);
 
-function monthStartYMD() {
-  const d = new Date(Date.now());
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  const week = new Date(now.getTime());
+  week.setDate(week.getDate() - 6);
+
+  const month = new Date(now.getTime());
+  month.setDate(1);
+
+  return {
+    today,
+    weekStart: ymdFromDate(week),
+    monthStart: ymdFromDate(month),
+  };
 }
 
 function dateKey(row: SleepNightAdminRow) {
@@ -137,6 +147,11 @@ export default function AdminPage() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<SleepNightAdminRow[]>([]);
+  const [dateWindow, setDateWindow] = useState<DateWindow | null>(null);
+
+  useEffect(() => {
+    setDateWindow(buildDateWindow());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,7 +200,7 @@ export default function AdminPage() {
           setError(rowsErr.message);
           setRows([]);
         } else {
-         setRows((data ?? []) as unknown as SleepNightAdminRow[]);
+          setRows((data ?? []) as unknown as SleepNightAdminRow[]);
         }
         setLoading(false);
       }
@@ -198,16 +213,16 @@ export default function AdminPage() {
   }, [supabase]);
 
   const stats = useMemo(() => {
-    const today = todayYMD();
-    const weekStart = addDaysYMD(today, -6);
-    const monthStart = monthStartYMD();
+    const today = dateWindow?.today ?? "";
+    const weekStart = dateWindow?.weekStart ?? "";
+    const monthStart = dateWindow?.monthStart ?? "";
 
     const totalNights = rows.length;
     const usersTotal = new Set(rows.map((r) => r.user_id)).size;
 
-    const todayRows = rows.filter((r) => dateKey(r) === today);
-    const weekRows = rows.filter((r) => dateKey(r) >= weekStart && dateKey(r) <= today);
-    const monthRows = rows.filter((r) => dateKey(r) >= monthStart && dateKey(r) <= today);
+    const todayRows = today ? rows.filter((r) => dateKey(r) === today) : [];
+    const weekRows = weekStart && today ? rows.filter((r) => dateKey(r) >= weekStart && dateKey(r) <= today) : [];
+    const monthRows = monthStart && today ? rows.filter((r) => dateKey(r) >= monthStart && dateKey(r) <= today) : [];
 
     const weeklyActiveUsers = new Set(weekRows.map((r) => r.user_id)).size;
     const monthlyActiveUsers = new Set(monthRows.map((r) => r.user_id)).size;
@@ -237,9 +252,9 @@ export default function AdminPage() {
       protocolCounts: countBy(rows.map((r) => r.protocol_used_name || "No protocol logged")),
       protocolFollowedCounts: countBy(rows.map((r) => r.protocol_followed || "No response")),
     };
-  }, [rows]);
+  }, [rows, dateWindow]);
 
-  if (loading) return <div style={{ padding: 28 }}>Loading admin stats...</div>;
+  if (loading || !dateWindow) return <div style={{ padding: 28 }}>Loading admin stats...</div>;
 
   if (accessDenied) {
     return (
