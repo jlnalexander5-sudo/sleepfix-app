@@ -14,6 +14,9 @@ type SleepNightRow = {
   sleep_latency_choice: string | null;
   wake_ups_choice: string | null;
   wake_recovery_choice?: string | null;
+  duration_min?: number | null;
+  sleep_start?: string | null;
+  sleep_end?: string | null;
   primary_trigger?: string | null;
   mind_tags?: string[] | null;
   environment_tags?: string[] | null;
@@ -37,6 +40,27 @@ function parseWakeUps(choice: string | null): number | null {
   const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
   return Number.isFinite(n) ? n : null;
 }
+
+
+function deriveDurationMin(row: SleepNightRow): number | null {
+  if (typeof row.duration_min === "number" && Number.isFinite(row.duration_min)) return row.duration_min;
+
+  if (row.sleep_start && row.sleep_end) {
+    const start = new Date(row.sleep_start).getTime();
+    const end = new Date(row.sleep_end).getTime();
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      return Math.round((end - start) / 60000);
+    }
+  }
+
+  return null;
+}
+
+function formatHours(min: number | null | undefined) {
+  if (typeof min !== "number" || !Number.isFinite(min)) return "—";
+  return `${Math.round((min / 60) * 10) / 10}h`;
+}
+
 
 function parseWakeRecovery(choice: string | null | undefined): number | null {
   if (!choice) return null;
@@ -86,6 +110,7 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
     quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
     latencyMin: parseLatency(row.sleep_latency_choice),
     wakeUps: parseWakeUps(row.wake_ups_choice),
+    durationMin: deriveDurationMin(row),
     wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
     primaryTrigger: row.primary_trigger ?? null,
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
@@ -259,7 +284,7 @@ export default function ProtocolsPage() {
 
       const { data, error: rowsErr } = await supabase
         .from("sleep_nights")
-        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
+        .select("id,local_date,created_at,sleep_start,sleep_end,duration_min,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
         .eq("user_id", authData.user.id)
         .order("local_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -344,6 +369,40 @@ export default function ProtocolsPage() {
             <div className="mt-4 rounded-xl bg-blue-50 p-4 text-base text-blue-900">
               {getStabilitySentence(result)}
             </div>
+
+            {result.timeInterpretation ? (
+              <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50 p-4">
+                <div className="text-sm font-bold uppercase tracking-wide text-cyan-700">
+                  Time interpretation
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <div className="text-sm font-bold text-cyan-800">In bed</div>
+                    <div className="text-lg font-extrabold text-cyan-950">{formatHours(result.timeInterpretation.timeInBedMin)}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-bold text-cyan-800">Estimated awake</div>
+                    <div className="text-lg font-extrabold text-cyan-950">{result.timeInterpretation.estimatedAwakeMin ?? "—"}m</div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-bold text-cyan-800">Estimated sleep</div>
+                    <div className="text-lg font-extrabold text-cyan-950">{formatHours(result.timeInterpretation.estimatedSleepMin)}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-bold text-cyan-800">Sleep efficiency</div>
+                    <div className="text-lg font-extrabold text-cyan-950">{result.timeInterpretation.sleepEfficiencyPct ?? "—"}%</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 text-sm text-cyan-950">
+                  {result.timeInterpretation.summary}
+                </div>
+              </div>
+            ) : null}
 
             {result.sleepDimensions ? (
               <div className="mt-4">
