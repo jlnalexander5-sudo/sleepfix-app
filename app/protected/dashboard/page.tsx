@@ -14,6 +14,9 @@ type NightRow = {
   duration_min: number | null;
   latency_min: number | null;
   wakeups_count: number | null;
+  wake_recovery_min: number | null;
+  estimated_sleep_min: number | null;
+  sleep_efficiency_pct: number | null;
   quality_num: number | null;
   // These are merged in from sleep_nights (not present on v_sleep_night_metrics)
   primary_driver: string | null;
@@ -62,6 +65,50 @@ function parseChoiceToNumber(choice: string | null | undefined): number | null {
   // supports "60+", "5", "10", etc.
   const n = parseInt(s.replace("+", ""), 10);
   return Number.isFinite(n) ? n : null;
+}
+
+
+
+function parseWakeRecovery(choice: string | null | undefined): number | null {
+  if (!choice) return null;
+  const cleaned = choice.toLowerCase().trim();
+  if (cleaned.includes("0-5")) return 5;
+  if (cleaned.includes("5-15")) return 15;
+  if (cleaned.includes("15-30")) return 30;
+  if (cleaned.includes("30-60")) return 60;
+  if (cleaned.includes("60+")) return 90;
+  const n = parseInt(cleaned.replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function deriveDurationMin(row: any): number | null {
+  if (typeof row.duration_min === "number" && Number.isFinite(row.duration_min)) return row.duration_min;
+
+  if (row.sleep_start && row.sleep_end) {
+    const start = new Date(row.sleep_start).getTime();
+    const end = new Date(row.sleep_end).getTime();
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      return Math.round((end - start) / 60000);
+    }
+  }
+
+  return null;
+}
+
+function calculateTimeStats(duration: number | null, latency: number | null, wakeRecovery: number | null) {
+  const awake = (latency ?? 0) + (wakeRecovery ?? 0);
+  const estimatedSleep = typeof duration === "number" ? Math.max(0, duration - awake) : null;
+  const efficiency =
+    typeof duration === "number" && duration > 0 && typeof estimatedSleep === "number"
+      ? Math.round((estimatedSleep / duration) * 100)
+      : null;
+
+  return { estimatedSleep, efficiency };
+}
+
+function formatHours(min: number | null | undefined) {
+  if (typeof min !== "number" || !Number.isFinite(min)) return "—";
+  return `${Math.round((min / 60) * 10) / 10}h`;
 }
 
 
@@ -319,6 +366,10 @@ export default function DashboardPage() {
     "sleep_quality",
     "sleep_latency_choice",
     "wake_ups_choice",
+    "wake_recovery_choice",
+    "duration_min",
+    "sleep_start",
+    "sleep_end",
         "primary_driver",
     "secondary_driver",
     "notes"
@@ -342,15 +393,21 @@ const nextRows: NightRow[] = (data ?? []).map((r: any) => {
   const latency = parseChoiceToNumber(r.sleep_latency_choice);
 
   const wakeups = parseChoiceToNumber(r.wake_ups_choice);
+  const wakeRecovery = parseWakeRecovery(r.wake_recovery_choice);
+  const duration = deriveDurationMin(r);
+  const timeStats = calculateTimeStats(duration, latency, wakeRecovery);
 
   return {
     night_id: r.id,
     user_id: r.user_id,
     created_at: r.created_at,
     local_date: r.local_date ?? null,
-    duration_min: null,
+    duration_min: duration,
     latency_min: latency,
     wakeups_count: wakeups,
+    wake_recovery_min: wakeRecovery,
+    estimated_sleep_min: timeStats.estimatedSleep,
+    sleep_efficiency_pct: timeStats.efficiency,
     quality_num: quality,
     primary_driver: r.primary_driver ?? null,
     secondary_driver: r.secondary_driver ?? null,
@@ -436,6 +493,9 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
   const avgQuality = useMemo(() => safeAvg(rows.map((r) => r.quality_num)), [rows]);
   const avgLatency = useMemo(() => safeAvg(rows.map((r) => r.latency_min)), [rows]);
   const avgWakeups = useMemo(() => safeAvg(rows.map((r) => r.wakeups_count)), [rows]);
+  const avgTimeInBed = useMemo(() => safeAvg(rows.map((r) => r.duration_min)), [rows]);
+  const avgEstimatedSleep = useMemo(() => safeAvg(rows.map((r) => r.estimated_sleep_min)), [rows]);
+  const avgSleepEfficiency = useMemo(() => safeAvg(rows.map((r) => r.sleep_efficiency_pct)), [rows]);
   const qualitySeries = useMemo(
     () => rows.map((r) => r.quality_num).filter((n): n is number => typeof n === "number" && Number.isFinite(n)),
     [rows]
@@ -529,6 +589,27 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
             </div>
 
             <div className="sf-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Time in bed (avg)</div>
+              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
+                {formatHours(avgTimeInBed)}
+              </div>
+            </div>
+
+            <div className="sf-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Estimated sleep (avg)</div>
+              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
+                {formatHours(avgEstimatedSleep)}
+              </div>
+            </div>
+
+            <div className="sf-card" style={{ padding: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>Sleep efficiency (avg)</div>
+              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>
+                {avgSleepEfficiency === null ? "—" : `${round1(avgSleepEfficiency)}%`}
+              </div>
+            </div>
+
+            <div className="sf-card" style={{ padding: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#444" }}>RRSM risk</div>
               <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6 }}>{risk.level}</div>
               <div style={{ marginTop: 6, color: "#444" }}>{risk.label}</div>
@@ -578,6 +659,15 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
                     <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>
                       Wake ups
                     </th>
+                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>
+                      In bed
+                    </th>
+                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>
+                      Est. sleep
+                    </th>
+                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>
+                      Efficiency
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -587,6 +677,9 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
                       <td style={{ padding: "10px 12px" }}>{r.quality_num ?? "—"}</td>
                       <td style={{ padding: "10px 12px" }}>{r.latency_min ?? "—"}</td>
                       <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? "—"}</td>
+                      <td style={{ padding: "10px 12px" }}>{formatHours(r.duration_min)}</td>
+                      <td style={{ padding: "10px 12px" }}>{formatHours(r.estimated_sleep_min)}</td>
+                      <td style={{ padding: "10px 12px" }}>{r.sleep_efficiency_pct === null ? "—" : `${r.sleep_efficiency_pct}%`}</td>
                     </tr>
                   ))}
                   <tr style={{ borderTop: "2px solid #e5e5e5", background: "#fafafa", fontWeight: 800 }}>
@@ -603,6 +696,9 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
                       {totalWakeups}
                       <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>SUM</span>
                     </td>
+                    <td style={{ padding: "10px 12px" }}>{formatHours(avgTimeInBed)} <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>AVE</span></td>
+                    <td style={{ padding: "10px 12px" }}>{formatHours(avgEstimatedSleep)} <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>AVE</span></td>
+                    <td style={{ padding: "10px 12px" }}>{avgSleepEfficiency === null ? "—" : `${round1(avgSleepEfficiency)}%`} <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#666" }}>AVE</span></td>
                   </tr>
                 </tbody>
               </table>
