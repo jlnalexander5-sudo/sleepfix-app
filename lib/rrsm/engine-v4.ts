@@ -48,6 +48,7 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   hiddenFactorReason: string | null;
   patternStability: "stable" | "forming" | "unstable";
   investigationPrompt: string | null;
+  userSummary: string;
 };
 
 type ProtocolFollowedValue =
@@ -431,15 +432,10 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   };
 }
 
-function chooseDominantCategory(scores: ReturnType<typeof scoreNightCategories>): RRSMContributorCategory {
-  const priority: RRSMContributorCategory[] = [
-    "mind_emotional",
-    "body_physiology",
-    "environment",
-    "sleep_hygiene",
-    "circadian_context",
-  ];
-
+function chooseDominantCategory(
+  scores: ReturnType<typeof scoreNightCategories>,
+  night?: NightWithOptionalProtocol,
+): RRSMContributorCategory {
   const maxScore = Math.max(
     scores.mind_emotional,
     scores.body_physiology,
@@ -449,6 +445,32 @@ function chooseDominantCategory(scores: ReturnType<typeof scoreNightCategories>)
   );
 
   if (maxScore <= 0) return "none";
+
+  // Bed / bedding thermal disruption should win over generic body discomfort.
+  // Example: user wakes repeatedly because mattress/blankets create heat/cold instability.
+  if (night && hasBedThermalSignal(night) && scores.environment >= Math.max(scores.body_physiology - 1, 3)) {
+    return "environment";
+  }
+
+  const primaryTrigger = getPrimaryTrigger(night);
+  if (
+    primaryTrigger &&
+    (primaryTrigger.includes("bed") ||
+      primaryTrigger.includes("bedding") ||
+      primaryTrigger.includes("room") ||
+      primaryTrigger.includes("environment")) &&
+    scores.environment >= 3
+  ) {
+    return "environment";
+  }
+
+  const priority: RRSMContributorCategory[] = [
+    "mind_emotional",
+    "environment",
+    "body_physiology",
+    "sleep_hygiene",
+    "circadian_context",
+  ];
 
   return priority.find((cat) => scores[cat as keyof typeof scores] === maxScore) ?? "none";
 }
@@ -593,7 +615,7 @@ function recurringIssue(nights: NightWithOptionalProtocol[], dominant: RRSMContr
   const lastSeven = nights.slice(-7);
   const matches = lastSeven.filter((night) => {
     const scores = scoreNightCategories(night);
-    const cat = chooseDominantCategory(scores);
+    const cat = chooseDominantCategory(scores, latest);
     return cat === dominant && detectSleepIssue(night);
   });
 
@@ -681,7 +703,7 @@ function latestIssueCategories(nights: NightWithOptionalProtocol[], limit = 5): 
   return nights
     .slice(-limit)
     .filter((night) => detectSleepIssue(night))
-    .map((night) => chooseDominantCategory(scoreNightCategories(night)))
+    .map((night) => chooseDominantCategory(scoreNightCategories(night), night))
     .filter((cat) => cat !== "none");
 }
 
@@ -722,8 +744,8 @@ function detectHiddenFactor(
     };
   }
 
-  const latestCat = chooseDominantCategory(scoreNightCategories(latest));
-  const previousCat = chooseDominantCategory(scoreNightCategories(previous));
+  const latestCat = chooseDominantCategory(scoreNightCategories(latest), latest);
+  const previousCat = chooseDominantCategory(scoreNightCategories(previous), previous);
 
   if (latestCat !== previousCat && latestCat !== "none" && previousCat !== "none") {
     return {
@@ -834,13 +856,63 @@ function confidenceForWithStability(
   return "low";
 }
 
+
+function buildUserSummary(
+  latestNight: NightWithOptionalProtocol | undefined,
+  dominant: RRSMContributorCategory,
+  recommendedProtocol: string,
+) {
+  if (!latestNight) return "SleepFix does not have a saved night to summarise yet.";
+
+  const wakeUps = typeof latestNight.wakeUps === "number" ? latestNight.wakeUps : 0;
+  const wakeRecovery = parseWakeRecoveryToMinutes(latestNight);
+  const latency = typeof latestNight.latencyMin === "number" ? latestNight.latencyMin : null;
+  const quality = typeof latestNight.quality === "number" ? latestNight.quality : null;
+  const bedText = joinedBedText(latestNight);
+  const primaryTrigger = getPrimaryTrigger(latestNight);
+
+  if (dominant === "environment" && hasBedThermalSignal(latestNight)) {
+    if (lowerIncludes(bedText, ["hot", "too many blankets", "partner body heat", "too warm", "mattress too hard"])) {
+      return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your bed/bedding signals point to heat build-up or thermal instability. Tonight's match is ${recommendedProtocol}.`;
+    }
+
+    if (lowerIncludes(bedText, ["cold", "too few blankets", "too light", "mattress too soft"])) {
+      return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your bed/bedding signals point to cold exposure or thermal instability. Tonight's match is ${recommendedProtocol}.`;
+    }
+
+    return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and the bed/bedding setup may be part of the disruption. Tonight's match is ${recommendedProtocol}.`;
+  }
+
+  if (dominant === "environment") {
+    return `SleepFix detected an environment-related sleep-maintenance issue: wake-ups and awake time after waking suggest the sleep problem was not just overall sleep quality. Tonight's match is ${recommendedProtocol}.`;
+  }
+
+  if (wakeUps >= 3 || (typeof wakeRecovery === "number" && wakeRecovery >= 30)) {
+    return `SleepFix detected sleep-maintenance instability: your overall sleep quality may be acceptable, but wake-ups and awake time after waking still show a real sleep disruption. Tonight's match is ${recommendedProtocol}.`;
+  }
+
+  if (latency !== null && latency >= 30) {
+    return `SleepFix detected a sleep-onset issue: it took about ${latency} minutes to fall asleep. Tonight's match is ${recommendedProtocol}.`;
+  }
+
+  if (quality !== null && quality <= 6) {
+    return `SleepFix detected reduced sleep quality. Tonight's match is ${recommendedProtocol}.`;
+  }
+
+  if (primaryTrigger) {
+    return `SleepFix did not detect a strong issue from the core metrics, but your main reported disruption was ${primaryTrigger}. Keep logging so SleepFix can check whether it repeats.`;
+  }
+
+  return "SleepFix did not detect a strong sleep issue from the latest record.";
+}
+
 export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtocolResult {
   const base = runRRSMEngineV2(nights);
 
   const latestNight = nights[nights.length - 1];
   const sleepIssueDetected = detectSleepIssue(latestNight);
   const categoryScores = scoreNightCategories(latestNight);
-  const dominantCategory = sleepIssueDetected ? chooseDominantCategory(categoryScores) : "none";
+  const dominantCategory = sleepIssueDetected ? chooseDominantCategory(categoryScores, latestNight) : "none";
   const recommendedProtocol = protocolForCategory(dominantCategory, categoryScores, latestNight);
   const recurring = recurringIssue(nights, dominantCategory);
   const secondaryFactors = secondaryFactorsFor(categoryScores, dominantCategory);
@@ -859,6 +931,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   );
 
   const protocolReason = detailedReasonForLatestNight(dominantCategory, latestNight);
+  const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
   const why = [
     ...base.why,
@@ -901,6 +974,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     hiddenFactorReason,
     patternStability,
     investigationPrompt,
+    userSummary,
     why,
     actions,
   };
