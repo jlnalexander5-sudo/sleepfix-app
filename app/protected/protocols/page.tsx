@@ -130,6 +130,8 @@ export default function ProtocolsPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RRSMProtocolResult | null>(null);
   const [nightCount, setNightCount] = useState(0);
+  const [accuracyFeedback, setAccuracyFeedback] = useState<"yes" | "no" | null>(null);
+  const [missingDetail, setMissingDetail] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +173,8 @@ export default function ProtocolsPage() {
       if (!cancelled) {
         setNightCount(mapped.length);
         setResult(protocolResult);
+        setAccuracyFeedback(null);
+        setMissingDetail("");
         setLoading(false);
       }
     }
@@ -224,16 +228,104 @@ export default function ProtocolsPage() {
       {result && nightCount > 0 && displayProtocol ? (
         <>
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">SleepFix summary</div>
+            <h2 className="mt-2 text-2xl font-bold text-blue-900">
+              {result.sleepIssueDetected ? "Sleep issue detected" : "No strong sleep issue detected"}
+            </h2>
+
+            <div className="mt-4 rounded-xl bg-blue-50 p-4 text-base text-blue-900">
+              {result.userSummary ?? result.protocolReason}
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-gray-200 p-3">
+                <div className="text-sm font-bold text-gray-500">Main pattern</div>
+                <div className="mt-1 font-semibold text-gray-900">{prettyCategory(result.dominantCategory)}</div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 p-3">
+                <div className="text-sm font-bold text-gray-500">Pattern strength</div>
+                <div className="mt-1 font-semibold text-gray-900">
+                  {result.protocolConfidence === "low"
+                    ? "Early pattern"
+                    : result.protocolConfidence === "moderate"
+                    ? "Pattern forming"
+                    : "Strong pattern"}
+                </div>
+              </div>
+            </div>
+
+            {result.sleepIssueDetected && result.secondaryFactors.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
+                <div className="font-bold text-gray-900">Other factors to watch</div>
+                <div className="mt-1">{result.secondaryFactors.map(prettyCategory).join(", ")}</div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-bold text-gray-900">Is this accurate?</h3>
+            <p className="mt-2 text-gray-700">
+              SleepFix needs your confirmation before treating this as the best explanation.
+            </p>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setAccuracyFeedback("yes")}
+                className={`rounded-xl border px-4 py-3 font-bold ${
+                  accuracyFeedback === "yes"
+                    ? "border-blue-700 bg-blue-50 text-blue-900"
+                    : "border-gray-200 bg-white text-gray-900"
+                }`}
+              >
+                Yes, this matches
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAccuracyFeedback("no")}
+                className={`rounded-xl border px-4 py-3 font-bold ${
+                  accuracyFeedback === "no"
+                    ? "border-amber-700 bg-amber-50 text-amber-900"
+                    : "border-gray-200 bg-white text-gray-900"
+                }`}
+              >
+                No, something is missing
+              </button>
+            </div>
+
+            {accuracyFeedback === "no" ? (
+              <div className="mt-4">
+                <label className="text-sm font-bold text-gray-700">
+                  What did SleepFix miss?
+                </label>
+                <textarea
+                  value={missingDetail}
+                  onChange={(e) => setMissingDetail(e.target.value)}
+                  placeholder="Example: the bed felt hot, hard mattress, partner heat, noise, cold feet, bathroom wake-up..."
+                  className="mt-2 min-h-[90px] w-full rounded-xl border border-gray-300 p-3 text-base"
+                />
+                <p className="mt-2 text-sm text-gray-600">
+                  For now, this is shown only on this page. Later we can save this to an admin feedback table.
+                </p>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="text-sm font-bold uppercase tracking-wide text-gray-500">Recommended protocol</div>
             <h2 className="mt-2 text-2xl font-bold text-blue-900">{displayProtocol.title}</h2>
+
             {escalatedProtocol ? (
               <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                <div className="font-bold">Escalated protocol</div>
+                <div className="font-bold">Deeper protocol</div>
                 <div className="mt-1">
-                  The standard protocol was followed but the sleep issue remained. SleepFix is showing the deeper version tonight.
+                  SleepFix is showing the deeper version because the issue appears to be recurring or unresolved.
                 </div>
               </div>
             ) : null}
+
             <p className="mt-2 text-base text-gray-700">{displayProtocol.bestFor}</p>
 
             <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
@@ -241,114 +333,49 @@ export default function ProtocolsPage() {
               <div className="mt-1">{result.protocolReason}</div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Sleep issue?</div>
-                <div className="mt-1 font-semibold text-gray-900">{result.sleepIssueDetected ? "Sleep issue detected" : "No clear sleep issue"}</div>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Recurring?</div>
-                <div className="mt-1 font-semibold text-gray-900">{result.recurringIssue ? "Recurring pattern" : "Still monitoring"}</div>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Main factor</div>
-                <div className="mt-1 font-semibold text-gray-900">{prettyCategory(result.dominantCategory)}</div>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Confidence</div>
-                <div className="mt-1 font-semibold capitalize text-gray-900">
-  {result.protocolConfidence === "low"
-    ? "Early pattern"
-    : result.protocolConfidence === "moderate"
-    ? "Pattern forming"
-    : "Strong pattern"}
-</div>
-              </div>
-            </div>
-
             <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
               <div className="font-bold text-gray-900">Related RRSM system</div>
               <div className="mt-1">{displayProtocol.related}</div>
             </div>
-
-            {result.sleepIssueDetected && result.secondaryFactors.length > 0 ? (
-              <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">Secondary factors to watch</div>
-                <div className="mt-1">{result.secondaryFactors.map(prettyCategory).join(", ")}</div>
-              </div>
-            ) : null}
           </section>
 
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-bold text-gray-900">What to do tonight</h3>
-            <p className="mt-2 text-gray-700">{displayProtocol.focus}</p>
+          {accuracyFeedback !== "no" ? (
+            <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="text-xl font-bold text-gray-900">What to do tonight</h3>
+              <p className="mt-2 text-gray-700">{displayProtocol.focus}</p>
 
-            <ol className="mt-4 list-decimal space-y-3 pl-6 text-base text-gray-800">
-              {displayProtocol.steps.map((s, idx) => (
-                <li key={idx} className="leading-relaxed">{s}</li>
-              ))}
-            </ol>
+              <ol className="mt-4 list-decimal space-y-3 pl-6 text-base text-gray-800">
+                {displayProtocol.steps.map((s, idx) => (
+                  <li key={idx} className="leading-relaxed">{s}</li>
+                ))}
+              </ol>
 
-            {displayProtocol.doNot?.length ? (
-              <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">Do not</div>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {displayProtocol.doNot.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+              {displayProtocol.doNot?.length ? (
+                <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+                  <div className="font-bold text-gray-900">Do not</div>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {displayProtocol.doNot.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
-            {displayProtocol.escalationNote ? (
-              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <div className="font-bold">Escalation note</div>
-                <div className="mt-1">{displayProtocol.escalationNote}</div>
-              </div>
-            ) : null}
-
-            {displayProtocol.diaryPrompt ? (
-              <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">Diary follow-up</div>
-                <div className="mt-1">{displayProtocol.diaryPrompt}</div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-gray-900">Protocol review</h3>
-          {!result.sleepIssueDetected ? (
-  <>
-    <div className="mt-3 font-semibold text-gray-900">
-      No protocol review needed
-    </div>
-
-    <p className="mt-2 text-gray-700">
-      There was no clear sleep issue in the latest sleep record, so SleepFix is not evaluating protocol effectiveness tonight.
-    </p>
-  </>
-) : (
-  <>
-    <div className="mt-3 font-semibold text-gray-900">
-      {result.protocolEvaluationLabel}
-    </div>
-
-    <p className="mt-2 text-gray-700">
-      {result.protocolEvaluationReason}
-    </p>
-  </>
-)}
-
-            <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-              <div className="font-bold text-gray-900">How to read this</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li><strong>Case A:</strong> protocol followed and sleep improved.</li>
-                <li><strong>Case B:</strong> protocol followed but sleep did not improve, so another factor may be present.</li>
-                <li><strong>Case C:</strong> protocol was not followed, partially followed, or not recorded, so effectiveness cannot be judged.</li>
-              </ul>
-            </div>
-          </section>
-        </>
+              {displayProtocol.diaryPrompt ? (
+                <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                  <div className="font-bold text-gray-900">Diary follow-up</div>
+                  <div className="mt-1">{displayProtocol.diaryPrompt}</div>
+                </div>
+              ) : null}
+            </section>
+          ) : (
+            <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+              <h3 className="text-xl font-bold text-amber-900">Protocol paused</h3>
+              <p className="mt-2 text-amber-900">
+                Because you said the summary is missing something, do not treat this recommendation as final. Record the missing factor in the Diary, then check the next recommendation after another saved night.
+              </p>
+            </section>
+          )        </>
       ) : null}
     </main>
   );
