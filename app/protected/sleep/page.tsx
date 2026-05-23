@@ -102,7 +102,10 @@ const BED_TAGS = [
   "Partner body heat",
   "Sleepwear too warm",
   "Sleepwear too light",
+  "Pillow too warm",
+  "Pillow too cold",
   "Pillow / position issue",
+  "Bedding needed adjustment",
   "Other bed factor",
 ] as const;
 
@@ -708,7 +711,7 @@ const canSaveNight = missingRequired.length === 0;
             value={bedTags}
             onChange={setBedTags}
             required
-            help="Choose what affected the bed, bedding, sleepwear, or sleeping setup."
+            help="Choose what affected the mattress, pillow, blankets, sleepwear, or sleeping setup."
           />
 
           <MultiCheckGroup
