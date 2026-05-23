@@ -74,6 +74,8 @@ type NightWithOptionalProtocol = RRSMMetricsNight & {
   protocolUsedName?: string | null;
   primary_trigger?: string | null;
   primaryTrigger?: string | null;
+  bed_tags?: string[] | null;
+  bedTags?: string[] | null;
 };
 
 function clamp7(n: number) {
@@ -111,6 +113,30 @@ function joinedProfileText(night: NightWithOptionalProtocol | undefined) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+
+function joinedBedText(night: NightWithOptionalProtocol | undefined) {
+  if (!night) return "";
+  const bedTags = night.bedTags ?? night.bed_tags ?? [];
+  return Array.isArray(bedTags) ? bedTags.filter(Boolean).join(" ").toLowerCase() : "";
+}
+
+function hasBedThermalSignal(night: NightWithOptionalProtocol | undefined) {
+  const bedText = joinedBedText(night);
+  return lowerIncludes(bedText, [
+    "mattress too hard",
+    "mattress too soft",
+    "bed felt hot",
+    "bed felt cold",
+    "too many blankets",
+    "too few blankets",
+    "partner body heat",
+    "sleepwear too warm",
+    "sleepwear too light",
+    "bedding",
+    "bed factor",
+  ]);
 }
 
 function parseWakeRecoveryToMinutes(night: NightWithOptionalProtocol | undefined): number | null {
@@ -155,6 +181,7 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const latencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 30;
   const majorLatencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 45;
   const wakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3;
+  const bedThermalSignal = hasBedThermalSignal(night);
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
@@ -165,6 +192,7 @@ return Boolean(
     maintenanceIssue ||
     prolongedWakeRecovery ||
     majorWakeRecovery ||
+    bedThermalSignal ||
     majorQualityIssue ||
     (qualityIssue && latencyIssue)
 );
@@ -183,7 +211,8 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
 
   const text = joinedNightText(night);
   const profileText = joinedProfileText(night);
-  const combinedText = `${text} ${profileText}`;
+  const bedText = joinedBedText(night);
+  const combinedText = `${text} ${profileText} ${bedText}`;
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
@@ -262,6 +291,13 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
       "mosquito",
       "room",
       "temperature",
+      "mattress",
+      "blanket",
+      "blankets",
+      "bedding",
+      "bed felt",
+      "partner body heat",
+      "sleepwear",
     ])
   ) {
     scores.environment += 4;
@@ -340,6 +376,21 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   if (lowerIncludes(profileText, ["talking", "customer-facing", "high-stress decision"])) {
     scores.mind_emotional += lowerIncludes(text, ["stress", "worry", "anxious", "upset", "overwhelmed"]) ? 2 : 1;
   }
+
+  // Bed / bedding thermal setup.
+  // This catches nights where sleep quality is good while asleep, but repeated wake-ups are caused by bed heat/cold instability.
+  if (hasBedThermalSignal(night)) {
+    scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 3;
+  }
+
+  if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm"])) {
+    scores.environment += 2;
+  }
+
+  if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light"])) {
+    scores.environment += 2;
+  }
+
   // User-perceived dominant trigger weighting.
   // This is NOT absolute truth. It is a weighting boost only.
   if (primaryTrigger.includes("emotional")) {
@@ -354,7 +405,12 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.body_physiology += 2;
   }
 
-  if (primaryTrigger.includes("room") || primaryTrigger.includes("environment")) {
+  if (
+    primaryTrigger.includes("room") ||
+    primaryTrigger.includes("environment") ||
+    primaryTrigger.includes("bed") ||
+    primaryTrigger.includes("bedding")
+  ) {
     scores.environment += 2;
   }
 
@@ -477,8 +533,17 @@ function detailedReasonForLatestNight(category: RRSMContributorCategory, latestN
   const wakeUps = typeof latestNight.wakeUps === "number" ? latestNight.wakeUps : 0;
   const wakeRecovery = parseWakeRecoveryToMinutes(latestNight);
   const text = joinedNightText(latestNight);
+  const bedText = joinedBedText(latestNight);
 
   if (category === "environment" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
+    if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm"])) {
+      return "SleepFix detected bed/bedding heat-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stabilising bed temperature without overcooling or overcorrecting.";
+    }
+
+    if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light"])) {
+      return "SleepFix detected bed/bedding cold-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stable warmth across the whole night without needing mid-night corrections.";
+    }
+
     if (lowerIncludes(text, ["cold"])) {
       return "SleepFix detected cold-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stable warmth through the whole night, especially feet and bedding.";
     }
@@ -753,6 +818,8 @@ function confidenceForWithStability(
     (primaryTrigger.includes("body") && dominant === "body_physiology") ||
     (primaryTrigger.includes("room") && dominant === "environment") ||
     (primaryTrigger.includes("environment") && dominant === "environment") ||
+    (primaryTrigger.includes("bed") && dominant === "environment") ||
+    (primaryTrigger.includes("bedding") && dominant === "environment") ||
     (primaryTrigger.includes("hygiene") && dominant === "sleep_hygiene") ||
     (primaryTrigger.includes("schedule") && dominant === "circadian_context") ||
     (primaryTrigger.includes("circadian") && dominant === "circadian_context");
