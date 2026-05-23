@@ -133,6 +133,22 @@ function prettyWakeCause(cause: string) {
   }
 }
 
+
+function prettyThermalSystem(state: string) {
+  switch (state) {
+    case "heat_load":
+      return "Heat load";
+    case "cold_exposure":
+      return "Cold exposure";
+    case "thermal_oscillation":
+      return "Hot/cold oscillation";
+    case "mixed_or_unclear":
+      return "Mixed or unclear";
+    default:
+      return "No strong thermal signal";
+  }
+}
+
 function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
   switch (value) {
     case "case_a_working":
@@ -379,6 +395,22 @@ export default function ProtocolsPage() {
                     : result.wakeCauseConfidence === "moderate"
                     ? "Moderate"
                     : "Low"}
+                </div>
+              </div>
+            ) : null}
+
+            {result.thermalSystemSummary ? (
+              <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-4">
+                <div className="text-sm font-bold uppercase tracking-wide text-orange-700">
+                  Thermal sleep system
+                </div>
+
+                <div className="mt-2 text-lg font-extrabold text-orange-950">
+                  {prettyThermalSystem(result.thermalSystemState)}
+                </div>
+
+                <div className="mt-2 text-sm text-orange-950">
+                  {result.thermalSystemSummary}
                 </div>
               </div>
             ) : null}
