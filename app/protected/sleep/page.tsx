@@ -106,6 +106,14 @@ const BED_TAGS = [
   "Pillow too cold",
   "Pillow / position issue",
   "Bedding needed adjustment",
+  "New mattress / still adjusting",
+  "New pillow / still adjusting",
+  "Changed blankets during night",
+  "Removed covers and improved",
+  "Added covers and improved",
+  "Changed pillow and improved",
+  "Got out of bed and reset",
+  "Overcorrected bedding / temperature",
   "Other bed factor",
 ] as const;
 
