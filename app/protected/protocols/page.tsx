@@ -1,981 +1,383 @@
-// lib/rrsm/engine-v4.ts
-// RRSM Engine v4 — protocol decision layer
-// Purpose:
-// 1) Detect whether there was a sleep issue.
-// 2) Detect whether the same issue is recurring.
-// 3) Score contributor categories from 1–7.
-// 4) Choose the best protocol using RRSM priority order.
-// 5) Evaluate whether the previous recommended protocol appears to be working.
-//
-// This file is intentionally deterministic and explainable.
+'use client';
 
-import type { RRSMMetricsNight, RRSMV2Insight } from "./engine-v2";
-import { runRRSMEngineV2 } from "./engine-v2";
+import React, { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { runRRSMEngineV4, type RRSMProtocolResult } from "@/lib/rrsm/engine-v4";
+import type { RRSMMetricsNight } from "@/lib/rrsm/engine-v2";
+import { getStandardProtocolByTitle, getEscalatedProtocolForTitle, type SleepFixProtocol } from "@/lib/protocols";
 
-export type RRSMContributorCategory =
-  | "mind_emotional"
-  | "body_physiology"
-  | "environment"
-  | "sleep_hygiene"
-  | "circadian_context"
-  | "none";
-
-export type RRSMProtocolEvaluation =
-  | "not_enough_data"
-  | "case_a_working"
-  | "case_b_hidden_factor"
-  | "case_c_not_followed";
-
-export type RRSMProtocolResult = RRSMV2Insight & {
-  sleepIssueDetected: boolean;
-  recurringIssue: boolean;
-  dominantCategory: RRSMContributorCategory;
-  categoryScores: {
-    mind_emotional: number;
-    body_physiology: number;
-    environment: number;
-    sleep_hygiene: number;
-    circadian_context: number;
-  };
-  recommendedProtocol: string;
-  protocolReason: string;
-  secondaryFactors: RRSMContributorCategory[];
-  protocolConfidence: "low" | "moderate" | "high";
-  protocolEvaluation: RRSMProtocolEvaluation;
-  protocolEvaluationLabel: string;
-  protocolEvaluationReason: string;
-  hiddenFactorSuspected: boolean;
-  hiddenFactorReason: string | null;
-  patternStability: "stable" | "forming" | "unstable";
-  investigationPrompt: string | null;
-  userSummary: string;
-};
-
-type ProtocolFollowedValue =
-  | "yes"
-  | "partial"
-  | "no"
-  | "none"
-  | "not_used"
-  | "not_applicable"
-  | null
-  | undefined;
-
-type NightWithOptionalProtocol = RRSMMetricsNight & {
-  sleepContext?: string[] | null;
-  workContext?: string[] | null;
-  sleep_context?: string[] | null;
-  work_context?: string[] | null;
-  wakeRecoveryMin?: number | null;
+type SleepNightRow = {
+  id: string;
+  local_date: string | null;
+  created_at: string;
+  sleep_quality: number | string | null;
+  sleep_latency_choice: string | null;
+  wake_ups_choice: string | null;
   wake_recovery_choice?: string | null;
-  wakeRecoveryChoice?: string | null;
-  protocolFollowed?: ProtocolFollowedValue;
-  protocol_followed?: ProtocolFollowedValue;
-  protocol_used_name?: string | null;
-  protocolUsedName?: string | null;
   primary_trigger?: string | null;
-  primaryTrigger?: string | null;
+  mind_tags?: string[] | null;
+  environment_tags?: string[] | null;
   bed_tags?: string[] | null;
-  bedTags?: string[] | null;
+  body_tags?: string[] | null;
+  primary_driver?: string | null;
+  secondary_driver?: string | null;
+  protocol_used_name?: string | null;
+  protocol_followed?: string | null;
 };
 
-function clamp7(n: number) {
-  return Math.max(0, Math.min(7, n));
-}
 
-function lowerIncludes(value: string | null | undefined, needles: string[]) {
-  const s = String(value ?? "").toLowerCase();
-  return needles.some((n) => s.includes(n));
-}
-
-function joinedNightText(night: RRSMMetricsNight) {
-  return [night.primaryDriver, night.secondaryDriver].filter(Boolean).join(" ").toLowerCase();
-}
-function getPrimaryTrigger(night: NightWithOptionalProtocol | undefined) {
-  if (!night) return "";
-
-  return String(
-    night.primary_trigger ??
-      night.primaryTrigger ??
-      ""
-  )
-    .trim()
-    .toLowerCase();
-}
-function joinedProfileText(night: NightWithOptionalProtocol | undefined) {
-  if (!night) return "";
-  const sleepContext = night.sleepContext ?? night.sleep_context ?? [];
-  const workContext = night.workContext ?? night.work_context ?? [];
-
-  return [
-    ...(Array.isArray(sleepContext) ? sleepContext : []),
-    ...(Array.isArray(workContext) ? workContext : []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-
-function joinedBedText(night: NightWithOptionalProtocol | undefined) {
-  if (!night) return "";
-  const bedTags = night.bedTags ?? night.bed_tags ?? [];
-  return Array.isArray(bedTags) ? bedTags.filter(Boolean).join(" ").toLowerCase() : "";
-}
-
-function hasBedThermalSignal(night: NightWithOptionalProtocol | undefined) {
-  const bedText = joinedBedText(night);
-  return lowerIncludes(bedText, [
-    "mattress too hard",
-    "mattress too soft",
-    "bed felt hot",
-    "bed felt cold",
-    "too many blankets",
-    "too few blankets",
-    "partner body heat",
-    "sleepwear too warm",
-    "sleepwear too light",
-    "bedding",
-    "bed factor",
-  ]);
-}
-
-function parseWakeRecoveryToMinutes(night: NightWithOptionalProtocol | undefined): number | null {
-  if (!night) return null;
-
-  if (typeof night.wakeRecoveryMin === "number") return night.wakeRecoveryMin;
-
-  const raw = String(night.wake_recovery_choice ?? night.wakeRecoveryChoice ?? "").toLowerCase().trim();
-  if (!raw) return null;
-
-  if (raw.includes("60")) return 60;
-  if (raw.includes("30-60") || raw.includes("30–60")) return 30;
-  if (raw.includes("15-30") || raw.includes("15–30")) return 15;
-  if (raw.includes("5-15") || raw.includes("5–15")) return 5;
-  if (raw.includes("0-5") || raw.includes("0–5")) return 0;
-
-  const n = parseInt(raw.replace(/[^0-9]/g, ""), 10);
+function parseLatency(choice: string | null): number | null {
+  if (!choice) return null;
+  const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
   return Number.isFinite(n) ? n : null;
 }
 
-function hasProlongedWakeRecovery(night: NightWithOptionalProtocol | undefined): boolean {
-  const mins = parseWakeRecoveryToMinutes(night);
-  return typeof mins === "number" && mins >= 15;
+function parseWakeUps(choice: string | null): number | null {
+  if (!choice) return null;
+  const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
 }
 
-function hasMajorWakeRecovery(night: NightWithOptionalProtocol | undefined): boolean {
-  const mins = parseWakeRecoveryToMinutes(night);
-  return typeof mins === "number" && mins >= 30;
+function parseWakeRecovery(choice: string | null | undefined): number | null {
+  if (!choice) return null;
+
+  const cleaned = choice.toLowerCase().trim();
+
+  if (cleaned.includes("0-5")) return 5;
+  if (cleaned.includes("5-15")) return 15;
+  if (cleaned.includes("15-30")) return 30;
+  if (cleaned.includes("30-60")) return 60;
+  if (cleaned.includes("60+")) return 90;
+
+  const n = parseInt(cleaned.replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
 }
 
-function hasMaintenanceIssue(night: NightWithOptionalProtocol | undefined): boolean {
-  if (!night) return false;
-  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
-  return wakeUps >= 2 && hasProlongedWakeRecovery(night);
+function textFromArray(value?: string[] | null) {
+  return Array.isArray(value) ? value.join(", ") : "";
 }
 
-function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean {
-  if (!night) return false;
+function mapNight(row: SleepNightRow): RRSMMetricsNight & {
+  wakeRecoveryMin?: number | null;
+  primaryTrigger?: string | null;
+  protocolFollowed?: "yes" | "partial" | "no" | "none" | null;
+} {
+  const drivers = [
+    row.primary_driver,
+    row.secondary_driver,
+    textFromArray(row.mind_tags),
+    textFromArray(row.environment_tags),
+    textFromArray(row.bed_tags),
+    textFromArray(row.body_tags),
+  ]
+    .filter(Boolean)
+    .join(", ");
 
-  const qualityIssue = typeof night.quality === "number" && night.quality <= 6;
-  const majorQualityIssue = typeof night.quality === "number" && night.quality <= 3;
-  const latencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 30;
-  const majorLatencyIssue = typeof night.latencyMin === "number" && night.latencyMin >= 45;
-  const wakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3;
-  const bedThermalSignal = hasBedThermalSignal(night);
-  const maintenanceIssue = hasMaintenanceIssue(night);
-  const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
-  const majorWakeRecovery = hasMajorWakeRecovery(night);
-
-return Boolean(
-  majorLatencyIssue ||
-    wakeIssue ||
-    maintenanceIssue ||
-    prolongedWakeRecovery ||
-    majorWakeRecovery ||
-    bedThermalSignal ||
-    majorQualityIssue ||
-    (qualityIssue && latencyIssue)
-);
-}
-
-function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
-  const scores = {
-    mind_emotional: 0,
-    body_physiology: 0,
-    environment: 0,
-    sleep_hygiene: 0,
-    circadian_context: 0,
-  };
-
-  if (!night) return scores;
-
-  const text = joinedNightText(night);
-  const profileText = joinedProfileText(night);
-  const bedText = joinedBedText(night);
-  const combinedText = `${text} ${profileText} ${bedText}`;
-  const maintenanceIssue = hasMaintenanceIssue(night);
-  const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
-  const majorWakeRecovery = hasMajorWakeRecovery(night);
-  const primaryTrigger = getPrimaryTrigger(night);
-
-  // C1 — Mind / emotional activation: RB2/RB3
-  if (
-    lowerIncludes(combinedText, [
-      "stress",
-      "worry",
-      "anxious",
-      "anxiety",
-      "racing",
-      "thought",
-      "overstimulated",
-      "wired",
-      "alert",
-      "emotional",
-      "confrontation",
-      "overwhelmed",
-    ])
-  ) {
-    scores.mind_emotional += 4;
-  }
-
-  if (typeof night.latencyMin === "number" && night.latencyMin >= 45) {
-    scores.mind_emotional += 2;
-  } else if (typeof night.latencyMin === "number" && night.latencyMin >= 30) {
-    scores.mind_emotional += 1;
-  }
-
-  if (prolongedWakeRecovery && scores.mind_emotional > 0) {
-    scores.mind_emotional += 1;
-  }
-
-  // C2 — Body physiology: RB1
-  if (
-    lowerIncludes(combinedText, [
-      "pain",
-      "discomfort",
-      "doms",
-      "sore",
-      "inflammation",
-      "inflamed",
-      "tense",
-      "restless",
-      "ill",
-      "flu",
-      "sick",
-      "heavy fatigue",
-      "body",
-    ])
-  ) {
-    scores.body_physiology += 4;
-  }
-
-  if (typeof night.wakeUps === "number" && night.wakeUps >= 3) {
-    scores.body_physiology += 1;
-  }
-
-  if (maintenanceIssue && scores.body_physiology > 0) {
-    scores.body_physiology += majorWakeRecovery ? 3 : 2;
-  }
-
-  // C3 — Environment / room disruption
-  if (
-    lowerIncludes(combinedText, [
-      "hot",
-      "cold",
-      "noise",
-      "noisy",
-      "light",
-      "bright",
-      "humid",
-      "dry",
-      "mosquito",
-      "room",
-      "temperature",
-      "mattress",
-      "blanket",
-      "blankets",
-      "bedding",
-      "bed felt",
-      "partner body heat",
-      "sleepwear",
-    ])
-  ) {
-    scores.environment += 4;
-  }
-
-  // Wake-up persistence makes room/body factors much more important.
-  // Example: cold room + repeated long awake periods = real maintenance disruption.
-  if (maintenanceIssue && scores.environment > 0) {
-    scores.environment += majorWakeRecovery ? 3 : 2;
-  }
-
-  // C4 — Personal sleep hygiene / behaviour
-  if (
-    lowerIncludes(combinedText, [
-      "caffeine",
-      "coffee",
-      "alcohol",
-      "nicotine",
-      "smoking",
-      "smoke",
-      "screen",
-      "phone",
-      "tv",
-      "scroll",
-      "late meal",
-      "food",
-      "eating",
-      "exercise late",
-      "gym",
-    ])
-  ) {
-    scores.sleep_hygiene += 4;
-  }
-
-  if (typeof night.latencyMin === "number" && night.latencyMin >= 45 && scores.sleep_hygiene > 0) {
-    scores.sleep_hygiene += 1;
-  }
-
-  // C5 — Circadian/context limitation
-  if (
-    lowerIncludes(combinedText, [
-      "shift",
-      "night shift",
-      "jet lag",
-      "travel",
-      "irregular",
-      "pregnant",
-      "pregnancy",
-      "chronic",
-      "illness",
-    ])
-  ) {
-    scores.circadian_context += 4;
-  }
-
-  // Profile/context modifiers.
-  // These do not diagnose the night by themselves; they bias the engine when nightly signals also point that way.
-  if (lowerIncludes(profileText, ["night shift", "rotating shift", "irregular work", "shift-based", "jet lag", "travel"])) {
-    scores.circadian_context += maintenanceIssue || typeof night.latencyMin === "number" && night.latencyMin >= 30 ? 3 : 1;
-  }
-
-  if (lowerIncludes(profileText, ["pregnancy", "chronic illness"])) {
-    scores.circadian_context += 2;
-    scores.body_physiology += 1;
-  }
-
-  if (lowerIncludes(profileText, ["construction", "physical labour", "machinery", "tools", "mostly standing", "driving"])) {
-    scores.body_physiology += lowerIncludes(text, ["pain", "discomfort", "tense", "restless", "fatigue", "sore", "inflamed"]) ? 2 : 1;
-  }
-
-  if (lowerIncludes(profileText, ["desk work", "screen-heavy", "phone", "mostly sitting"])) {
-    scores.mind_emotional += lowerIncludes(text, ["racing", "thought", "wired", "alert", "stimulated", "foggy"]) ? 2 : 1;
-    scores.sleep_hygiene += lowerIncludes(text, ["screen", "phone", "tv", "scroll"]) ? 2 : 0;
-  }
-
-  if (lowerIncludes(profileText, ["talking", "customer-facing", "high-stress decision"])) {
-    scores.mind_emotional += lowerIncludes(text, ["stress", "worry", "anxious", "upset", "overwhelmed"]) ? 2 : 1;
-  }
-
-  // Bed / bedding thermal setup.
-  // This catches nights where sleep quality is good while asleep, but repeated wake-ups are caused by bed heat/cold instability.
-  if (hasBedThermalSignal(night)) {
-    scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 3;
-  }
-
-  if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm"])) {
-    scores.environment += 2;
-  }
-
-  if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light"])) {
-    scores.environment += 2;
-  }
-
-  // User-perceived dominant trigger weighting.
-  // This is NOT absolute truth. It is a weighting boost only.
-  if (primaryTrigger.includes("emotional")) {
-    scores.mind_emotional += 2;
-  }
-
-  if (primaryTrigger.includes("mental")) {
-    scores.mind_emotional += 2;
-  }
-
-  if (primaryTrigger.includes("body") || primaryTrigger.includes("pain")) {
-    scores.body_physiology += 2;
-  }
-
-  if (
-    primaryTrigger.includes("room") ||
-    primaryTrigger.includes("environment") ||
-    primaryTrigger.includes("bed") ||
-    primaryTrigger.includes("bedding")
-  ) {
-    scores.environment += 2;
-  }
-
-  if (primaryTrigger.includes("hygiene") || primaryTrigger.includes("habit")) {
-    scores.sleep_hygiene += 2;
-  }
-
-  if (primaryTrigger.includes("circadian") || primaryTrigger.includes("schedule")) {
-    scores.circadian_context += 2;
-  }
+  const protocolFollowed =
+    row.protocol_followed === "yes" ||
+    row.protocol_followed === "partial" ||
+    row.protocol_followed === "no" ||
+    row.protocol_followed === "none"
+      ? row.protocol_followed
+      : null;
 
   return {
-    mind_emotional: clamp7(scores.mind_emotional),
-    body_physiology: clamp7(scores.body_physiology),
-    environment: clamp7(scores.environment),
-    sleep_hygiene: clamp7(scores.sleep_hygiene),
-    circadian_context: clamp7(scores.circadian_context),
+    dateKey: row.local_date ?? row.created_at?.slice(0, 10),
+    quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
+    latencyMin: parseLatency(row.sleep_latency_choice),
+    wakeUps: parseWakeUps(row.wake_ups_choice),
+    wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
+    primaryTrigger: row.primary_trigger ?? null,
+    primaryDriver: drivers || row.primary_driver || "(no driver logged)",
+    secondaryDriver: row.secondary_driver ?? null,
+    protocolFollowed,
   };
 }
 
-function chooseDominantCategory(
-  scores: ReturnType<typeof scoreNightCategories>,
-  night?: NightWithOptionalProtocol,
-): RRSMContributorCategory {
-  const maxScore = Math.max(
-    scores.mind_emotional,
-    scores.body_physiology,
-    scores.environment,
-    scores.sleep_hygiene,
-    scores.circadian_context,
-  );
-
-  if (maxScore <= 0) return "none";
-
-  // Bed / bedding thermal disruption should win over generic body discomfort.
-  // Example: user wakes repeatedly because mattress/blankets create heat/cold instability.
-  if (night && hasBedThermalSignal(night) && scores.environment >= Math.max(scores.body_physiology - 1, 3)) {
-    return "environment";
-  }
-
-  const primaryTrigger = getPrimaryTrigger(night);
-  if (
-    primaryTrigger &&
-    (primaryTrigger.includes("bed") ||
-      primaryTrigger.includes("bedding") ||
-      primaryTrigger.includes("room") ||
-      primaryTrigger.includes("environment")) &&
-    scores.environment >= 3
-  ) {
-    return "environment";
-  }
-
-  const priority: RRSMContributorCategory[] = [
-    "mind_emotional",
-    "environment",
-    "body_physiology",
-    "sleep_hygiene",
-    "circadian_context",
-  ];
-
-  return priority.find((cat) => scores[cat as keyof typeof scores] === maxScore) ?? "none";
-}
-
-function mindProtocolForNight(night: NightWithOptionalProtocol | undefined) {
-  const text = `${joinedNightText(night as RRSMMetricsNight)} ${joinedProfileText(night)}`;
-
-  const hasMentalActivation = lowerIncludes(text, [
-    "racing",
-    "thought",
-    "thoughts",
-    "mentally stimulated",
-    "mental",
-    "wired",
-    "alert",
-    "focused",
-    "overstimulated",
-  ]);
-
-  const hasEmotionalActivation = lowerIncludes(text, [
-    "anxious",
-    "anxiety",
-    "worried",
-    "worry",
-    "upset",
-    "stress",
-    "stressed",
-    "euphoric",
-    "depressed",
-    "low",
-    "flat",
-    "emotional",
-  ]);
-
-  if (hasMentalActivation) return "RRSM Quieting Protocol";
-  if (hasEmotionalActivation) return "RRSM Body Downshift Protocol";
-
-  return "RRSM Quieting Protocol";
-}
-
-
-function protocolForCategory(category: RRSMContributorCategory, scores: ReturnType<typeof scoreNightCategories>, night?: NightWithOptionalProtocol) {
+function prettyCategory(category: string) {
   switch (category) {
     case "mind_emotional":
-      return mindProtocolForNight(night);
+      return "Mind / emotional activation";
     case "body_physiology":
-      if (scores.body_physiology >= 5) return "RRSM Body Recovery Protocol";
-      return "RRSM Body Downshift Protocol";
+      return "Body / physiology activation";
     case "environment":
-      return "Sleep Environment Reset Protocol";
+      return "Room temperature / environment disruption";
     case "sleep_hygiene":
-      return "RRSM Shutdown Ritual";
+      return "Personal sleep-hygiene disruption";
     case "circadian_context":
-      return "RRSM Rhythm Support Protocol";
+      return "Timing / life-context limitation";
     default:
-      return "No protocol needed tonight";
+      return "No clear sleep issue";
   }
 }
 
-function reasonForCategory(category: RRSMContributorCategory) {
-  switch (category) {
-    case "mind_emotional":
-      return "Your sleep form points toward mind or emotional activation. Mental activation usually needs quieting; emotional activation often needs body downshifting first.";
-    case "body_physiology":
-      return "Your sleep form points most strongly toward body-based activation such as pain, tension, inflammation, DOMS, illness, or physical discomfort.";
-    case "environment":
-      return "Your sleep form points most strongly toward room-environment disruption. If wake-ups included longer awake periods, the issue is likely sleep maintenance rather than falling asleep.";
-    case "sleep_hygiene":
-      return "Your sleep form points most strongly toward a personal sleep-rhythm habit, such as late caffeine, screens, alcohol, nicotine, late food, or late exercise.";
-    case "circadian_context":
-      return "Your profile context suggests a rhythm or life-context limitation may be affecting sleep. The goal is to improve sleep transition and recovery stability without treating real timing constraints as simple habits.";
+function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
+  switch (value) {
+    case "case_a_working":
+      return "Case A: the protocol appears to be helping.";
+    case "case_b_hidden_factor":
+      return "Case B: protocol was followed but sleep did not improve; another factor may be present.";
+    case "case_c_not_followed":
+      return "Case C: protocol was not fully followed, so effectiveness cannot be judged yet.";
     default:
-      return "Your sleep form does not show a clear sleep issue tonight.";
+      return "Not enough data yet to judge whether the protocol worked.";
   }
 }
 
+export default function ProtocolsPage() {
+  const supabase = useMemo(() => createClient(), []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<RRSMProtocolResult | null>(null);
+  const [nightCount, setNightCount] = useState(0);
+  const [accuracyFeedback, setAccuracyFeedback] = useState<"yes" | "no" | null>(null);
+  const [missingDetail, setMissingDetail] = useState("");
 
-function detailedReasonForLatestNight(category: RRSMContributorCategory, latestNight: NightWithOptionalProtocol | undefined) {
-  const baseReason = reasonForCategory(category);
-  if (!latestNight) return baseReason;
+  useEffect(() => {
+    let cancelled = false;
 
-  const wakeUps = typeof latestNight.wakeUps === "number" ? latestNight.wakeUps : 0;
-  const wakeRecovery = parseWakeRecoveryToMinutes(latestNight);
-  const text = joinedNightText(latestNight);
-  const bedText = joinedBedText(latestNight);
+    async function loadRecommendation() {
+      setLoading(true);
+      setError(null);
 
-  if (category === "environment" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
-    if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm"])) {
-      return "SleepFix detected bed/bedding heat-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stabilising bed temperature without overcooling or overcorrecting.";
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !authData?.user) {
+        if (!cancelled) {
+          setError(authErr?.message ?? "Not signed in.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      const { data, error: rowsErr } = await supabase
+        .from("sleep_nights")
+        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
+        .eq("user_id", authData.user.id)
+        .order("local_date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(14);
+
+      if (rowsErr) {
+        if (!cancelled) {
+          setError(rowsErr.message);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const mapped = [...(data ?? [])]
+        .reverse()
+        .map((row) => mapNight(row as SleepNightRow));
+      const protocolResult = runRRSMEngineV4(mapped);
+
+      if (!cancelled) {
+        setNightCount(mapped.length);
+        setResult(protocolResult);
+        setAccuracyFeedback(null);
+        setMissingDetail("");
+        setLoading(false);
+      }
     }
 
-    if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light"])) {
-      return "SleepFix detected bed/bedding cold-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stable warmth across the whole night without needing mid-night corrections.";
-    }
-
-    if (lowerIncludes(text, ["cold"])) {
-      return "SleepFix detected cold-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stable warmth through the whole night, especially feet and bedding.";
-    }
-    if (lowerIncludes(text, ["hot", "humid"])) {
-      return "SleepFix detected heat/humidity-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is thermal stability without overcooling the body.";
-    }
-    return "SleepFix detected room-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is removing the room factor that kept reactivating you.";
-  }
-
-  if (category === "body_physiology" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
-    return "SleepFix detected body-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is reducing body activation enough that wake-ups do not keep you awake.";
-  }
-
-  if (category === "mind_emotional" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
-    if (lowerIncludes(text, ["racing", "thought", "mentally stimulated", "wired", "alert"])) {
-      return "SleepFix detected mental reactivation after waking. The main target is stopping wake-ups from turning into long awake periods.";
-    }
-
-    if (lowerIncludes(text, ["anxious", "worried", "upset", "stress", "stressed", "euphoric", "depressed", "low", "flat"])) {
-      return "SleepFix detected emotional activation affecting sleep maintenance. The main target is reducing emotional charge through body downshifting before trying to sleep again.";
-    }
-
-    return "SleepFix detected mind/emotional reactivation after waking. The main target is stopping wake-ups from turning into long awake periods.";
-  }
-
-  return baseReason;
-}
-
-function secondaryFactorsFor(scores: ReturnType<typeof scoreNightCategories>, dominant: RRSMContributorCategory) {
-  const entries: Array<[RRSMContributorCategory, number]> = [
-    ["mind_emotional", scores.mind_emotional],
-    ["body_physiology", scores.body_physiology],
-    ["environment", scores.environment],
-    ["sleep_hygiene", scores.sleep_hygiene],
-    ["circadian_context", scores.circadian_context],
-  ];
-
-  return entries
-    .filter(([cat, score]) => cat !== dominant && score >= 3)
-    .sort((a, b) => b[1] - a[1])
-    .map(([cat]) => cat);
-}
-
-function recurringIssue(nights: NightWithOptionalProtocol[], dominant: RRSMContributorCategory): boolean {
-  if (dominant === "none") return false;
-
-  const lastSeven = nights.slice(-7);
-  const matches = lastSeven.filter((night) => {
-    const scores = scoreNightCategories(night);
-    const cat = chooseDominantCategory(scores, night);
-    return cat === dominant && detectSleepIssue(night);
-  });
-
-  return matches.length >= 2;
-}
-
-function confidenceFor(nights: NightWithOptionalProtocol[], sleepIssueDetected: boolean, recurring: boolean) {
-  if (!sleepIssueDetected) return "low";
-  if (recurring && nights.length >= 5) return "high";
-  if (nights.length >= 3) return "moderate";
-  return "low";
-}
-
-function getProtocolFollowed(night: NightWithOptionalProtocol | undefined): ProtocolFollowedValue {
-  if (!night) return null;
-  return night.protocolFollowed ?? night.protocol_followed ?? null;
-}
-
-function normalizeProtocolFollowed(value: ProtocolFollowedValue): "yes" | "partial" | "no" | "none" | null {
-  if (!value) return null;
-  const v = String(value).toLowerCase().trim();
-
-  if (v === "yes" || v.includes("followed")) return "yes";
-  if (v === "partial" || v.includes("part")) return "partial";
-  if (v === "none" || v === "not_used" || v === "not applicable" || v === "not_applicable") return "none";
-  if (v === "no" || v.includes("did not")) return "no";
-
-  return null;
-}
-
-function evaluateProtocol(nights: NightWithOptionalProtocol[]): {
-  value: RRSMProtocolEvaluation;
-  label: string;
-  reason: string;
-} {
-  if (nights.length < 2) {
-    return {
-      value: "not_enough_data",
-      label: "Not enough data yet",
-      reason: "SleepFix needs at least two saved nights to compare protocol use against the next sleep result.",
+    loadRecommendation();
+    return () => {
+      cancelled = true;
     };
-  }
+  }, [supabase]);
 
-  const previous = nights[nights.length - 2];
-  const latest = nights[nights.length - 1];
+  const protocol: SleepFixProtocol | null = useMemo(() => {
+    if (!result) return null;
+    return getStandardProtocolByTitle(result.recommendedProtocol);
+  }, [result]);
 
-  const followed = normalizeProtocolFollowed(getProtocolFollowed(previous));
+  const escalatedProtocol: SleepFixProtocol | null = useMemo(() => {
+    if (!result || result.protocolEvaluation !== "case_b_hidden_factor") return null;
+    return getEscalatedProtocolForTitle(result.recommendedProtocol);
+  }, [result]);
 
-  if (!followed || followed === "none" || followed === "no" || followed === "partial") {
-    return {
-      value: "case_c_not_followed",
-      label: "Case C — protocol not fully followed",
-      reason: "The previous protocol was not followed fully, so SleepFix cannot fairly judge whether it worked.",
-    };
-  }
+  const displayProtocol = escalatedProtocol ?? protocol;
 
-  const prevIssue = detectSleepIssue(previous);
-  const latestIssue = detectSleepIssue(latest);
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-8">
+      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Tonight&apos;s Protocol</h1>
+      <p className="mt-2 text-base text-gray-600">
+        SleepFix analyses your recent sleep patterns to recommend the best protocol for tonight.
+      </p>
 
-  if (prevIssue && !latestIssue) {
-    return {
-      value: "case_a_working",
-      label: "Case A — protocol appears to be working",
-      reason: "The protocol was followed and the next saved night no longer shows a clear sleep issue.",
-    };
-  }
+      {loading ? (
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm">
+          Loading your protocol recommendation...
+        </div>
+      ) : null}
 
-  if (prevIssue && latestIssue) {
-    return {
-      value: "case_b_hidden_factor",
-      label: "Case B — hidden factor likely remains",
-      reason: "The protocol was followed but the next saved night still shows a sleep issue, so another contributor may be present.",
-    };
-  }
+      {error ? (
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+          {error}
+        </div>
+      ) : null}
 
-  return {
-    value: "not_enough_data",
-    label: "Not enough data yet",
-    reason: "The saved nights do not yet show a clear before-and-after protocol comparison.",
-  };
-}
+      {!loading && !error && nightCount < 1 ? (
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-bold text-blue-900">No sleep record yet</h2>
+          <p className="mt-2 text-gray-700">
+            Save at least one night in the Sleep page so SleepFix can recommend a protocol.
+          </p>
+        </div>
+      ) : null}
 
+      {result && nightCount > 0 && displayProtocol ? (
+        <>
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">SleepFix summary</div>
+            <h2 className="mt-2 text-2xl font-bold text-blue-900">
+              {result.sleepIssueDetected ? "Sleep issue detected" : "No strong sleep issue detected"}
+            </h2>
 
-function latestIssueCategories(nights: NightWithOptionalProtocol[], limit = 5): RRSMContributorCategory[] {
-  return nights
-    .slice(-limit)
-    .filter((night) => detectSleepIssue(night))
-    .map((night) => chooseDominantCategory(scoreNightCategories(night), night))
-    .filter((cat) => cat !== "none");
-}
+            <div className="mt-4 rounded-xl bg-blue-50 p-4 text-base text-blue-900">
+              {result.userSummary ?? result.protocolReason}
+            </div>
 
-function detectPatternStability(
-  nights: NightWithOptionalProtocol[],
-  dominant: RRSMContributorCategory,
-  protocolEvaluation: RRSMProtocolEvaluation,
-): "stable" | "forming" | "unstable" {
-  const cats = latestIssueCategories(nights, 5);
-  const unique = new Set(cats);
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-gray-200 p-3">
+                <div className="text-sm font-bold text-gray-500">Main pattern</div>
+                <div className="mt-1 font-semibold text-gray-900">{prettyCategory(result.dominantCategory)}</div>
+              </div>
 
-  if (protocolEvaluation === "case_b_hidden_factor") return "unstable";
-  if (cats.length >= 3 && unique.size >= 3) return "unstable";
-  if (dominant !== "none" && cats.filter((cat) => cat === dominant).length >= 2) return "stable";
+              <div className="rounded-xl border border-gray-200 p-3">
+                <div className="text-sm font-bold text-gray-500">Pattern strength</div>
+                <div className="mt-1 font-semibold text-gray-900">
+                  {result.protocolConfidence === "low"
+                    ? "Early pattern"
+                    : result.protocolConfidence === "moderate"
+                    ? "Pattern forming"
+                    : "Strong pattern"}
+                </div>
+              </div>
+            </div>
 
-  return "forming";
-}
+            {result.sleepIssueDetected && result.secondaryFactors.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
+                <div className="font-bold text-gray-900">Other factors to watch</div>
+                <div className="mt-1">{result.secondaryFactors.map(prettyCategory).join(", ")}</div>
+              </div>
+            ) : null}
+          </section>
 
-function detectHiddenFactor(
-  nights: NightWithOptionalProtocol[],
-  dominant: RRSMContributorCategory,
-  protocolEvaluation: RRSMProtocolEvaluation,
-): {
-  suspected: boolean;
-  reason: string | null;
-} {
-  if (protocolEvaluation !== "case_b_hidden_factor") {
-    return { suspected: false, reason: null };
-  }
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-bold text-gray-900">Is this accurate?</h3>
+            <p className="mt-2 text-gray-700">
+              SleepFix needs your confirmation before treating this as the best explanation.
+            </p>
 
-  const latest = nights[nights.length - 1];
-  const previous = nights[nights.length - 2];
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setAccuracyFeedback("yes")}
+                className={`rounded-xl border px-4 py-3 font-bold ${
+                  accuracyFeedback === "yes"
+                    ? "border-blue-700 bg-blue-50 text-blue-900"
+                    : "border-gray-200 bg-white text-gray-900"
+                }`}
+              >
+                Yes, this matches
+              </button>
 
-  if (!latest || !previous) {
-    return {
-      suspected: true,
-      reason: "The protocol was followed but the next night still showed a sleep issue. SleepFix needs more data to identify what changed.",
-    };
-  }
+              <button
+                type="button"
+                onClick={() => setAccuracyFeedback("no")}
+                className={`rounded-xl border px-4 py-3 font-bold ${
+                  accuracyFeedback === "no"
+                    ? "border-amber-700 bg-amber-50 text-amber-900"
+                    : "border-gray-200 bg-white text-gray-900"
+                }`}
+              >
+                No, something is missing
+              </button>
+            </div>
 
-  const latestCat = chooseDominantCategory(scoreNightCategories(latest), latest);
-  const previousCat = chooseDominantCategory(scoreNightCategories(previous), previous);
+            {accuracyFeedback === "no" ? (
+              <div className="mt-4">
+                <label className="text-sm font-bold text-gray-700">
+                  What did SleepFix miss?
+                </label>
+                <textarea
+                  value={missingDetail}
+                  onChange={(e) => setMissingDetail(e.target.value)}
+                  placeholder="Example: the bed felt hot, hard mattress, partner heat, noise, cold feet, bathroom wake-up..."
+                  className="mt-2 min-h-[90px] w-full rounded-xl border border-gray-300 p-3 text-base"
+                />
+                <p className="mt-2 text-sm text-gray-600">
+                  For now, this is shown only on this page. Later we can save this to an admin feedback table.
+                </p>
+              </div>
+            ) : null}
+          </section>
 
-  if (latestCat !== previousCat && latestCat !== "none" && previousCat !== "none") {
-    return {
-      suspected: true,
-      reason:
-        "The protocol was followed, but the main sleep factor shifted. This suggests the original protocol may not have been targeting the main remaining cause.",
-    };
-  }
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">Recommended protocol</div>
+            <h2 className="mt-2 text-2xl font-bold text-blue-900">{displayProtocol.title}</h2>
 
-  if (dominant === "environment") {
-    return {
-      suspected: true,
-      reason:
-        "The room/environment protocol was followed but sleep still remained disrupted. Check for a hidden body or timing factor, such as illness, body temperature instability, pain, or irregular schedule pressure.",
-    };
-  }
+            {escalatedProtocol ? (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-bold">Deeper protocol</div>
+                <div className="mt-1">
+                  SleepFix is showing the deeper version because the issue appears to be recurring or unresolved.
+                </div>
+              </div>
+            ) : null}
 
-  if (dominant === "mind_emotional") {
-    return {
-      suspected: true,
-      reason:
-        "The mind/emotional protocol was followed but sleep still remained disrupted. Check whether the issue was actually body activation, room disturbance, caffeine/screen stimulation, or a timing constraint.",
-    };
-  }
+            <p className="mt-2 text-base text-gray-700">{displayProtocol.bestFor}</p>
 
-  if (dominant === "body_physiology") {
-    return {
-      suspected: true,
-      reason:
-        "The body protocol was followed but sleep still remained disrupted. Check for hidden inflammation, illness, room temperature, overtraining, pain position, or schedule strain.",
-    };
-  }
+            <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
+              <div className="font-bold">Why this protocol?</div>
+              <div className="mt-1">{result.protocolReason}</div>
+            </div>
 
-  if (dominant === "sleep_hygiene") {
-    return {
-      suspected: true,
-      reason:
-        "The sleep-hygiene protocol was followed but sleep still remained disrupted. Check whether another factor, such as emotion, pain, room temperature, or circadian timing, was stronger than the habit factor.",
-    };
-  }
+            <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
+              <div className="font-bold text-gray-900">Related RRSM system</div>
+              <div className="mt-1">{displayProtocol.related}</div>
+            </div>
+          </section>
 
-  return {
-    suspected: true,
-    reason:
-      "The protocol was followed but the sleep issue remained. SleepFix suspects another hidden factor may be contributing.",
-  };
-}
+          {accuracyFeedback !== "no" ? (
+            <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="text-xl font-bold text-gray-900">What to do tonight</h3>
+              <p className="mt-2 text-gray-700">{displayProtocol.focus}</p>
 
-function investigationPromptFor(
-  dominant: RRSMContributorCategory,
-  hiddenFactorSuspected: boolean,
-  patternStability: "stable" | "forming" | "unstable",
-): string | null {
-  if (!hiddenFactorSuspected && patternStability !== "unstable") return null;
+              <ol className="mt-4 list-decimal space-y-3 pl-6 text-base text-gray-800">
+                {displayProtocol.steps.map((s, idx) => (
+                  <li key={idx} className="leading-relaxed">{s}</li>
+                ))}
+              </ol>
 
-  switch (dominant) {
-    case "environment":
-      return "Tonight, check one room factor only: temperature, bedding, light, noise, humidity, or airflow. Do not change several things at once.";
-    case "mind_emotional":
-      return "Tonight, note whether the problem is thoughts, emotion, body activation, or outside disturbance. Do not assume they are the same issue.";
-    case "body_physiology":
-      return "Tonight, note the exact body factor: pain area, soreness, inflammation, illness, tension, or restless body. Also check whether room temperature worsened it.";
-    case "sleep_hygiene":
-      return "Tonight, track one habit variable only: caffeine, alcohol, nicotine, late food, screens, supplements, or late exercise.";
-    case "circadian_context":
-      return "Tonight, note whether timing pressure is unavoidable: shift work, irregular hours, travel, pregnancy, chronic illness, or a disrupted routine.";
-    default:
-      return "Tonight, record what changed from the previous night. SleepFix needs a cleaner signal before changing the protocol.";
-  }
-}
+              {displayProtocol.doNot?.length ? (
+                <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+                  <div className="font-bold text-gray-900">Do not</div>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {displayProtocol.doNot.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
-function confidenceForWithStability(
-  nights: NightWithOptionalProtocol[],
-  sleepIssueDetected: boolean,
-  recurring: boolean,
-  patternStability: "stable" | "forming" | "unstable",
-  protocolEvaluation: RRSMProtocolEvaluation,
-): "low" | "moderate" | "high" {
-  if (!sleepIssueDetected) return "low";
-
-  const latest = nights[nights.length - 1];
-  const primaryTrigger = getPrimaryTrigger(latest);
-
-  if (primaryTrigger) {
-  const dominant = chooseDominantCategory(
-    scoreNightCategories(latest)
+              {displayProtocol.diaryPrompt ? (
+                <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                  <div className="font-bold text-gray-900">Diary follow-up</div>
+                  <div className="mt-1">{displayProtocol.diaryPrompt}</div>
+                </div>
+              ) : null}
+            </section>
+          ) : (
+            <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+              <h3 className="text-xl font-bold text-amber-900">Protocol paused</h3>
+              <p className="mt-2 text-amber-900">
+                Because you said the summary is missing something, do not treat this recommendation as final. Record the missing factor in the Diary, then check the next recommendation after another saved night.
+              </p>
+            </section>
+          )}
+        </>
+      ) : null}
+    </main>
   );
-
-  const aligned =
-    (primaryTrigger.includes("emotional") && dominant === "mind_emotional") ||
-    (primaryTrigger.includes("mental") && dominant === "mind_emotional") ||
-    (primaryTrigger.includes("body") && dominant === "body_physiology") ||
-    (primaryTrigger.includes("room") && dominant === "environment") ||
-    (primaryTrigger.includes("environment") && dominant === "environment") ||
-    (primaryTrigger.includes("bed") && dominant === "environment") ||
-    (primaryTrigger.includes("bedding") && dominant === "environment") ||
-    (primaryTrigger.includes("hygiene") && dominant === "sleep_hygiene") ||
-    (primaryTrigger.includes("schedule") && dominant === "circadian_context") ||
-    (primaryTrigger.includes("circadian") && dominant === "circadian_context");
-
-    if (!aligned) return "low";
-  }
-
-  if (patternStability === "unstable") return "low";
-  if (protocolEvaluation === "case_b_hidden_factor") return "low";
-  if (recurring && nights.length >= 5) return "high";
-  if (nights.length >= 3) return "moderate";
-  return "low";
-}
-
-
-function buildUserSummary(
-  latestNight: NightWithOptionalProtocol | undefined,
-  dominant: RRSMContributorCategory,
-  recommendedProtocol: string,
-) {
-  if (!latestNight) return "SleepFix does not have a saved night to summarise yet.";
-
-  const wakeUps = typeof latestNight.wakeUps === "number" ? latestNight.wakeUps : 0;
-  const wakeRecovery = parseWakeRecoveryToMinutes(latestNight);
-  const latency = typeof latestNight.latencyMin === "number" ? latestNight.latencyMin : null;
-  const quality = typeof latestNight.quality === "number" ? latestNight.quality : null;
-  const bedText = joinedBedText(latestNight);
-  const primaryTrigger = getPrimaryTrigger(latestNight);
-
-  if (dominant === "environment" && hasBedThermalSignal(latestNight)) {
-    if (lowerIncludes(bedText, ["hot", "too many blankets", "partner body heat", "too warm", "mattress too hard"])) {
-      return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your bed/bedding signals point to heat build-up or thermal instability. Tonight's match is ${recommendedProtocol}.`;
-    }
-
-    if (lowerIncludes(bedText, ["cold", "too few blankets", "too light", "mattress too soft"])) {
-      return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your bed/bedding signals point to cold exposure or thermal instability. Tonight's match is ${recommendedProtocol}.`;
-    }
-
-    return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and the bed/bedding setup may be part of the disruption. Tonight's match is ${recommendedProtocol}.`;
-  }
-
-  if (dominant === "environment") {
-    return `SleepFix detected an environment-related sleep-maintenance issue: wake-ups and awake time after waking suggest the sleep problem was not just overall sleep quality. Tonight's match is ${recommendedProtocol}.`;
-  }
-
-  if (wakeUps >= 3 || (typeof wakeRecovery === "number" && wakeRecovery >= 30)) {
-    return `SleepFix detected sleep-maintenance instability: your overall sleep quality may be acceptable, but wake-ups and awake time after waking still show a real sleep disruption. Tonight's match is ${recommendedProtocol}.`;
-  }
-
-  if (latency !== null && latency >= 30) {
-    return `SleepFix detected a sleep-onset issue: it took about ${latency} minutes to fall asleep. Tonight's match is ${recommendedProtocol}.`;
-  }
-
-  if (quality !== null && quality <= 6) {
-    return `SleepFix detected reduced sleep quality. Tonight's match is ${recommendedProtocol}.`;
-  }
-
-  if (primaryTrigger) {
-    return `SleepFix did not detect a strong issue from the core metrics, but your main reported disruption was ${primaryTrigger}. Keep logging so SleepFix can check whether it repeats.`;
-  }
-
-  return "SleepFix did not detect a strong sleep issue from the latest record.";
-}
-
-export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtocolResult {
-  const base = runRRSMEngineV2(nights);
-
-  const latestNight = nights[nights.length - 1];
-  const sleepIssueDetected = detectSleepIssue(latestNight);
-  const categoryScores = scoreNightCategories(latestNight);
-  const dominantCategory = sleepIssueDetected ? chooseDominantCategory(categoryScores, latestNight) : "none";
-  const recommendedProtocol = protocolForCategory(dominantCategory, categoryScores, latestNight);
-  const recurring = recurringIssue(nights, dominantCategory);
-  const secondaryFactors = secondaryFactorsFor(categoryScores, dominantCategory);
-  const protocolEvaluation = evaluateProtocol(nights);
-  const patternStability = detectPatternStability(nights, dominantCategory, protocolEvaluation.value);
-  const hiddenFactor = detectHiddenFactor(nights, dominantCategory, protocolEvaluation.value);
-  const hiddenFactorSuspected = hiddenFactor.suspected;
-  const hiddenFactorReason = hiddenFactor.reason;
-  const investigationPrompt = investigationPromptFor(dominantCategory, hiddenFactorSuspected, patternStability);
-  const protocolConfidence = confidenceForWithStability(
-    nights,
-    sleepIssueDetected,
-    recurring,
-    patternStability,
-    protocolEvaluation.value,
-  );
-
-  const protocolReason = detailedReasonForLatestNight(dominantCategory, latestNight);
-  const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
-
-  const why = [
-    ...base.why,
-    sleepIssueDetected
-      ? "Sleep issue detected from the latest sleep record."
-      : "No clear sleep issue detected from the latest sleep record.",
-    recurring
-      ? "This contributor appears to be recurring in recent entries."
-      : "This does not yet look like a recurring pattern.",
-    protocolReason,
-    protocolEvaluation.reason,
-    hiddenFactorReason ? hiddenFactorReason : null,
-    investigationPrompt ? investigationPrompt : null,
-  ].filter(Boolean) as string[];
-
-  const actions = [`Tonight's recommended protocol: ${recommendedProtocol}`, ...base.actions];
-
-  if (secondaryFactors.length > 0) {
-    actions.push(`Secondary factors to watch: ${secondaryFactors.join(", ")}.`);
-  }
-
-  if (hiddenFactorSuspected && investigationPrompt) {
-    actions.push(`Hidden-factor check: ${investigationPrompt}`);
-  }
-
-  return {
-    ...base,
-    sleepIssueDetected,
-    recurringIssue: recurring,
-    dominantCategory,
-    categoryScores,
-    recommendedProtocol,
-    protocolReason,
-    secondaryFactors,
-    protocolConfidence,
-    protocolEvaluation: protocolEvaluation.value,
-    protocolEvaluationLabel: protocolEvaluation.label,
-    protocolEvaluationReason: protocolEvaluation.reason,
-    hiddenFactorSuspected,
-    hiddenFactorReason,
-    patternStability,
-    investigationPrompt,
-    userSummary,
-    why,
-    actions,
-  };
 }
