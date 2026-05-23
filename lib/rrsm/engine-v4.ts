@@ -35,6 +35,17 @@ export type RRSMSleepDimensionScores = {
   environmentStress: number;
 };
 
+export type RRSMTimeInterpretation = {
+  timeInBedMin: number | null;
+  sleepLatencyMin: number | null;
+  awakeAfterWakeMin: number | null;
+  estimatedAwakeMin: number | null;
+  estimatedSleepMin: number | null;
+  sleepEfficiencyPct: number | null;
+  fragmentationBurden: "low" | "moderate" | "high" | "unknown";
+  summary: string;
+};
+
 export type RRSMWakeCause =
   | "thermal_bed"
   | "room_environment"
@@ -91,6 +102,7 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   thermalSystemSummary: string;
   adaptationState: RRSMAdaptationState;
   adaptationSummary: string;
+  timeInterpretation: RRSMTimeInterpretation;
 };
 
 type ProtocolFollowedValue =
@@ -108,6 +120,10 @@ type NightWithOptionalProtocol = RRSMMetricsNight & {
   workContext?: string[] | null;
   sleep_context?: string[] | null;
   work_context?: string[] | null;
+  durationMin?: number | null;
+  duration_min?: number | null;
+  timeInBedMin?: number | null;
+  time_in_bed_min?: number | null;
   wakeRecoveryMin?: number | null;
   wake_recovery_choice?: string | null;
   wakeRecoveryChoice?: string | null;
@@ -242,6 +258,10 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
+  const timeInterpretation = buildTimeInterpretation(night);
+  const poorSleepEfficiency =
+    typeof timeInterpretation.sleepEfficiencyPct === "number" &&
+    timeInterpretation.sleepEfficiencyPct < 85;
 
 return Boolean(
   majorLatencyIssue ||
@@ -249,6 +269,7 @@ return Boolean(
     maintenanceIssue ||
     prolongedWakeRecovery ||
     majorWakeRecovery ||
+    poorSleepEfficiency ||
     bedThermalSignal ||
     thermalSystemSignal ||
     majorQualityIssue ||
@@ -274,6 +295,10 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
+  const timeInterpretation = buildTimeInterpretation(night);
+  const poorSleepEfficiency =
+    typeof timeInterpretation.sleepEfficiencyPct === "number" &&
+    timeInterpretation.sleepEfficiencyPct < 85;
   const primaryTrigger = getPrimaryTrigger(night);
 
   // C1 — Mind / emotional activation: RB2/RB3
@@ -945,6 +970,81 @@ function confidenceForWithStability(
 
 
 
+
+function getTimeInBedMinutes(night: NightWithOptionalProtocol | undefined): number | null {
+  if (!night) return null;
+
+  const raw =
+    night.timeInBedMin ??
+    night.time_in_bed_min ??
+    night.durationMin ??
+    night.duration_min ??
+    null;
+
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return raw;
+  return null;
+}
+
+function buildTimeInterpretation(night: NightWithOptionalProtocol | undefined): RRSMTimeInterpretation {
+  if (!night) {
+    return {
+      timeInBedMin: null,
+      sleepLatencyMin: null,
+      awakeAfterWakeMin: null,
+      estimatedAwakeMin: null,
+      estimatedSleepMin: null,
+      sleepEfficiencyPct: null,
+      fragmentationBurden: "unknown",
+      summary: "SleepFix does not have enough timing data yet.",
+    };
+  }
+
+  const timeInBedMin = getTimeInBedMinutes(night);
+  const sleepLatencyMin = typeof night.latencyMin === "number" ? night.latencyMin : null;
+  const awakeAfterWakeMin = parseWakeRecoveryToMinutes(night);
+
+  const estimatedAwakeMin =
+    (sleepLatencyMin ?? 0) + (awakeAfterWakeMin ?? 0);
+
+  const estimatedSleepMin =
+    typeof timeInBedMin === "number"
+      ? Math.max(0, timeInBedMin - estimatedAwakeMin)
+      : null;
+
+  const sleepEfficiencyPct =
+    typeof timeInBedMin === "number" && timeInBedMin > 0 && typeof estimatedSleepMin === "number"
+      ? Math.round((estimatedSleepMin / timeInBedMin) * 100)
+      : null;
+
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+
+  const fragmentationBurden =
+    wakeUps >= 5 || estimatedAwakeMin >= 120
+      ? "high"
+      : wakeUps >= 3 || estimatedAwakeMin >= 60
+      ? "moderate"
+      : wakeUps >= 1 || estimatedAwakeMin >= 30
+      ? "low"
+      : "low";
+
+  const summary =
+    timeInBedMin === null
+      ? "SleepFix can estimate latency and wake recovery, but time-in-bed was not available for this record."
+      : `Time interpretation: you were in bed for about ${Math.round(timeInBedMin / 60 * 10) / 10} hours. Estimated awake time was ${estimatedAwakeMin} minutes, leaving about ${Math.round((estimatedSleepMin ?? 0) / 60 * 10) / 10} hours of estimated sleep. Sleep efficiency was ${sleepEfficiencyPct}%.`;
+
+  return {
+    timeInBedMin,
+    sleepLatencyMin,
+    awakeAfterWakeMin,
+    estimatedAwakeMin,
+    estimatedSleepMin,
+    sleepEfficiencyPct,
+    fragmentationBurden,
+    summary,
+  };
+}
+
+
 function classifyAdaptationAndCompensation(night: NightWithOptionalProtocol | undefined): {
   state: RRSMAdaptationState;
   summary: string;
@@ -1364,6 +1464,7 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
   const latency = typeof night.latencyMin === "number" ? night.latencyMin : null;
   const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
   const wakeRecovery = parseWakeRecoveryToMinutes(night);
+  const timeInterpretation = buildTimeInterpretation(night);
   const bedText = joinedBedText(night);
   const nightText = joinedNightText(night);
   const combinedText = `${nightText} ${bedText}`;
@@ -1406,7 +1507,8 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
     100 -
       (latency !== null && latency >= 30 ? 18 : 0) -
       wakePenalty -
-      recoveryPenalty
+      recoveryPenalty -
+      (timeInterpretation.sleepEfficiencyPct !== null && timeInterpretation.sleepEfficiencyPct < 85 ? 15 : 0)
   );
 
   const thermalSystem = classifyThermalSystem(night);
@@ -1488,6 +1590,17 @@ function buildUserSummary(
 
   const thermalSystem = classifyThermalSystem(latestNight);
   const adaptation = classifyAdaptationAndCompensation(latestNight);
+  const timeInterpretation = buildTimeInterpretation(latestNight);
+
+  if (
+    timeInterpretation.timeInBedMin !== null &&
+    timeInterpretation.estimatedAwakeMin !== null &&
+    timeInterpretation.estimatedAwakeMin >= 60 &&
+    typeof wakeUps === "number" &&
+    wakeUps >= 3
+  ) {
+    return `SleepFix detected a time-in-bed mismatch: you had enough opportunity for sleep, but the night was fragmented. ${timeInterpretation.summary} Tonight's match is ${recommendedProtocol}.`;
+  }
 
   if (adaptation.state === "active_self_correction") {
     return `SleepFix detected an unstable night that was actively managed: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, but your record suggests you adjusted the bed, pillow, covers, or sleep setup and partially corrected the issue. Tonight's match is ${recommendedProtocol}.`;
@@ -1570,6 +1683,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const wakeCauseResult = classifyWakeCause(latestNight);
   const thermalSystem = classifyThermalSystem(latestNight);
   const adaptation = classifyAdaptationAndCompensation(latestNight);
+  const timeInterpretation = buildTimeInterpretation(latestNight);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
   const why = [
@@ -1623,6 +1737,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     thermalSystemSummary: thermalSystem.summary,
     adaptationState: adaptation.state,
     adaptationSummary: adaptation.summary,
+    timeInterpretation,
     why,
     actions,
   };
