@@ -375,7 +375,7 @@ export default function ProtocolsPage() {
                 Because you said the summary is missing something, do not treat this recommendation as final. Record the missing factor in the Diary, then check the next recommendation after another saved night.
               </p>
             </section>
-          ) : null}
+          )}
         </>
       ) : null}
     </main>
