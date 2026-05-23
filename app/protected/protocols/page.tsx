@@ -149,6 +149,22 @@ function prettyThermalSystem(state: string) {
   }
 }
 
+
+function prettyAdaptationState(state: string) {
+  switch (state) {
+    case "new_setup_adaptation":
+      return "New setup adaptation";
+    case "active_self_correction":
+      return "Active self-correction";
+    case "overcorrection":
+      return "Possible overcorrection";
+    case "unresolved_instability":
+      return "Unresolved instability";
+    default:
+      return "No clear adaptation signal";
+  }
+}
+
 function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
   switch (value) {
     case "case_a_working":
@@ -411,6 +427,22 @@ export default function ProtocolsPage() {
 
                 <div className="mt-2 text-sm text-orange-950">
                   {result.thermalSystemSummary}
+                </div>
+              </div>
+            ) : null}
+
+            {result.adaptationSummary ? (
+              <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+                  Active management
+                </div>
+
+                <div className="mt-2 text-lg font-extrabold text-emerald-950">
+                  {prettyAdaptationState(result.adaptationState)}
+                </div>
+
+                <div className="mt-2 text-sm text-emerald-950">
+                  {result.adaptationSummary}
                 </div>
               </div>
             ) : null}
