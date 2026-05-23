@@ -90,11 +90,28 @@ const MENTAL_TAGS = [
 ] as const;
 
 const ENV_TAGS = ["Hot", "cold", "noisy", "Quiet", "Bright", "Dark", "Humid", "Dry"] as const;
+
+const BED_TAGS = [
+  "No bed / bedding issue",
+  "Mattress too hard",
+  "Mattress too soft",
+  "Bed felt hot",
+  "Bed felt cold",
+  "Too many blankets",
+  "Too few blankets",
+  "Partner body heat",
+  "Sleepwear too warm",
+  "Sleepwear too light",
+  "Pillow / position issue",
+  "Other bed factor",
+] as const;
+
 const PRIMARY_TRIGGER_OPTIONS = [
   "Emotional state",
   "Mental activation",
   "Body discomfort / pain",
   "Room environment",
+  "Bed / bedding temperature",
   "Sleep hygiene / habits",
   "Circadian / schedule issue",
   "Not sure",
@@ -217,6 +234,7 @@ export default function SleepPage() {
   const [emotionalTags, setEmotionalTags] = useState<string[]>([]);
   const [mentalTags, setMentalTags] = useState<string[]>([]);
   const [environmentTags, setEnvironmentTags] = useState<string[]>([]);
+  const [bedTags, setBedTags] = useState<string[]>(["No bed / bedding issue"]);
   const [bodyTags, setBodyTags] = useState<string[]>([]);
   const [primaryTrigger, setPrimaryTrigger] = useState<string>("");
   const [protocolUsedName, setProtocolUsedName] = useState<string>("");
@@ -241,6 +259,7 @@ export default function SleepPage() {
     setEmotionalTags([]);
     setMentalTags([]);
     setEnvironmentTags([]);
+    setBedTags(["No bed / bedding issue"]);
     setBodyTags([]);
     setPrimaryTrigger("");
     setProtocolUsedName("");
@@ -284,6 +303,7 @@ export default function SleepPage() {
     setEmotionalTags([]);
     setMentalTags([]);
     setEnvironmentTags([]);
+    setBedTags(["No bed / bedding issue"]);
     setBodyTags([]);
     setProtocolUsedName("");
     setProtocolFollowed("");
@@ -408,6 +428,7 @@ export default function SleepPage() {
         wake_recovery_choice: wakeRecoveryChoice,
         mind_tags: [...emotionalTags, ...mentalTags],
         environment_tags: environmentTags,
+        bed_tags: bedTags,
         body_tags: bodyTags,
         primary_trigger: primaryTrigger,
         primary_driver: primaryDriver,
@@ -454,6 +475,7 @@ if (!wakeRecoveryChoice) missingRequired.push("Total awake time after wake-ups")
 if (!emotionalTags || emotionalTags.length === 0) missingRequired.push("Emotional state");
 if (!mentalTags || mentalTags.length === 0) missingRequired.push("Mental state");
 if (!environmentTags || environmentTags.length === 0) missingRequired.push("Room environment");
+if (!bedTags || bedTags.length === 0) missingRequired.push("Bed / bedding factor");
 if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body state");
 if (!primaryTrigger) missingRequired.push("Main sleep disruption");
 const canSaveNight = missingRequired.length === 0;
@@ -678,6 +700,15 @@ const canSaveNight = missingRequired.length === 0;
             onChange={setEnvironmentTags}
             required
             help="Choose what affected the room while you slept."
+          />
+
+          <MultiCheckGroup
+            title="Bed / bedding factor"
+            options={[...BED_TAGS]}
+            value={bedTags}
+            onChange={setBedTags}
+            required
+            help="Choose what affected the bed, bedding, sleepwear, or sleeping setup."
           />
 
           <MultiCheckGroup
