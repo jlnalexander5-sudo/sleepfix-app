@@ -433,6 +433,7 @@ export default function SleepPage() {
         sleep_end: endAt.toISOString(),
         // Use the wake date as the night's local_date so dashboard dates match what users expect.
         local_date: toIsoLocalDate(endAt),
+        duration_min: durationMinutes,
         sleep_quality: Number(sleepQuality),
         sleep_latency_choice: sleepLatencyChoice,
         wake_ups_choice: wakeUpsChoice,
