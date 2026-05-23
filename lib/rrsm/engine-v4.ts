@@ -7,7 +7,7 @@
 // 4) Choose the best protocol using RRSM priority order.
 // 5) Evaluate whether the previous recommended protocol appears to be working.
 //
-// This file is intentionally deterministic and explainable.
+// This file is intentionally deterministic, explainable, and wake-cause aware.
 
 import type { RRSMMetricsNight, RRSMV2Insight } from "./engine-v2";
 import { runRRSMEngineV2 } from "./engine-v2";
