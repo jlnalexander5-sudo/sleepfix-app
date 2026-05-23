@@ -111,6 +111,28 @@ function prettyCategory(category: string) {
   }
 }
 
+
+function prettyWakeCause(cause: string) {
+  switch (cause) {
+    case "thermal_bed":
+      return "Bed / bedding thermal disruption";
+    case "room_environment":
+      return "Room environment";
+    case "body_discomfort":
+      return "Body discomfort / physiology";
+    case "mental_reactivation":
+      return "Mental reactivation";
+    case "emotional_activation":
+      return "Emotional activation";
+    case "sleep_hygiene":
+      return "Sleep hygiene / habits";
+    case "circadian_timing":
+      return "Timing / life-context";
+    default:
+      return "Unknown / still learning";
+  }
+}
+
 function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
   switch (value) {
     case "case_a_working":
@@ -304,6 +326,30 @@ export default function ProtocolsPage() {
                     score={result.sleepDimensions.environmentStress}
                     status={statusFor(100 - result.sleepDimensions.environmentStress, "Low", "Moderate", "High")}
                   />
+                </div>
+              </div>
+            ) : null}
+
+            {result.wakeCauseSummary ? (
+              <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+                <div className="text-sm font-bold uppercase tracking-wide text-indigo-700">
+                  Likely wake-up cause
+                </div>
+
+                <div className="mt-2 text-lg font-extrabold text-indigo-950">
+                  {prettyWakeCause(result.wakeCause)}
+                </div>
+
+                <div className="mt-2 text-sm text-indigo-950">
+                  {result.wakeCauseSummary}
+                </div>
+
+                <div className="mt-3 text-sm font-semibold text-indigo-900">
+                  Confidence: {result.wakeCauseConfidence === "high"
+                    ? "High"
+                    : result.wakeCauseConfidence === "moderate"
+                    ? "Moderate"
+                    : "Low"}
                 </div>
               </div>
             ) : null}
