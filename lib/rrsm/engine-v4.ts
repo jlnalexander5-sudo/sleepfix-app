@@ -26,6 +26,15 @@ export type RRSMProtocolEvaluation =
   | "case_b_hidden_factor"
   | "case_c_not_followed";
 
+export type RRSMSleepDimensionScores = {
+  sleepRecovery: number;
+  sleepStability: number;
+  thermalStability: number;
+  wakeMaintenance: number;
+  sleepOnset: number;
+  environmentStress: number;
+};
+
 export type RRSMProtocolResult = RRSMV2Insight & {
   sleepIssueDetected: boolean;
   recurringIssue: boolean;
@@ -49,6 +58,8 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   patternStability: "stable" | "forming" | "unstable";
   investigationPrompt: string | null;
   userSummary: string;
+  sleepDimensions: RRSMSleepDimensionScores;
+  sleepDimensionSummary: string;
 };
 
 type ProtocolFollowedValue =
@@ -135,6 +146,8 @@ function hasBedThermalSignal(night: NightWithOptionalProtocol | undefined) {
     "partner body heat",
     "sleepwear too warm",
     "sleepwear too light",
+    "pillow / position issue",
+    "pillow",
     "bedding",
     "bed factor",
   ]);
@@ -299,6 +312,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
       "bed felt",
       "partner body heat",
       "sleepwear",
+      "pillow",
     ])
   ) {
     scores.environment += 4;
@@ -384,11 +398,11 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 3;
   }
 
-  if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm"])) {
+  if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow"])) {
     scores.environment += 2;
   }
 
-  if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light"])) {
+  if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light", "pillow / position"])) {
     scores.environment += 2;
   }
 
@@ -558,11 +572,11 @@ function detailedReasonForLatestNight(category: RRSMContributorCategory, latestN
   const bedText = joinedBedText(latestNight);
 
   if (category === "environment" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
-    if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm"])) {
+    if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow"])) {
       return "SleepFix detected bed/bedding heat-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stabilising bed temperature without overcooling or overcorrecting.";
     }
 
-    if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light"])) {
+    if (lowerIncludes(bedText, ["mattress too soft", "bed felt cold", "too few blankets", "sleepwear too light", "pillow / position"])) {
       return "SleepFix detected bed/bedding cold-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is stable warmth across the whole night without needing mid-night corrections.";
     }
 
@@ -857,6 +871,131 @@ function confidenceForWithStability(
 }
 
 
+
+function clamp100(n: number) {
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined): RRSMSleepDimensionScores {
+  if (!night) {
+    return {
+      sleepRecovery: 0,
+      sleepStability: 0,
+      thermalStability: 0,
+      wakeMaintenance: 0,
+      sleepOnset: 0,
+      environmentStress: 0,
+    };
+  }
+
+  const quality = typeof night.quality === "number" ? night.quality : null;
+  const latency = typeof night.latencyMin === "number" ? night.latencyMin : null;
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+  const wakeRecovery = parseWakeRecoveryToMinutes(night);
+  const bedText = joinedBedText(night);
+  const nightText = joinedNightText(night);
+  const combinedText = `${nightText} ${bedText}`;
+
+  const sleepRecovery = clamp100(quality === null ? 50 : quality * 10);
+
+  const sleepOnset = clamp100(
+    latency === null
+      ? 50
+      : latency <= 10
+      ? 95
+      : latency <= 20
+      ? 85
+      : latency <= 30
+      ? 70
+      : latency <= 45
+      ? 50
+      : latency <= 60
+      ? 35
+      : 20
+  );
+
+  const wakePenalty = wakeUps * 12;
+  const recoveryPenalty =
+    wakeRecovery === null
+      ? 0
+      : wakeRecovery >= 60
+      ? 45
+      : wakeRecovery >= 30
+      ? 32
+      : wakeRecovery >= 15
+      ? 20
+      : wakeRecovery >= 5
+      ? 8
+      : 0;
+
+  const wakeMaintenance = clamp100(100 - wakePenalty - recoveryPenalty);
+
+  const sleepStability = clamp100(
+    100 -
+      (latency !== null && latency >= 30 ? 18 : 0) -
+      wakePenalty -
+      recoveryPenalty
+  );
+
+  const thermalSignal = lowerIncludes(combinedText, [
+    "hot",
+    "cold",
+    "humid",
+    "dry",
+    "temperature",
+    "mattress",
+    "blanket",
+    "blankets",
+    "bedding",
+    "bed felt",
+    "partner body heat",
+    "sleepwear",
+    "pillow",
+  ]);
+
+  const thermalStability = clamp100(
+    100 -
+      (thermalSignal ? 35 : 0) -
+      (hasBedThermalSignal(night) ? 25 : 0) -
+      (wakeUps >= 3 ? 12 : 0) -
+      (wakeRecovery !== null && wakeRecovery >= 30 ? 18 : 0)
+  );
+
+  const environmentStress = clamp100(
+    (thermalSignal ? 40 : 0) +
+      (hasBedThermalSignal(night) ? 30 : 0) +
+      (lowerIncludes(combinedText, ["noise", "noisy", "bright", "light", "room"]) ? 20 : 0) +
+      (wakeUps >= 3 ? 10 : 0) +
+      (wakeRecovery !== null && wakeRecovery >= 30 ? 10 : 0)
+  );
+
+  return {
+    sleepRecovery,
+    sleepStability,
+    thermalStability,
+    wakeMaintenance,
+    sleepOnset,
+    environmentStress,
+  };
+}
+
+function dimensionLabel(score: number, goodLabel: string, mediumLabel: string, lowLabel: string) {
+  if (score >= 75) return goodLabel;
+  if (score >= 50) return mediumLabel;
+  return lowLabel;
+}
+
+function buildSleepDimensionSummary(dimensions: RRSMSleepDimensionScores) {
+  return [
+    `Recovery: ${dimensionLabel(dimensions.sleepRecovery, "good", "mixed", "low")}`,
+    `Night stability: ${dimensionLabel(dimensions.sleepStability, "stable", "mixed", "unstable")}`,
+    `Wake maintenance: ${dimensionLabel(dimensions.wakeMaintenance, "stable", "disrupted", "strongly disrupted")}`,
+    `Thermal stability: ${dimensionLabel(dimensions.thermalStability, "stable", "mixed", "unstable")}`,
+    `Sleep onset: ${dimensionLabel(dimensions.sleepOnset, "settled", "delayed", "strongly delayed")}`,
+  ].join(" • ");
+}
+
+
 function buildUserSummary(
   latestNight: NightWithOptionalProtocol | undefined,
   dominant: RRSMContributorCategory,
@@ -872,7 +1011,7 @@ function buildUserSummary(
   const primaryTrigger = getPrimaryTrigger(latestNight);
 
   if (dominant === "environment" && hasBedThermalSignal(latestNight)) {
-    if (lowerIncludes(bedText, ["hot", "too many blankets", "partner body heat", "too warm", "mattress too hard"])) {
+    if (lowerIncludes(bedText, ["hot", "too many blankets", "partner body heat", "too warm", "mattress too hard", "pillow"])) {
       return `SleepFix detected a sleep-maintenance issue: you woke ${wakeUps} time${wakeUps === 1 ? "" : "s"}, had ${wakeRecovery ?? "some"} minutes of awake time after waking, and your bed/bedding signals point to heat build-up or thermal instability. Tonight's match is ${recommendedProtocol}.`;
     }
 
@@ -931,6 +1070,8 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   );
 
   const protocolReason = detailedReasonForLatestNight(dominantCategory, latestNight);
+  const sleepDimensions = calculateSleepDimensions(latestNight);
+  const sleepDimensionSummary = buildSleepDimensionSummary(sleepDimensions);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
   const why = [
@@ -975,6 +1116,8 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     patternStability,
     investigationPrompt,
     userSummary,
+    sleepDimensions,
+    sleepDimensionSummary,
     why,
     actions,
   };
