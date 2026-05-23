@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -38,7 +36,7 @@ function addDaysYMD(ymd: string, days: number) {
 }
 
 function monthStartYMD() {
-  const d = new Date();
+  const d = new Date(Date.now());
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
