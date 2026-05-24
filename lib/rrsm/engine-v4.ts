@@ -1989,6 +1989,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const thermalSource = classifyThermalSource(latestNight);
   const adaptation = classifyAdaptationAndCompensation(latestNight);
   const timeInterpretation = buildTimeInterpretation(latestNight);
+  const wakeDamageProfile = classifyWakeDamage(latestNight);
   const wakeDamage = classifyWakeDamage(latestNight);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
