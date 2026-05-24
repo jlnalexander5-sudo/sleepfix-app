@@ -1746,6 +1746,7 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
   const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
   const wakeRecovery = parseWakeRecoveryToMinutes(night);
   const timeInterpretation = buildTimeInterpretation(night);
+  const wakeDamage = classifyWakeDamage(night);
   const bedText = joinedBedText(night);
   const nightText = joinedNightText(night);
   const combinedText = `${nightText} ${bedText}`;
