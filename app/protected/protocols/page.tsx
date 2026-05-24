@@ -282,8 +282,12 @@ export default function ProtocolsPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RRSMProtocolResult | null>(null);
   const [nightCount, setNightCount] = useState(0);
+  const [latestNightRow, setLatestNightRow] = useState<SleepNightRow | null>(null);
   const [accuracyFeedback, setAccuracyFeedback] = useState<"yes" | "no" | null>(null);
   const [missingDetail, setMissingDetail] = useState("");
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -317,7 +321,10 @@ export default function ProtocolsPage() {
         return;
       }
 
-      const mapped = [...(data ?? [])]
+      const rows = (data ?? []) as SleepNightRow[];
+      const latestRow = rows[0] ?? null;
+
+      const mapped = [...rows]
         .reverse()
         .map((row) => mapNight(row as SleepNightRow));
       const protocolResult = runRRSMEngineV4(mapped);
@@ -325,8 +332,11 @@ export default function ProtocolsPage() {
       if (!cancelled) {
         setNightCount(mapped.length);
         setResult(protocolResult);
+        setLatestNightRow(latestRow);
         setAccuracyFeedback(null);
         setMissingDetail("");
+        setFeedbackMessage(null);
+        setFeedbackError(null);
         setLoading(false);
       }
     }
@@ -336,6 +346,48 @@ export default function ProtocolsPage() {
       cancelled = true;
     };
   }, [supabase]);
+
+
+  async function saveEngineFeedback(userAgreed: boolean, missingReasonOverride?: string) {
+    if (!result) return;
+
+    setFeedbackSaving(true);
+    setFeedbackError(null);
+    setFeedbackMessage(null);
+
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+
+    if (authErr || !authData?.user) {
+      setFeedbackError(authErr?.message ?? "Not signed in.");
+      setFeedbackSaving(false);
+      return;
+    }
+
+    const missingReason =
+      typeof missingReasonOverride === "string"
+        ? missingReasonOverride.trim()
+        : missingDetail.trim();
+
+    const { error: insertErr } = await supabase
+      .from("sleep_engine_feedback")
+      .insert({
+        user_id: authData.user.id,
+        sleep_night_id: latestNightRow?.id ?? null,
+        local_date: latestNightRow?.local_date ?? null,
+        engine_category: result.dominantCategory,
+        engine_protocol: result.recommendedProtocol,
+        user_agreed: userAgreed,
+        missing_reason: userAgreed ? null : missingReason || null,
+      });
+
+    if (insertErr) {
+      setFeedbackError(insertErr.message);
+    } else {
+      setFeedbackMessage(userAgreed ? "Feedback saved: this matched." : "Feedback saved: missing factor recorded.");
+    }
+
+    setFeedbackSaving(false);
+  }
 
   const protocol: SleepFixProtocol | null = useMemo(() => {
     if (!result) return null;
@@ -583,7 +635,11 @@ export default function ProtocolsPage() {
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => setAccuracyFeedback("yes")}
+                onClick={() => {
+                  setAccuracyFeedback("yes");
+                  setMissingDetail("");
+                  saveEngineFeedback(true, "");
+                }}
                 className={`rounded-xl border px-4 py-3 font-bold ${
                   accuracyFeedback === "yes"
                     ? "border-blue-700 bg-blue-50 text-blue-900"
@@ -595,7 +651,11 @@ export default function ProtocolsPage() {
 
               <button
                 type="button"
-                onClick={() => setAccuracyFeedback("no")}
+                onClick={() => {
+                  setAccuracyFeedback("no");
+                  setFeedbackMessage(null);
+                  setFeedbackError(null);
+                }}
                 className={`rounded-xl border px-4 py-3 font-bold ${
                   accuracyFeedback === "no"
                     ? "border-amber-700 bg-amber-50 text-amber-900"
@@ -605,6 +665,18 @@ export default function ProtocolsPage() {
                 No, something is missing
               </button>
             </div>
+
+            {accuracyFeedback === "yes" && feedbackMessage ? (
+              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4 font-bold text-green-700">
+                {feedbackMessage}
+              </div>
+            ) : null}
+
+            {feedbackError && accuracyFeedback === "yes" ? (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 font-bold text-red-700">
+                {feedbackError}
+              </div>
+            ) : null}
 
             {accuracyFeedback === "no" ? (
               <div className="mt-4">
@@ -617,9 +689,28 @@ export default function ProtocolsPage() {
                   placeholder="Example: the bed felt hot, hard mattress, partner heat, noise, cold feet, bathroom wake-up..."
                   className="mt-2 min-h-[90px] w-full rounded-xl border border-gray-300 p-3 text-base"
                 />
-                <p className="mt-2 text-sm text-gray-600">
-                  For now, this is shown only on this page. Later we can save this to an admin feedback table.
-                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => saveEngineFeedback(false)}
+                    disabled={feedbackSaving || missingDetail.trim().length < 3}
+                    className="rounded-xl bg-amber-700 px-4 py-3 font-bold text-white disabled:opacity-50"
+                  >
+                    {feedbackSaving ? "Saving feedback..." : "Save missing factor"}
+                  </button>
+
+                  {feedbackMessage ? (
+                    <span className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-700">
+                      {feedbackMessage}
+                    </span>
+                  ) : null}
+
+                  {feedbackError ? (
+                    <span className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                      {feedbackError}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </section>
