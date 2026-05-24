@@ -23,6 +23,18 @@ type SleepNightAdminRow = {
   protocol_followed: string | null;
 };
 
+type EngineFeedbackRow = {
+  id: string;
+  user_id: string;
+  sleep_night_id: string | null;
+  local_date: string | null;
+  engine_category: string | null;
+  engine_protocol: string | null;
+  user_agreed: boolean | null;
+  missing_reason: string | null;
+  created_at: string;
+};
+
 type DateWindow = {
   today: string;
   weekStart: string;
@@ -147,6 +159,7 @@ export default function AdminPage() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<SleepNightAdminRow[]>([]);
+  const [feedbackRows, setFeedbackRows] = useState<EngineFeedbackRow[]>([]);
   const [dateWindow, setDateWindow] = useState<DateWindow | null>(null);
 
   useEffect(() => {
@@ -195,12 +208,33 @@ export default function AdminPage() {
         .order("created_at", { ascending: false })
         .limit(5000);
 
+      const { data: feedbackData, error: feedbackErr } = await supabase
+        .from("sleep_engine_feedback")
+        .select([
+          "id",
+          "user_id",
+          "sleep_night_id",
+          "local_date",
+          "engine_category",
+          "engine_protocol",
+          "user_agreed",
+          "missing_reason",
+          "created_at",
+        ].join(","))
+        .order("created_at", { ascending: false })
+        .limit(5000);
+
       if (!cancelled) {
         if (rowsErr) {
           setError(rowsErr.message);
           setRows([]);
+        } else if (feedbackErr) {
+          setError(feedbackErr.message);
+          setRows((data ?? []) as unknown as SleepNightAdminRow[]);
+          setFeedbackRows([]);
         } else {
           setRows((data ?? []) as unknown as SleepNightAdminRow[]);
+          setFeedbackRows((feedbackData ?? []) as unknown as EngineFeedbackRow[]);
         }
         setLoading(false);
       }
@@ -230,6 +264,28 @@ export default function AdminPage() {
     const protocolAnswered = rows.filter((r) => r.protocol_followed);
     const protocolUsed = rows.filter((r) => r.protocol_followed === "yes" || r.protocol_followed === "partial");
 
+    const totalFeedback = feedbackRows.length;
+    const agreedFeedback = feedbackRows.filter((f) => f.user_agreed === true).length;
+    const missingFeedback = feedbackRows.filter((f) => f.user_agreed === false).length;
+    const feedbackAgreementPct = pct(agreedFeedback, totalFeedback);
+    const feedbackMissingPct = pct(missingFeedback, totalFeedback);
+
+    const missedCategoryCounts = countBy(
+      feedbackRows
+        .filter((f) => f.user_agreed === false)
+        .map((f) => f.engine_category || "Unknown")
+    );
+
+    const missedProtocolCounts = countBy(
+      feedbackRows
+        .filter((f) => f.user_agreed === false)
+        .map((f) => f.engine_protocol || "Unknown")
+    );
+
+    const latestMissingReasons = feedbackRows
+      .filter((f) => f.user_agreed === false && f.missing_reason && f.missing_reason.trim())
+      .slice(0, 8);
+
     return {
       today,
       weekStart,
@@ -251,8 +307,16 @@ export default function AdminPage() {
       adaptationCounts: countBy(rows.map(classifyAdaptation)),
       protocolCounts: countBy(rows.map((r) => r.protocol_used_name || "No protocol logged")),
       protocolFollowedCounts: countBy(rows.map((r) => r.protocol_followed || "No response")),
+      totalFeedback,
+      agreedFeedback,
+      missingFeedback,
+      feedbackAgreementPct,
+      feedbackMissingPct,
+      missedCategoryCounts,
+      missedProtocolCounts,
+      latestMissingReasons,
     };
-  }, [rows, dateWindow]);
+  }, [rows, feedbackRows, dateWindow]);
 
   if (loading || !dateWindow) return <div style={{ padding: 28 }}>Loading admin stats...</div>;
 
@@ -346,12 +410,35 @@ export default function AdminPage() {
 
       <section style={{ marginTop: 22 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900 }}>Accuracy feedback</h2>
+
+        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+          <StatCard label="Total feedback" value={stats.totalFeedback} note="All saved engine confirmations/corrections" />
+          <StatCard label="Agreed" value={stats.agreedFeedback} note={`${stats.feedbackAgreementPct} of feedback`} />
+          <StatCard label="Missing / wrong" value={stats.missingFeedback} note={`${stats.feedbackMissingPct} of feedback`} />
+        </div>
+
+        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+          <TopList title="Missed categories" rows={stats.missedCategoryCounts} />
+          <TopList title="Missed protocols" rows={stats.missedProtocolCounts} />
+        </div>
+
         <div className="sf-card" style={{ marginTop: 12, padding: 16 }}>
-          <strong>Not connected yet.</strong>
-          <div style={{ marginTop: 6, color: "#555" }}>
-            The Protocols page asks whether the summary is accurate, but it does not save the answer yet.
-            Next admin patch should create a feedback table and persist yes/no/missing details.
-          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>Latest missing-factor notes</div>
+
+          {stats.latestMissingReasons.length ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              {stats.latestMissingReasons.map((item) => (
+                <div key={item.id} style={{ borderTop: "1px solid #eee", paddingTop: 10 }}>
+                  <div style={{ fontSize: 13, color: "#666", fontWeight: 800 }}>
+                    {item.local_date ?? String(item.created_at).slice(0, 10)} · {item.engine_category ?? "Unknown"} · {item.engine_protocol ?? "No protocol"}
+                  </div>
+                  <div style={{ marginTop: 4, color: "#111" }}>{item.missing_reason}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: "#666" }}>No missing-factor notes yet.</div>
+          )}
         </div>
       </section>
     </div>
