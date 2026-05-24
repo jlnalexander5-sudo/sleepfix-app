@@ -13,6 +13,80 @@ export type RRSMProtocol = {
 };
 
 const PROTOCOLS: RRSMProtocol[] = [
+
+  {
+    id: "bed-heat-reduction",
+    name: "Bed Heat Reduction Protocol",
+    family: "Stabilization",
+    oneLine: "Reduce heat trapped in bedding without cooling the whole body or room.",
+    steps: [
+      "Keep the room stable. Do not use cold-water cooling if the room itself is cold.",
+      "Remove or thin only one bedding layer tonight.",
+      "Check pillow heat: use a cooler pillowcase/material or swap pillow if it retains heat.",
+      "Avoid wrapping the feet/body too tightly if heat builds during the night.",
+      "If you wake hot: remove one cover layer, reset the bedding, then return to bed."
+    ],
+    avoid: [
+      "Do not cool the whole body if the room is cold.",
+      "Do not change room temperature, pillow, covers, and sleepwear all at once.",
+      "Do not add heavy blankets just because the room feels cold if the bed itself overheats."
+    ],
+  },
+  {
+    id: "bed-thermal-retention",
+    name: "Bed Thermal Retention Protocol",
+    family: "Stabilization",
+    oneLine: "Hold stable warmth in the bed without overheating later.",
+    steps: [
+      "Add warmth through one stable layer, not several random layers.",
+      "Warm feet gently before bed if they are cold.",
+      "Use breathable bedding that holds warmth without trapping excessive heat.",
+      "Check whether the mattress or pillow feels cold and adjust only that part if needed.",
+      "If you wake cold: add one targeted layer and keep the rest of the setup unchanged."
+    ],
+    avoid: [
+      "Do not overcorrect with too many blankets.",
+      "Do not use high electric-blanket heat as the main solution.",
+      "Do not change several thermal variables at once."
+    ],
+  },
+  {
+    id: "room-cooling",
+    name: "Room Cooling Protocol",
+    family: "Stabilization",
+    oneLine: "Reduce hot-room or humid-room disruption without overcooling the body.",
+    steps: [
+      "Improve airflow before bed if the room is hot or stuffy.",
+      "Reduce humidity or heat build-up in the room where possible.",
+      "Use light breathable bedding so room heat does not compound with bed heat.",
+      "Cool the room gradually rather than shocking the body with cold.",
+      "Keep the same bedding setup so you can test whether the room change worked."
+    ],
+    avoid: [
+      "Do not use very cold showers or ice-cold cooling as the first move.",
+      "Do not combine strong AC, fan, bedding changes, and clothing changes in one night.",
+      "Do not confuse hot bedding with hot room temperature."
+    ],
+  },
+  {
+    id: "room-warming",
+    name: "Room Warming Protocol",
+    family: "Stabilization",
+    oneLine: "Reduce cold-room disruption without creating heavy bedding heat later.",
+    steps: [
+      "Reduce drafts and cold air movement before bed.",
+      "Warm the room slightly before sleep if possible, then keep it stable.",
+      "Use one targeted warmth layer rather than piling on multiple blankets.",
+      "Warm feet gently before bed if cold feet are part of the wake-up pattern.",
+      "Keep bedding breathable so room warming does not create bed overheating later."
+    ],
+    avoid: [
+      "Do not overheat the room.",
+      "Do not add several blanket layers at once.",
+      "Do not use noisy heating if the noise itself wakes you."
+    ],
+  },
+
   {
     id: "rb2-deceleration",
     name: "RB2 Deceleration",
