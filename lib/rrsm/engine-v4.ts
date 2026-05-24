@@ -35,6 +35,12 @@ export type RRSMSleepDimensionScores = {
   environmentStress: number;
 };
 
+export type RRSMWakeDamageProfile = {
+  wakeType: "few_wakes" | "frequent_short_wakes" | "long_awake_after_waking" | "destructive_fragmentation" | "unknown";
+  damageLevel: "low" | "moderate" | "high" | "unknown";
+  summary: string;
+};
+
 export type RRSMTimeInterpretation = {
   timeInBedMin: number | null;
   sleepLatencyMin: number | null;
@@ -113,6 +119,7 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   adaptationState: RRSMAdaptationState;
   adaptationSummary: string;
   timeInterpretation: RRSMTimeInterpretation;
+  wakeDamageProfile: RRSMWakeDamageProfile;
 };
 
 type ProtocolFollowedValue =
@@ -306,13 +313,15 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
   const timeInterpretation = buildTimeInterpretation(night);
+  const wakeDamage = classifyWakeDamage(night);
+  const wakeDamage = classifyWakeDamage(night);
   const poorSleepEfficiency =
     typeof timeInterpretation.sleepEfficiencyPct === "number" &&
     timeInterpretation.sleepEfficiencyPct < 85;
 
 return Boolean(
   majorLatencyIssue ||
-    wakeIssue ||
+    (wakeIssue && wakeDamage.damageLevel !== "low") ||
     maintenanceIssue ||
     prolongedWakeRecovery ||
     majorWakeRecovery ||
@@ -343,6 +352,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
   const timeInterpretation = buildTimeInterpretation(night);
+  const wakeDamage = classifyWakeDamage(night);
   const poorSleepEfficiency =
     typeof timeInterpretation.sleepEfficiencyPct === "number" &&
     timeInterpretation.sleepEfficiencyPct < 85;
@@ -445,7 +455,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
 
   // Wake-up persistence makes room/body factors much more important.
   // Example: cold room + repeated long awake periods = real maintenance disruption.
-  if (maintenanceIssue && scores.environment > 0) {
+  if (maintenanceIssue && scores.environment > 0 && wakeDamage.damageLevel !== "low") {
     scores.environment += majorWakeRecovery ? 3 : 2;
   }
 
@@ -520,7 +530,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   // Bed / bedding thermal setup.
   // This catches nights where sleep quality is good while asleep, but repeated wake-ups are caused by bed heat/cold instability.
   if (hasBedThermalSignal(night)) {
-    scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 3;
+    scores.environment += wakeDamage.damageLevel === "low" ? 1 : maintenanceIssue || prolongedWakeRecovery ? 4 : 3;
   }
 
   if (lowerIncludes(bedText, ["mattress too hard", "bed felt hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow too warm", "pillow"])) {
@@ -534,7 +544,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   const thermalSystem = classifyThermalSystem(night);
   const adaptation = classifyAdaptationAndCompensation(night);
   if (thermalSystem.state !== "none") {
-    scores.environment += maintenanceIssue || prolongedWakeRecovery ? 4 : 2;
+    scores.environment += wakeDamage.damageLevel === "low" ? 1 : maintenanceIssue || prolongedWakeRecovery ? 4 : 2;
 
     // Thermal system problems should not be mistaken for generic body discomfort.
     if (scores.body_physiology > 0 && !lowerIncludes(combinedText, ["pain", "sore", "doms", "inflamed", "inflammation"])) {
@@ -1119,6 +1129,86 @@ function buildTimeInterpretation(night: NightWithOptionalProtocol | undefined): 
 }
 
 
+
+function classifyWakeDamage(night: NightWithOptionalProtocol | undefined): RRSMWakeDamageProfile {
+  if (!night) {
+    return {
+      wakeType: "unknown",
+      damageLevel: "unknown",
+      summary: "SleepFix does not have enough data to separate wake-up type from wake-up damage yet.",
+    };
+  }
+
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+  const quality = typeof night.quality === "number" ? night.quality : null;
+  const time = buildTimeInterpretation(night);
+  const estimatedAwake = time.estimatedAwakeMin;
+  const efficiency = time.sleepEfficiencyPct;
+
+  const goodRecovery =
+    (quality !== null && quality >= 7) ||
+    (efficiency !== null && efficiency >= 85);
+
+  if (wakeUps <= 1 && (estimatedAwake === null || estimatedAwake < 30)) {
+    return {
+      wakeType: "few_wakes",
+      damageLevel: "low",
+      summary: "Wake damage: low. Wake-ups were few or brief, so SleepFix does not treat this as destructive fragmentation.",
+    };
+  }
+
+  if (
+    wakeUps >= 3 &&
+    typeof estimatedAwake === "number" &&
+    estimatedAwake <= 45 &&
+    goodRecovery
+  ) {
+    return {
+      wakeType: "frequent_short_wakes",
+      damageLevel: "low",
+      summary:
+        "Wake damage: low. You had frequent wake-ups, but total awake time stayed low and recovery appears preserved. This is different from severe insomnia-style fragmentation.",
+    };
+  }
+
+  if (
+    typeof estimatedAwake === "number" &&
+    estimatedAwake >= 60 &&
+    wakeUps < 5
+  ) {
+    return {
+      wakeType: "long_awake_after_waking",
+      damageLevel: estimatedAwake >= 120 ? "high" : "moderate",
+      summary:
+        "Wake damage: moderate. The main problem is not just waking up, but staying awake after waking.",
+    };
+  }
+
+  if (
+    wakeUps >= 5 &&
+    (
+      (typeof estimatedAwake === "number" && estimatedAwake >= 60) ||
+      (efficiency !== null && efficiency < 80) ||
+      (quality !== null && quality <= 6)
+    )
+  ) {
+    return {
+      wakeType: "destructive_fragmentation",
+      damageLevel: "high",
+      summary:
+        "Wake damage: high. Frequent wake-ups combined with longer awake time, lower efficiency, or poorer recovery suggest destructive sleep fragmentation.",
+    };
+  }
+
+  return {
+    wakeType: wakeUps >= 3 ? "frequent_short_wakes" : "unknown",
+    damageLevel: "moderate",
+    summary:
+      "Wake damage: mixed. Wake-ups were present, but SleepFix needs more signal to separate harmless position changes from disruptive fragmentation.",
+  };
+}
+
+
 function classifyAdaptationAndCompensation(night: NightWithOptionalProtocol | undefined): {
   state: RRSMAdaptationState;
   summary: string;
@@ -1698,8 +1788,8 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
   const sleepStability = clamp100(
     100 -
       (latency !== null && latency >= 30 ? 18 : 0) -
-      wakePenalty -
-      recoveryPenalty -
+      (wakeDamage.damageLevel === "low" ? Math.round(wakePenalty * 0.35) : wakePenalty) -
+      (wakeDamage.damageLevel === "low" ? Math.round(recoveryPenalty * 0.35) : recoveryPenalty) -
       (timeInterpretation.sleepEfficiencyPct !== null && timeInterpretation.sleepEfficiencyPct < 85 ? 15 : 0)
   );
 
@@ -1783,6 +1873,14 @@ function buildUserSummary(
   const thermalSystem = classifyThermalSystem(latestNight);
   const adaptation = classifyAdaptationAndCompensation(latestNight);
   const timeInterpretation = buildTimeInterpretation(latestNight);
+  const wakeDamage = classifyWakeDamage(latestNight);
+
+  if (
+    wakeDamage.wakeType === "frequent_short_wakes" &&
+    wakeDamage.damageLevel === "low"
+  ) {
+    return `${wakeDamage.summary} SleepFix will look for the cause of the wake-up type, but it will not treat this as high-damage sleep failure. Tonight's match is ${recommendedProtocol}.`;
+  }
 
   if (
     latestNight &&
@@ -1891,6 +1989,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const thermalSource = classifyThermalSource(latestNight);
   const adaptation = classifyAdaptationAndCompensation(latestNight);
   const timeInterpretation = buildTimeInterpretation(latestNight);
+  const wakeDamage = classifyWakeDamage(latestNight);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
 
   const why = [
@@ -1947,6 +2046,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     adaptationState: adaptation.state,
     adaptationSummary: adaptation.summary,
     timeInterpretation,
+    wakeDamageProfile,
     why,
     actions,
   };
