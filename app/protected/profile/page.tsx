@@ -1,148 +1,113 @@
-'use client';
+"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { runRRSMEngineV4, type RRSMProtocolResult } from "@/lib/rrsm/engine-v4";
-import type { RRSMMetricsNight } from "@/lib/rrsm/engine-v2";
-import { getStandardProtocolByTitle, getEscalatedProtocolForTitle, type SleepFixProtocol } from "@/lib/protocols";
-
-type SleepNightRow = {
-  sleepContext?: string[] | null;
-  workContext?: string[] | null;
-  id: string;
-  local_date: string | null;
-  created_at: string;
-  sleep_quality: number | string | null;
-  sleep_latency_choice: string | null;
-  wake_ups_choice: string | null;
-  wake_recovery_choice?: string | null;
-  mind_tags?: string[] | null;
-  environment_tags?: string[] | null;
-  body_tags?: string[] | null;
-  primary_driver?: string | null;
-  secondary_driver?: string | null;
-  protocol_used_name?: string | null;
-  protocol_followed?: string | null;
-};
 
 type RRSMProfileRow = {
+  id?: string;
+  user_id?: string;
   sleep_context?: string[] | null;
   work_context?: string[] | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
-function parseLatency(choice: string | null): number | null {
-  if (!choice) return null;
-  const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
-  return Number.isFinite(n) ? n : null;
+const SLEEP_CONTEXT_OPTIONS = [
+  "Usually sleeps cold",
+  "Usually sleeps hot",
+  "Temperature changes wake me",
+  "Noise sensitive",
+  "Light sensitive",
+  "Partner affects sleep",
+  "New mattress / bedding change",
+  "Pain or discomfort affects sleep",
+  "Mind stays active at night",
+  "Wake-ups are the main issue",
+  "Sleep onset is the main issue",
+];
+
+const WORK_CONTEXT_OPTIONS = [
+  "Desk work / screen-heavy",
+  "Physical labour",
+  "Mostly standing",
+  "Mostly driving",
+  "Shift work",
+  "Irregular schedule",
+  "High-stress decisions",
+  "Customer-facing / talking",
+  "Early starts",
+  "Late finishes",
+  "Travel affects routine",
+];
+
+function toggleValue(list: string[], value: string) {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
 
-function parseWakeUps(choice: string | null): number | null {
-  if (!choice) return null;
-  const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
-  return Number.isFinite(n) ? n : null;
+function CheckboxGrid({
+  title,
+  description,
+  options,
+  values,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  options: string[];
+  values: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-extrabold text-gray-900">{title}</h2>
+      <p className="mt-1 text-gray-600">{description}</p>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {options.map((option) => {
+          const checked = values.includes(option);
+
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onChange(toggleValue(values, option))}
+              className={`rounded-xl border px-4 py-3 text-left font-semibold ${
+                checked
+                  ? "border-blue-700 bg-blue-50 text-blue-950"
+                  : "border-gray-200 bg-white text-gray-900"
+              }`}
+            >
+              <span className="mr-2">{checked ? "☑" : "☐"}</span>
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
-function parseWakeRecovery(choice: string | null | undefined): number | null {
-  if (!choice) return null;
-  const cleaned = choice.toLowerCase().trim();
-
-  if (cleaned.includes("60+")) return 60;
-  if (cleaned.includes("30-60") || cleaned.includes("30–60")) return 30;
-  if (cleaned.includes("15-30") || cleaned.includes("15–30")) return 15;
-  if (cleaned.includes("5-15") || cleaned.includes("5–15")) return 5;
-  if (cleaned.includes("0-5") || cleaned.includes("0–5")) return 0;
-
-  const n = parseInt(cleaned.replace(/[^0-9]/g, ""), 10);
-  return Number.isFinite(n) ? n : null;
-}
-
-function textFromArray(value?: string[] | null) {
-  return Array.isArray(value) ? value.join(", ") : "";
-}
-
-function mapNight(row: SleepNightRow): RRSMMetricsNight & {
-  sleepContext?: string[] | null;
-  workContext?: string[] | null;
-  wakeRecoveryMin?: number | null;
-  protocolFollowed?: "yes" | "partial" | "no" | "none" | null;
-} {
-  const drivers = [
-    row.primary_driver,
-    row.secondary_driver,
-    textFromArray(row.mind_tags),
-    textFromArray(row.environment_tags),
-    textFromArray(row.body_tags),
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const protocolFollowed =
-    row.protocol_followed === "yes" ||
-    row.protocol_followed === "partial" ||
-    row.protocol_followed === "no" ||
-    row.protocol_followed === "none"
-      ? row.protocol_followed
-      : null;
-
-  return {
-    dateKey: row.local_date ?? row.created_at?.slice(0, 10),
-    quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
-    latencyMin: parseLatency(row.sleep_latency_choice),
-    wakeUps: parseWakeUps(row.wake_ups_choice),
-    wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
-    sleepContext: row.sleepContext ?? null,
-    workContext: row.workContext ?? null,
-    primaryDriver: drivers || row.primary_driver || "(no driver logged)",
-    secondaryDriver: row.secondary_driver ?? null,
-    protocolFollowed,
-  };
-}
-
-function prettyCategory(category: string) {
-  switch (category) {
-    case "mind_emotional":
-      return "Mind / emotional activation";
-    case "body_physiology":
-      return "Body / physiology activation";
-    case "environment":
-      return "Room / environment disruption";
-    case "sleep_hygiene":
-      return "Personal sleep-hygiene disruption";
-    case "circadian_context":
-      return "Timing / life-context limitation";
-    default:
-      return "No clear sleep issue";
-  }
-}
-
-function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
-  switch (value) {
-    case "case_a_working":
-      return "Case A: the protocol appears to be helping.";
-    case "case_b_hidden_factor":
-      return "Case B: protocol was followed but sleep did not improve; another factor may be present.";
-    case "case_c_not_followed":
-      return "Case C: protocol was not fully followed, so effectiveness cannot be judged yet.";
-    default:
-      return "Not enough data yet to judge whether the protocol worked.";
-  }
-}
-
-export default function ProtocolsPage() {
+export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
+
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<RRSMProtocolResult | null>(null);
-  const [nightCount, setNightCount] = useState(0);
+
+  const [sleepContext, setSleepContext] = useState<string[]>([]);
+  const [workContext, setWorkContext] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadRecommendation() {
+    async function loadProfile() {
       setLoading(true);
       setError(null);
+      setMessage(null);
 
       const { data: authData, error: authErr } = await supabase.auth.getUser();
+
       if (authErr || !authData?.user) {
         if (!cancelled) {
           setError(authErr?.message ?? "Not signed in.");
@@ -151,214 +116,125 @@ export default function ProtocolsPage() {
         return;
       }
 
-      const { data, error: rowsErr } = await supabase
-        .from("sleep_nights")
-        .select("id,local_date,created_at,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,mind_tags,environment_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
-        .eq("user_id", authData.user.id)
-        .order("local_date", { ascending: true })
-        .limit(14);
-
-      if (rowsErr) {
-        if (!cancelled) {
-          setError(rowsErr.message);
-          setLoading(false);
-        }
-        return;
-      }
-
-      const { data: profileData } = await supabase
+      const { data, error: profileErr } = await supabase
         .from("rrsm_profiles")
         .select("sleep_context,work_context")
         .eq("user_id", authData.user.id)
         .maybeSingle();
 
-      const profile = (profileData ?? {}) as RRSMProfileRow;
-
-      const mapped = (data ?? []).map((row) =>
-        mapNight({
-          ...(row as SleepNightRow),
-          sleepContext: Array.isArray(profile.sleep_context) ? profile.sleep_context : [],
-          workContext: Array.isArray(profile.work_context) ? profile.work_context : [],
-        })
-      );
-
-      const protocolResult = runRRSMEngineV4(mapped);
-
       if (!cancelled) {
-        setNightCount(mapped.length);
-        setResult(protocolResult);
+        if (profileErr) {
+          setError(profileErr.message);
+        } else {
+          const profile = (data ?? {}) as RRSMProfileRow;
+          setSleepContext(Array.isArray(profile.sleep_context) ? profile.sleep_context : []);
+          setWorkContext(Array.isArray(profile.work_context) ? profile.work_context : []);
+        }
+
         setLoading(false);
       }
     }
 
-    loadRecommendation();
+    loadProfile();
+
     return () => {
       cancelled = true;
     };
   }, [supabase]);
 
-  const protocol: SleepFixProtocol | null = useMemo(() => {
-    if (!result) return null;
-    return getStandardProtocolByTitle(result.recommendedProtocol);
-  }, [result]);
+  async function saveProfile() {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
 
-  const escalatedProtocol: SleepFixProtocol | null = useMemo(() => {
-    if (!result || result.protocolEvaluation !== "case_b_hidden_factor") return null;
-    return getEscalatedProtocolForTitle(result.recommendedProtocol);
-  }, [result]);
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
 
-  const displayProtocol = escalatedProtocol ?? protocol;
+    if (authErr || !authData?.user) {
+      setError(authErr?.message ?? "Not signed in.");
+      setSaving(false);
+      return;
+    }
+
+    const payload = {
+      user_id: authData.user.id,
+      sleep_context: sleepContext,
+      work_context: workContext,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: saveErr } = await supabase
+      .from("rrsm_profiles")
+      .upsert(payload, { onConflict: "user_id" });
+
+    if (saveErr) {
+      setError(saveErr.message);
+    } else {
+      setMessage("Profile saved.");
+    }
+
+    setSaving(false);
+  }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Tonight&apos;s Protocol</h1>
+    <main className="mx-auto max-w-4xl px-4 py-8">
+      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Profile</h1>
       <p className="mt-2 text-base text-gray-600">
-        SleepFix uses your recent sleep records to recommend the protocol most likely to match tonight&apos;s sleep issue.
+        Tell SleepFix about your usual sleep context so the engine can interpret your nightly records more accurately.
       </p>
 
       {loading ? (
         <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm">
-          Loading your protocol recommendation...
+          Loading profile...
         </div>
       ) : null}
 
       {error ? (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-700">
           {error}
         </div>
       ) : null}
 
-      {!loading && !error && nightCount < 1 ? (
-        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold text-blue-900">No sleep record yet</h2>
-          <p className="mt-2 text-gray-700">
-            Save at least one night in the Sleep page so SleepFix can recommend a protocol.
-          </p>
+      {message ? (
+        <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-700">
+          {message}
         </div>
       ) : null}
 
-      {result && nightCount > 0 && displayProtocol ? (
-        <>
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">Recommended protocol</div>
-            <h2 className="mt-2 text-2xl font-bold text-blue-900">{displayProtocol.title}</h2>
-            {escalatedProtocol ? (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                <div className="font-bold">Escalated protocol</div>
-                <div className="mt-1">
-                  The standard protocol was followed but the sleep issue remained. SleepFix is showing the deeper version tonight.
-                </div>
-              </div>
-            ) : null}
-            <p className="mt-2 text-base text-gray-700">{displayProtocol.bestFor}</p>
+      {!loading ? (
+        <div className="mt-6 grid gap-6">
+          <CheckboxGrid
+            title="Sleep context"
+            description="Choose the patterns that commonly affect your sleep."
+            options={SLEEP_CONTEXT_OPTIONS}
+            values={sleepContext}
+            onChange={setSleepContext}
+          />
 
-            <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
-              <div className="font-bold">Why this protocol?</div>
-              <div className="mt-1">{result.protocolReason}</div>
-            </div>
+          <CheckboxGrid
+            title="Work / lifestyle context"
+            description="Choose the usual work or lifestyle context that may affect sleep."
+            options={WORK_CONTEXT_OPTIONS}
+            values={workContext}
+            onChange={setWorkContext}
+          />
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Sleep issue?</div>
-                <div className="mt-1 font-semibold text-gray-900">{result.sleepIssueDetected ? "Yes" : "No clear issue"}</div>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Recurring?</div>
-                <div className="mt-1 font-semibold text-gray-900">{result.recurringIssue ? "Yes" : "Not yet"}</div>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Main factor</div>
-                <div className="mt-1 font-semibold text-gray-900">{prettyCategory(result.dominantCategory)}</div>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Confidence</div>
-                <div className="mt-1 font-semibold capitalize text-gray-900">{result.protocolConfidence}</div>
-              </div>
-            </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-extrabold text-gray-900">Why this matters</h2>
+            <p className="mt-2 text-gray-700">
+              The profile does not replace your nightly sleep record. It gives SleepFix background context so it can
+              separate repeated patterns from one-off disruptions.
+            </p>
 
-            <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
-              <div className="font-bold text-gray-900">Related RRSM system</div>
-              <div className="mt-1">{displayProtocol.related}</div>
-            </div>
-
-            {result.sleepIssueDetected && result.secondaryFactors.length > 0 ? (
-              <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">Secondary factors to watch</div>
-                <div className="mt-1">{result.secondaryFactors.map(prettyCategory).join(", ")}</div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-bold text-gray-900">What to do tonight</h3>
-            <p className="mt-2 text-gray-700">{displayProtocol.focus}</p>
-
-            <ol className="mt-4 list-decimal space-y-3 pl-6 text-base text-gray-800">
-              {displayProtocol.steps.map((s, idx) => (
-                <li key={idx} className="leading-relaxed">{s}</li>
-              ))}
-            </ol>
-
-            {displayProtocol.doNot?.length ? (
-              <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">Do not</div>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {displayProtocol.doNot.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {displayProtocol.escalationNote ? (
-              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <div className="font-bold">Escalation note</div>
-                <div className="mt-1">{displayProtocol.escalationNote}</div>
-              </div>
-            ) : null}
-
-            {displayProtocol.diaryPrompt ? (
-              <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">Diary follow-up</div>
-                <div className="mt-1">{displayProtocol.diaryPrompt}</div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-gray-900">Protocol review</h3>
-          {!result.sleepIssueDetected ? (
-  <>
-    <div className="mt-3 font-semibold text-gray-900">
-      No protocol review needed
-    </div>
-
-    <p className="mt-2 text-gray-700">
-      There was no clear sleep issue in the latest sleep record, so SleepFix is not evaluating protocol effectiveness tonight.
-    </p>
-  </>
-) : (
-  <>
-    <div className="mt-3 font-semibold text-gray-900">
-      {result.protocolEvaluationLabel}
-    </div>
-
-    <p className="mt-2 text-gray-700">
-      {result.protocolEvaluationReason}
-    </p>
-  </>
-)}
-
-            <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-              <div className="font-bold text-gray-900">How to read this</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li><strong>Case A:</strong> protocol followed and sleep improved.</li>
-                <li><strong>Case B:</strong> protocol followed but sleep did not improve, so another factor may be present.</li>
-                <li><strong>Case C:</strong> protocol was not followed, partially followed, or not recorded, so effectiveness cannot be judged.</li>
-              </ul>
-            </div>
-          </section>
-        </>
+            <button
+              type="button"
+              onClick={saveProfile}
+              disabled={saving}
+              className="mt-5 rounded-xl bg-blue-900 px-5 py-3 font-bold text-white disabled:opacity-60"
+            >
+              {saving ? "Saving..." : "Save profile"}
+            </button>
+          </div>
+        </div>
       ) : null}
     </main>
   );
