@@ -145,6 +145,8 @@ type NightWithOptionalProtocol = RRSMMetricsNight & {
   primaryTrigger?: string | null;
   bed_tags?: string[] | null;
   bedTags?: string[] | null;
+  body_tags?: string[] | null;
+  bodyTags?: string[] | null;
 };
 
 function clamp7(n: number) {
@@ -190,6 +192,41 @@ function joinedBedText(night: NightWithOptionalProtocol | undefined) {
   const bedTags = night.bedTags ?? night.bed_tags ?? [];
   return Array.isArray(bedTags) ? bedTags.filter(Boolean).join(" ").toLowerCase() : "";
 }
+
+
+function joinedBodyText(night: NightWithOptionalProtocol | undefined) {
+  if (!night) return "";
+  const bodyTags = night.bodyTags ?? night.body_tags ?? [];
+  return Array.isArray(bodyTags) ? bodyTags.filter(Boolean).join(" ").toLowerCase() : "";
+}
+
+function hasDomsOrMuscleSorenessSignal(night: NightWithOptionalProtocol | undefined) {
+  const text = `${joinedNightText(night as RRSMMetricsNight)} ${joinedBodyText(night)}`;
+  return lowerIncludes(text, [
+    "doms",
+    "muscle soreness",
+    "sore muscle",
+    "sore muscles",
+    "post exercise soreness",
+    "exercise soreness",
+  ]);
+}
+
+function hasGeneralBodyDiscomfortSignal(night: NightWithOptionalProtocol | undefined) {
+  const text = `${joinedNightText(night as RRSMMetricsNight)} ${joinedBodyText(night)} ${joinedBedText(night)}`;
+  return lowerIncludes(text, [
+    "body discomfort",
+    "discomfort",
+    "pressure",
+    "position",
+    "positional",
+    "mattress too hard",
+    "new mattress",
+    "still adjusting",
+    "pillow / position",
+  ]);
+}
+
 
 function hasBedThermalSignal(night: NightWithOptionalProtocol | undefined) {
   const bedText = joinedBedText(night);
@@ -342,12 +379,14 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   }
 
   // C2 — Body physiology: RB1
+  // DOMS / muscle soreness is not the same as general discomfort / pressure.
+  if (hasDomsOrMuscleSorenessSignal(night)) {
+    scores.body_physiology += 4;
+  }
+
   if (
     lowerIncludes(combinedText, [
       "pain",
-      "discomfort",
-      "doms",
-      "sore",
       "inflammation",
       "inflamed",
       "tense",
@@ -362,8 +401,12 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.body_physiology += 4;
   }
 
+  if (hasGeneralBodyDiscomfortSignal(night)) {
+    scores.body_physiology += 2;
+  }
+
   if (typeof night.wakeUps === "number" && night.wakeUps >= 3) {
-    scores.body_physiology += 1;
+    scores.body_physiology += hasGeneralBodyDiscomfortSignal(night) && !hasDomsOrMuscleSorenessSignal(night) ? 0 : 1;
   }
 
   if (maintenanceIssue && scores.body_physiology > 0 && !hasThermalSystemSignal(night)) {
@@ -636,7 +679,18 @@ function protocolForCategory(category: RRSMContributorCategory, scores: ReturnTy
     case "mind_emotional":
       return mindProtocolForNight(night);
     case "body_physiology":
-      if (scores.body_physiology >= 5) return "RRSM Body Recovery Protocol";
+      if (hasDomsOrMuscleSorenessSignal(night)) return "RRSM Body Recovery Protocol";
+      if (
+        night &&
+        lowerIncludes(`${joinedNightText(night)} ${joinedBodyText(night)}`, [
+          "inflammation",
+          "inflamed",
+          "pain",
+          "sore",
+        ])
+      ) {
+        return "RRSM Body Recovery Protocol";
+      }
       return "RRSM Body Downshift Protocol";
     case "environment": {
       const thermalProtocol = protocolForThermalSource(classifyThermalSource(night).source);
@@ -697,6 +751,14 @@ function detailedReasonForLatestNight(category: RRSMContributorCategory, latestN
   }
 
   if (category === "body_physiology" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
+    if (hasDomsOrMuscleSorenessSignal(latestNight)) {
+      return "SleepFix detected muscle soreness / DOMS-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The target is body recovery without overstimulating sore tissue.";
+    }
+
+    if (hasGeneralBodyDiscomfortSignal(latestNight)) {
+      return "SleepFix detected body discomfort / pressure-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The target is reducing pressure or positional activation, not treating it as DOMS.";
+    }
+
     return "SleepFix detected body-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is reducing body activation enough that wake-ups do not keep you awake.";
   }
 
@@ -1721,6 +1783,20 @@ function buildUserSummary(
   const thermalSystem = classifyThermalSystem(latestNight);
   const adaptation = classifyAdaptationAndCompensation(latestNight);
   const timeInterpretation = buildTimeInterpretation(latestNight);
+
+  if (
+    latestNight &&
+    hasGeneralBodyDiscomfortSignal(latestNight) &&
+    !hasDomsOrMuscleSorenessSignal(latestNight) &&
+    typeof wakeUps === "number" &&
+    wakeUps >= 3 &&
+    typeof timeInterpretation.estimatedAwakeMin === "number" &&
+    timeInterpretation.estimatedAwakeMin <= 45 &&
+    typeof latestNight.quality === "number" &&
+    latestNight.quality >= 7
+  ) {
+    return `SleepFix detected frequent short wake-ups with preserved recovery. This looks more like body discomfort, pressure, position, or sleep-setup adaptation than a DOMS recovery problem. Tonight's match is ${recommendedProtocol}.`;
+  }
 
   if (
     timeInterpretation.timeInBedMin !== null &&
