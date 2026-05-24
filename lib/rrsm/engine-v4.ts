@@ -314,7 +314,6 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const majorWakeRecovery = hasMajorWakeRecovery(night);
   const timeInterpretation = buildTimeInterpretation(night);
   const wakeDamage = classifyWakeDamage(night);
-  const wakeDamage = classifyWakeDamage(night);
   const poorSleepEfficiency =
     typeof timeInterpretation.sleepEfficiencyPct === "number" &&
     timeInterpretation.sleepEfficiencyPct < 85;
