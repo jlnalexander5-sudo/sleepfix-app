@@ -176,6 +176,24 @@ function prettyThermalSystem(state: string) {
 }
 
 
+
+function prettyThermalSource(source: string) {
+  switch (source) {
+    case "bed_heat":
+      return "Bed / bedding heat";
+    case "bed_cold":
+      return "Bed / bedding cold";
+    case "room_heat":
+      return "Hot room";
+    case "room_cold":
+      return "Cold room";
+    case "mixed_thermal":
+      return "Mixed thermal signal";
+    default:
+      return "No clear thermal source";
+  }
+}
+
 function prettyAdaptationState(state: string) {
   switch (state) {
     case "new_setup_adaptation":
@@ -487,6 +505,22 @@ export default function ProtocolsPage() {
 
                 <div className="mt-2 text-sm text-orange-950">
                   {result.thermalSystemSummary}
+                </div>
+              </div>
+            ) : null}
+
+            {result.thermalSourceSummary ? (
+              <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-4">
+                <div className="text-sm font-bold uppercase tracking-wide text-amber-700">
+                  Thermal source
+                </div>
+
+                <div className="mt-2 text-lg font-extrabold text-amber-950">
+                  {prettyThermalSource(result.thermalSource)}
+                </div>
+
+                <div className="mt-2 text-sm text-amber-950">
+                  {result.thermalSourceSummary}
                 </div>
               </div>
             ) : null}
