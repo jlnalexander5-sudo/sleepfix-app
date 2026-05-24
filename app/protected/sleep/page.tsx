@@ -130,7 +130,8 @@ const PRIMARY_TRIGGER_OPTIONS = [
 
 const BODY_TAGS = [
   "Pain",
-  "Muscle soreness / discomfort",
+  "Muscle soreness / DOMS",
+  "Body discomfort / pressure",
   "Restless",
   "Heavy fatigue",
   "Light fatigue",
