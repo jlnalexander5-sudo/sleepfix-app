@@ -169,7 +169,7 @@ export default function ProfilePage() {
     if (saveErr) {
       setError(saveErr.message);
     } else {
-      setMessage("Profile saved.");
+      setMessage("Saved successfully.");
     }
 
     setSaving(false);
@@ -225,14 +225,28 @@ export default function ProfilePage() {
               separate repeated patterns from one-off disruptions.
             </p>
 
-            <button
-              type="button"
-              onClick={saveProfile}
-              disabled={saving}
-              className="mt-5 rounded-xl bg-blue-900 px-5 py-3 font-bold text-white disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save profile"}
-            </button>
+         <div className="mt-5 flex flex-wrap items-center gap-4">
+  <button
+    type="button"
+    onClick={saveProfile}
+    disabled={saving}
+    className="rounded-xl bg-blue-900 px-5 py-3 font-bold text-white disabled:opacity-60"
+  >
+    {saving ? "Saving..." : "Save profile"}
+  </button>
+
+  {message ? (
+    <span className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-bold text-green-700">
+      {message}
+    </span>
+  ) : null}
+
+  {error ? (
+    <span className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-bold text-red-700">
+      {error}
+    </span>
+  ) : null}
+</div>
           </div>
         </div>
       ) : null}
