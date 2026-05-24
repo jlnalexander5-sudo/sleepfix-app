@@ -63,6 +63,14 @@ export type RRSMThermalSystemState =
   | "mixed_or_unclear"
   | "none";
 
+export type RRSMThermalSource =
+  | "bed_heat"
+  | "bed_cold"
+  | "room_heat"
+  | "room_cold"
+  | "mixed_thermal"
+  | "none";
+
 export type RRSMAdaptationState =
   | "new_setup_adaptation"
   | "active_self_correction"
@@ -100,6 +108,8 @@ export type RRSMProtocolResult = RRSMV2Insight & {
   wakeCauseSummary: string;
   thermalSystemState: RRSMThermalSystemState;
   thermalSystemSummary: string;
+  thermalSource: RRSMThermalSource;
+  thermalSourceSummary: string;
   adaptationState: RRSMAdaptationState;
   adaptationSummary: string;
   timeInterpretation: RRSMTimeInterpretation;
@@ -628,8 +638,10 @@ function protocolForCategory(category: RRSMContributorCategory, scores: ReturnTy
     case "body_physiology":
       if (scores.body_physiology >= 5) return "RRSM Body Recovery Protocol";
       return "RRSM Body Downshift Protocol";
-    case "environment":
-      return "Sleep Environment Reset Protocol";
+    case "environment": {
+      const thermalProtocol = protocolForThermalSource(classifyThermalSource(night).source);
+      return thermalProtocol ?? "Sleep Environment Reset Protocol";
+    }
     case "sleep_hygiene":
       return "RRSM Shutdown Ritual";
     case "circadian_context":
@@ -646,7 +658,7 @@ function reasonForCategory(category: RRSMContributorCategory) {
     case "body_physiology":
       return "Your sleep form points most strongly toward body-based activation such as pain, tension, inflammation, DOMS, illness, or physical discomfort.";
     case "environment":
-      return "Your sleep form points most strongly toward room-environment disruption. If wake-ups included longer awake periods, the issue is likely sleep maintenance rather than falling asleep.";
+      return "Your sleep form points most strongly toward an environmental or thermal sleep-maintenance disruption. SleepFix now separates room heat, room cold, bed heat, and bed cold before choosing the protocol.";
     case "sleep_hygiene":
       return "Your sleep form points most strongly toward a personal sleep-rhythm habit, such as late caffeine, screens, alcohol, nicotine, late food, or late exercise.";
     case "circadian_context":
@@ -1136,6 +1148,114 @@ function classifyAdaptationAndCompensation(night: NightWithOptionalProtocol | un
 }
 
 
+
+function classifyThermalSource(night: NightWithOptionalProtocol | undefined): {
+  source: RRSMThermalSource;
+  summary: string;
+} {
+  if (!night) {
+    return {
+      source: "none",
+      summary: "No thermal source could be classified yet.",
+    };
+  }
+
+  const text = joinedNightText(night);
+  const bedText = joinedBedText(night);
+  const primaryTrigger = getPrimaryTrigger(night);
+  const profileText = joinedProfileText(night);
+  const combinedText = `${text} ${bedText} ${primaryTrigger} ${profileText}`;
+
+  const bedHeat = lowerIncludes(bedText, [
+    "bed felt hot",
+    "too many blankets",
+    "partner body heat",
+    "sleepwear too warm",
+    "pillow too warm",
+    "mattress too hard",
+    "removed covers",
+    "overcorrected",
+  ]);
+
+  const bedCold = lowerIncludes(bedText, [
+    "bed felt cold",
+    "too few blankets",
+    "sleepwear too light",
+    "pillow too cold",
+    "mattress too soft",
+    "added covers",
+  ]);
+
+  const roomHeat =
+    lowerIncludes(combinedText, ["hot room", "room hot", "room was hot", "hot weather", "heatwave", "humid", "airflow", "stuffy"]) ||
+    (primaryTrigger.includes("room") && lowerIncludes(text, ["hot", "humid", "stuffy"]));
+
+  const roomCold =
+    lowerIncludes(combinedText, ["cold room", "room cold", "room was cold", "cold weather", "freezing", "draft", "draught"]) ||
+    (primaryTrigger.includes("room") && lowerIncludes(text, ["cold", "freezing", "draft", "draught"]));
+
+  if (bedHeat && !bedCold) {
+    return {
+      source: "bed_heat",
+      summary:
+        "Thermal source: bed/bedding heat. The issue appears to be heat trapped in covers, pillow, sleepwear, mattress, or partner body heat — not necessarily hot room temperature.",
+    };
+  }
+
+  if (bedCold && !bedHeat) {
+    return {
+      source: "bed_cold",
+      summary:
+        "Thermal source: bed/bedding cold. The issue appears to be unstable warmth from bedding, pillow, sleepwear, mattress, or cover level — not necessarily cold room temperature alone.",
+    };
+  }
+
+  if (roomHeat && !roomCold) {
+    return {
+      source: "room_heat",
+      summary:
+        "Thermal source: hot room. The issue appears to be ambient room heat, humidity, poor airflow, or warm weather affecting sleep.",
+    };
+  }
+
+  if (roomCold && !roomHeat) {
+    return {
+      source: "room_cold",
+      summary:
+        "Thermal source: cold room. The issue appears to be ambient room cold, drafts, poor insulation, or cold weather affecting sleep.",
+    };
+  }
+
+  if ((bedHeat || roomHeat) && (bedCold || roomCold)) {
+    return {
+      source: "mixed_thermal",
+      summary:
+        "Thermal source: mixed hot/cold signals. SleepFix sees more than one thermal direction, so tonight change only one variable and record what happened.",
+    };
+  }
+
+  return {
+    source: "none",
+    summary: "No clear thermal source was separated from the latest record.",
+  };
+}
+
+function protocolForThermalSource(source: RRSMThermalSource): string | null {
+  switch (source) {
+    case "bed_heat":
+      return "Bed Heat Reduction Protocol";
+    case "bed_cold":
+      return "Bed Thermal Retention Protocol";
+    case "room_heat":
+      return "Room Cooling Protocol";
+    case "room_cold":
+      return "Room Warming Protocol";
+    default:
+      return null;
+  }
+}
+
+
 function classifyThermalSystem(night: NightWithOptionalProtocol | undefined): {
   state: RRSMThermalSystemState;
   summary: string;
@@ -1202,18 +1322,28 @@ function classifyThermalSystem(night: NightWithOptionalProtocol | undefined): {
   }
 
   if (heatSignals) {
+    const source = classifyThermalSource(night);
     return {
       state: "heat_load",
       summary:
-        "Thermal sleep system: heat load. Mattress, pillow, blankets, sleepwear, partner heat, or room conditions may be building heat during the night and triggering wake-ups.",
+        source.source === "bed_heat"
+          ? "Thermal sleep system: bed heat load. Bedding, covers, pillow, sleepwear, mattress, or partner body heat may be trapping heat during the night."
+          : source.source === "room_heat"
+          ? "Thermal sleep system: room heat load. Room temperature, humidity, airflow, or hot weather may be disrupting sleep."
+          : "Thermal sleep system: heat load. Heat signals were detected, but SleepFix needs one more clean night to separate room heat from bed/bedding heat.",
     };
   }
 
   if (coldSignals) {
+    const source = classifyThermalSource(night);
     return {
       state: "cold_exposure",
       summary:
-        "Thermal sleep system: cold exposure. Mattress, bedding, sleepwear, pillow, or room conditions may be failing to hold stable warmth through the night.",
+        source.source === "bed_cold"
+          ? "Thermal sleep system: bed cold exposure. Covers, pillow, sleepwear, mattress, or bedding level may not be holding stable warmth."
+          : source.source === "room_cold"
+          ? "Thermal sleep system: room cold exposure. Cold room temperature, drafts, or poor insulation may be disrupting sleep."
+          : "Thermal sleep system: cold exposure. Cold signals were detected, but SleepFix needs one more clean night to separate room cold from bed/bedding cold.",
     };
   }
 
@@ -1682,6 +1812,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const sleepDimensionSummary = buildSleepDimensionSummary(sleepDimensions);
   const wakeCauseResult = classifyWakeCause(latestNight);
   const thermalSystem = classifyThermalSystem(latestNight);
+  const thermalSource = classifyThermalSource(latestNight);
   const adaptation = classifyAdaptationAndCompensation(latestNight);
   const timeInterpretation = buildTimeInterpretation(latestNight);
   const userSummary = buildUserSummary(latestNight, dominantCategory, recommendedProtocol);
@@ -1735,6 +1866,8 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     wakeCauseSummary: wakeCauseResult.summary,
     thermalSystemState: thermalSystem.state,
     thermalSystemSummary: thermalSystem.summary,
+    thermalSource: thermalSource.source,
+    thermalSourceSummary: thermalSource.summary,
     adaptationState: adaptation.state,
     adaptationSummary: adaptation.summary,
     timeInterpretation,
