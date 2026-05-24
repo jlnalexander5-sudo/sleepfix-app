@@ -209,6 +209,22 @@ function prettyAdaptationState(state: string) {
   }
 }
 
+
+function prettyWakeDamageType(type: string) {
+  switch (type) {
+    case "few_wakes":
+      return "Few wake-ups";
+    case "frequent_short_wakes":
+      return "Frequent short wake-ups";
+    case "long_awake_after_waking":
+      return "Long awake after waking";
+    case "destructive_fragmentation":
+      return "Destructive fragmentation";
+    default:
+      return "Unknown";
+  }
+}
+
 function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
   switch (value) {
     case "case_a_working":
@@ -471,6 +487,26 @@ export default function ProtocolsPage() {
 
                 <div className="mt-3 text-sm text-cyan-950">
                   {result.timeInterpretation.summary}
+                </div>
+              </div>
+            ) : null}
+
+            {result.wakeDamageProfile ? (
+              <div className="mt-4 rounded-xl border border-purple-100 bg-purple-50 p-4">
+                <div className="text-sm font-bold uppercase tracking-wide text-purple-700">
+                  Wake-up type vs damage
+                </div>
+
+                <div className="mt-2 text-lg font-extrabold text-purple-950">
+                  {prettyWakeDamageType(result.wakeDamageProfile.wakeType)}
+                </div>
+
+                <div className="mt-1 text-sm font-bold capitalize text-purple-900">
+                  Damage level: {result.wakeDamageProfile.damageLevel}
+                </div>
+
+                <div className="mt-2 text-sm text-purple-950">
+                  {result.wakeDamageProfile.summary}
                 </div>
               </div>
             ) : null}
