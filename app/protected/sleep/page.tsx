@@ -16,6 +16,7 @@ function parseWakeUpsToNumber(choice: string): number {
 import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { buildAdaptiveReminderState, type AdaptiveReminderState } from "@/lib/rrsm/adaptive-reminder";
 function buildDriverNotes(drivers: string[]) {
   const selectedDrivers = drivers.filter((d) => d !== "Nothing / none");
   if (selectedDrivers.length === 0) return null;
@@ -247,6 +248,7 @@ export default function SleepPage() {
   // Latest / metrics
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
+  const [adaptiveReminder, setAdaptiveReminder] = useState<AdaptiveReminderState | null>(null);
 
   // Driver confirmation (simple fields)
   const [drivers, setDrivers] = useState<string[]>(["Nothing / none"]);
@@ -356,6 +358,15 @@ export default function SleepPage() {
         return;
       }
       setMetrics((metricRows ?? []) as NightMetricsRow[]);
+
+      const { data: recentRows } = await supabase
+        .from("sleep_nights")
+        .select("created_at, local_date")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      setAdaptiveReminder(buildAdaptiveReminderState((recentRows ?? []) as any[]));
     })();
   }, [supabase, userId]);
 
@@ -457,6 +468,7 @@ export default function SleepPage() {
       }
 
       setLatestNightId(inserted?.id ?? null);
+      setAdaptiveReminder(null);
 
       // Optimistically reset form + refresh list.
       resetNightForm();
@@ -518,6 +530,23 @@ const canSaveNight = missingRequired.length === 0;
       `}</style>
 
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18, fontFamily: "Verdana, sans-serif", color: "#000080" }}>Sleep</h1>
+
+      {adaptiveReminder?.shouldShow ? (
+        <div
+          style={{
+            marginBottom: 16,
+            border: "1px solid #c7d2fe",
+            borderRadius: 16,
+            background: "#eef2ff",
+            padding: 14,
+            color: "#1e1b4b",
+          }}
+        >
+          <div style={{ fontWeight: 900 }}>{adaptiveReminder.title}</div>
+          <div style={{ marginTop: 4 }}>{adaptiveReminder.message}</div>
+        </div>
+      ) : null}
+
 
       {/* Night window */}
       <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
