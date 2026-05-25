@@ -116,27 +116,9 @@ const BED_TAGS = [
   "Pillow too warm",
   "Pillow too cold",
   "Pillow / position issue",
-  "Bedding needed adjustment",
   "New mattress / still adjusting",
   "New pillow / still adjusting",
-  "Changed blankets during night",
-  "Removed covers and improved",
-  "Added covers and improved",
-  "Changed pillow and improved",
-  "Got out of bed and reset",
-  "Overcorrected bedding / temperature",
   "Other bed factor",
-] as const;
-
-const PRIMARY_TRIGGER_OPTIONS = [
-  "Emotional state",
-  "Mental activation",
-  "Body discomfort / pain",
-  "Room environment",
-  "Bed / bedding temperature",
-  "Sleep hygiene / habits",
-  "Circadian / schedule issue",
-  "Not sure",
 ] as const;
 
 const BODY_TAGS = [
@@ -259,7 +241,6 @@ export default function SleepPage() {
   const [environmentTags, setEnvironmentTags] = useState<string[]>([]);
   const [bedTags, setBedTags] = useState<string[]>(["No bed / bedding issue"]);
   const [bodyTags, setBodyTags] = useState<string[]>([]);
-  const [primaryTrigger, setPrimaryTrigger] = useState<string>("");
   const [protocolUsedName, setProtocolUsedName] = useState<string>("");
   const [protocolFollowed, setProtocolFollowed] = useState<string>("");
 
@@ -284,7 +265,6 @@ export default function SleepPage() {
     setEnvironmentTags([]);
     setBedTags(["No bed / bedding issue"]);
     setBodyTags([]);
-    setPrimaryTrigger("");
     setProtocolUsedName("");
     setProtocolFollowed("");
     setDrivers(["Nothing / none"]);
@@ -458,7 +438,6 @@ export default function SleepPage() {
         environment_tags: environmentIssueTags,
         bed_tags: bedTags,
         body_tags: bodyTags,
-        primary_trigger: primaryTrigger,
         primary_driver: primaryDriver,
         secondary_driver: extraDrivers.length ? extraDrivers.join(", ") : null,
         protocol_used_name: !protocolUsedName || protocolUsedName === "none" ? null : protocolUsedName,
@@ -505,7 +484,6 @@ if (!mentalTags || mentalTags.length === 0) missingRequired.push("Mental state")
 if (!environmentTags || environmentTags.length === 0) missingRequired.push("Room environment impact");
 if (!bedTags || bedTags.length === 0) missingRequired.push("Bed / bedding factor");
 if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body state");
-if (!primaryTrigger) missingRequired.push("Main sleep disruption");
 const canSaveNight = missingRequired.length === 0;
 
   return (
@@ -722,12 +700,12 @@ const canSaveNight = missingRequired.length === 0;
           />
 
           <MultiCheckGroup
-            title="Was the room environment an issue?"
+            title="Room environment issue?"
             options={[ROOM_NO_ISSUE, ...ENV_TAGS]}
             value={environmentTags}
             onChange={setEnvironmentTags}
             required
-            help="Only choose a room factor if it negatively affected your sleep. If the room was cold but comfortable, choose 'No clear room issue'."
+            help="Was the room environment disturbing or affecting your sleep tonight? Only tick items that felt disruptive or contributed to wake-ups, discomfort, or unstable sleep."
           />
 
           <MultiCheckGroup
@@ -747,29 +725,7 @@ const canSaveNight = missingRequired.length === 0;
             required
             help="Choose what best describes your body state."
           />
-          <div style={{ marginTop: 18 }}>
-  <div className="sf-field-label">
-    Main sleep disruption tonight<span className="sf-req">*</span>
-  </div>
 
-  <div className="sf-help" style={{ marginBottom: 12 }}>
-    What affected your sleep the MOST tonight?
-  </div>
-
-  <select
-    className="sf-select"
-    value={primaryTrigger}
-    onChange={(e) => setPrimaryTrigger(e.target.value)}
-  >
-    <option value="">Select…</option>
-
-    {PRIMARY_TRIGGER_OPTIONS.map((v) => (
-      <option key={v} value={v}>
-        {v}
-      </option>
-    ))}
-  </select>
-</div>
         </div>
       </div>
 
