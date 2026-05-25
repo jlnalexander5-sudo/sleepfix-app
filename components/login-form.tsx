@@ -33,13 +33,27 @@ export function LoginForm({
     setError(null);
 
     try {
+      const cleanEmail = email.trim();
+
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: cleanEmail,
         password,
       });
+
       if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
+
+      // iOS/Safari can be slow to expose the freshly-created auth session.
+      // Confirm the session exists before routing into the protected app.
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+
+      if (!sessionData.session) {
+        throw new Error("Login succeeded, but the browser did not save the session. Please close Safari/Chrome, reopen it, and try again.");
+      }
+
+      router.replace("/protected/dashboard");
+      router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
@@ -66,6 +80,9 @@ export function LoginForm({
                   type="email"
                   placeholder="m@example.com"
                   required
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -84,6 +101,7 @@ export function LoginForm({
                   id="password"
                   type="password"
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
