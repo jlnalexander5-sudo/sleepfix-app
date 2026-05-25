@@ -89,7 +89,18 @@ const MENTAL_TAGS = [
   "Calm / quiet mind",
 ] as const;
 
-const ENV_TAGS = ["Hot", "cold", "noisy", "Quiet", "Bright", "Dark", "Humid", "Dry"] as const;
+const ROOM_NO_ISSUE = "No clear room issue";
+
+const ENV_TAGS = [
+  "Room too hot",
+  "Room too cold",
+  "Room too noisy",
+  "Room too bright",
+  "Room too humid",
+  "Room too dry",
+  "Room felt stuffy / poor airflow",
+  "Other room issue",
+] as const;
 
 const BED_TAGS = [
   "No bed / bedding issue",
@@ -428,6 +439,10 @@ export default function SleepPage() {
       const primaryDriver = drivers.find((d) => d !== "Nothing / none") ?? null;
       const extraDrivers = drivers.filter((d) => d !== primaryDriver && d !== "Nothing / none");
 
+      // Important: room/environment choices are now impact signals, not neutral observations.
+      // If the user says there was no clear room issue, do not send an environment driver to the engine.
+      const environmentIssueTags = environmentTags.includes(ROOM_NO_ISSUE) ? [] : environmentTags;
+
       const payload = {
         user_id: userId,
         sleep_start: startAt.toISOString(),
@@ -440,7 +455,7 @@ export default function SleepPage() {
         wake_ups_choice: wakeUpsChoice,
         wake_recovery_choice: wakeRecoveryChoice,
         mind_tags: [...emotionalTags, ...mentalTags],
-        environment_tags: environmentTags,
+        environment_tags: environmentIssueTags,
         bed_tags: bedTags,
         body_tags: bodyTags,
         primary_trigger: primaryTrigger,
@@ -487,7 +502,7 @@ if (!wakeUpsChoice) missingRequired.push("Wake Ups");
 if (!wakeRecoveryChoice) missingRequired.push("Total awake time after wake-ups");
 if (!emotionalTags || emotionalTags.length === 0) missingRequired.push("Emotional state");
 if (!mentalTags || mentalTags.length === 0) missingRequired.push("Mental state");
-if (!environmentTags || environmentTags.length === 0) missingRequired.push("Room environment");
+if (!environmentTags || environmentTags.length === 0) missingRequired.push("Room environment impact");
 if (!bedTags || bedTags.length === 0) missingRequired.push("Bed / bedding factor");
 if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body state");
 if (!primaryTrigger) missingRequired.push("Main sleep disruption");
@@ -707,12 +722,12 @@ const canSaveNight = missingRequired.length === 0;
           />
 
           <MultiCheckGroup
-            title="Room environment"
-            options={["Not sure / none", ...ENV_TAGS]}
+            title="Was the room environment an issue?"
+            options={[ROOM_NO_ISSUE, ...ENV_TAGS]}
             value={environmentTags}
             onChange={setEnvironmentTags}
             required
-            help="Choose what affected the room while you slept."
+            help="Only choose a room factor if it negatively affected your sleep. If the room was cold but comfortable, choose 'No clear room issue'."
           />
 
           <MultiCheckGroup
@@ -802,7 +817,7 @@ const canSaveNight = missingRequired.length === 0;
       </div>
 
       <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
-        {isSavingNight ? "Saving…" : saveNotice === "Saved" ? "Saved" : "Save night"}
+        {isSavingNight ? "Saving…" : saveNotice ? "Saved" : "Save night"}
       </button>
       {saveNotice && (
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#000080" }}>{saveNotice}</div>
