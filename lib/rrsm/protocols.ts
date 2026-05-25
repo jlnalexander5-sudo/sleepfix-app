@@ -15,6 +15,27 @@ export type RRSMProtocol = {
 const PROTOCOLS: RRSMProtocol[] = [
 
   {
+    id: "good-recovery-stability",
+    name: "Good recovery — keep current setup stable tonight.",
+    family: "Optimization",
+    oneLine: "No corrective protocol. Protect the conditions that worked.",
+    steps: [
+      "Repeat the same sleep setup tonight.",
+      "Avoid introducing new bedding, room, supplement, or schedule changes unless necessary.",
+      "Keep the room and bed conditions stable so SleepFix can confirm the pattern.",
+      "Log the next night normally so the app can detect whether recovery stays stable."
+    ],
+    avoid: [
+      "Do not start a corrective protocol just because one is available.",
+      "Do not change several variables after a good night.",
+      "Do not overcorrect temperature, bedding, or routine when recovery is already good."
+    ],
+    notes: [
+      "This is stability reinforcement mode: preserve the current setup rather than intervening."
+    ],
+  },
+
+  {
     id: "bed-heat-reduction",
     name: "Bed Heat Reduction Protocol",
     family: "Stabilization",
@@ -132,11 +153,12 @@ const PROTOCOLS: RRSMProtocol[] = [
     id: "maintain-routine",
     name: "Maintain Routine",
     family: "Optimization",
-    oneLine: "Repeat what’s working and aim for consistency.",
+    oneLine: "Repeat what’s working and avoid unnecessary corrections.",
     steps: [
       "Keep bedtime/wake time consistent.",
       "Repeat the same wind-down routine.",
-      "Keep the room environment stable."
+      "Keep the room and bed environment stable.",
+      "Do not add a corrective protocol unless the next night shows a real issue."
     ],
   }
 ];
