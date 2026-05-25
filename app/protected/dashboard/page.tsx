@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import RRSMInsightCard from "@/components/RRSMInsightCard";
 import { runRRSMEngineV2 } from "@/lib/rrsm/engine-v2";
+import { buildAdaptiveReminderState, type AdaptiveReminderState } from "@/lib/rrsm/adaptive-reminder";
 
 type NightRow = {
   night_id: string;
@@ -337,6 +338,7 @@ export default function DashboardPage() {
   const [rows, setRows] = useState<NightRow[]>([]);
   const [habitsByDate, setHabitsByDate] = useState<Record<string, DailyHabitRow>>({});
   const [habitsErr, setHabitsErr] = useState<string | null>(null);
+  const [adaptiveReminder, setAdaptiveReminder] = useState<AdaptiveReminderState | null>(null);
 
 
   const [insight, setInsight] = useState<RRSMInsight | null>(null);
@@ -352,6 +354,7 @@ export default function DashboardPage() {
       setUserId(uid);
       if (!uid) {
         setRows([]);
+        setAdaptiveReminder(null);
         setLoading(false);
         return;
       }
@@ -382,6 +385,7 @@ export default function DashboardPage() {
       if (error) {
         setErr(error.message);
         setRows([]);
+        setAdaptiveReminder(null);
         setLoading(false);
         return;
       }
@@ -416,6 +420,7 @@ const nextRows: NightRow[] = (data ?? []).map((r: any) => {
 });
 const uniqueRows = filterToLatest7CalendarDays(nextRows);
       setRows(uniqueRows);
+      setAdaptiveReminder(buildAdaptiveReminderState(nextRows));
 
       setLoading(false);
 
@@ -538,6 +543,26 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
           </div>
         </div>
       </div>
+
+
+      {!loading && userId && adaptiveReminder?.shouldShow ? (
+        <div
+          style={{
+            marginTop: 16,
+            border: "1px solid #c7d2fe",
+            borderRadius: 16,
+            background: "#eef2ff",
+            padding: 14,
+            color: "#1e1b4b",
+          }}
+        >
+          <div style={{ fontWeight: 900 }}>{adaptiveReminder.title}</div>
+          <div style={{ marginTop: 4 }}>{adaptiveReminder.message}</div>
+          <Link href="/protected/sleep" style={{ display: "inline-block", marginTop: 8, fontWeight: 800 }}>
+            Log sleep now →
+          </Link>
+        </div>
+      ) : null}
 
       {loading ? (
         <div style={{ marginTop: 18 }}>Loading…</div>
