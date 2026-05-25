@@ -1,137 +1,138 @@
-import Link from "next/link";
-import Head from "next/head";
-import Script from "next/script";
+"use client";
 
-export default function ProtectedLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+import React, { useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+const FEEDBACK_CATEGORIES = [
+  "Bug",
+  "Confusing result",
+  "Wrong protocol",
+  "Something missing",
+  "Suggestion",
+  "Other",
+];
+
+export default function FeedbackPage() {
+  const supabase = useMemo(() => createClient(), []);
+  const [category, setCategory] = useState("Suggestion");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submitFeedback() {
+    setSaving(true);
+    setSuccess(null);
+    setError(null);
+
+    const cleanMessage = message.trim();
+
+    if (cleanMessage.length < 5) {
+      setError("Please write a little more detail before sending.");
+      setSaving(false);
+      return;
+    }
+
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+
+    if (authErr || !authData?.user) {
+      setError(authErr?.message ?? "Not signed in.");
+      setSaving(false);
+      return;
+    }
+
+    const { error: insertErr } = await supabase.from("user_feedback").insert({
+      user_id: authData.user.id,
+      category,
+      message: cleanMessage,
+      page:
+        typeof window !== "undefined"
+          ? window.location.pathname
+          : "/protected/feedback",
+    });
+
+    if (insertErr) {
+      setError(insertErr.message);
+    } else {
+      setSuccess("Feedback sent. Thank you — this helps improve SleepFix.");
+      setMessage("");
+      setCategory("Suggestion");
+    }
+
+    setSaving(false);
+  }
+
   return (
-    <>
-      <Head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1d2dbf" />
-      </Head>
+    <main className="mx-auto max-w-3xl px-4 py-8">
+      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">
+        Feedback
+      </h1>
 
-      <Script id="sleepfixme-sw" strategy="afterInteractive">
-        {`
-          if ("serviceWorker" in navigator) {
-            window.addEventListener("load", function () {
-              navigator.serviceWorker.register("/sw.js").catch(function (err) {
-                console.error("SW registration failed:", err);
-              });
-            });
-          }
-        `}
-      </Script>
+      <p className="mt-2 text-base text-gray-600">
+        Tell us what felt confusing, wrong, annoying, missing, or useful. This
+        helps improve the SleepFix engine and user experience.
+      </p>
 
-      <div style={{ minHeight: "100vh", fontSize: "18px", lineHeight: 1.6 }}>
-        <header
-          style={{
-            borderBottom: "1px solid rgba(255,255,255,0.12)",
-            padding: "14px 16px",
-          }}
+      <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <label className="text-sm font-bold text-gray-700">
+          Type of feedback
+        </label>
+
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="mt-2 w-full rounded-xl border border-gray-300 bg-white p-3 text-base"
         >
-          <nav className="sf-topnav">
-            <a
-              href="/protected/dashboard"
-              className="sf-brand"
-              aria-label="SleepFixMe home"
-            >
-              SleepFixMe
-            </a>
+          {FEEDBACK_CATEGORIES.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
 
-            <div className="sf-links">
-              <Link href="/protected/dashboard" style={{ textDecoration: "none" }}>
-                Dashboard
-              </Link>
+        <label className="mt-5 block text-sm font-bold text-gray-700">
+          What should we know?
+        </label>
 
-              <span className="sf-sep">|</span>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Example: the protocol did not match my real issue, the wording was confusing, the app missed something, or I found a bug..."
+          className="mt-2 min-h-[150px] w-full rounded-xl border border-gray-300 p-3 text-base"
+        />
 
-              <Link href="/protected/habits" style={{ textDecoration: "none" }}>
-               Diary
-              </Link>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={submitFeedback}
+            disabled={saving || message.trim().length < 5}
+            className="rounded-xl bg-blue-900 px-5 py-3 font-bold text-white disabled:opacity-50"
+          >
+            {saving ? "Sending..." : "Send feedback"}
+          </button>
 
-              <span className="sf-sep">|</span>
+          {success ? (
+            <span className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-bold text-green-700">
+              {success}
+            </span>
+          ) : null}
 
-              <Link href="/protected/sleep" style={{ textDecoration: "none" }}>
-                Sleep
-              </Link>
-<span className="sf-sep">|</span>
+          {error ? (
+            <span className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-bold text-red-700">
+              {error}
+            </span>
+          ) : null}
+        </div>
+      </section>
 
-<Link href="/protected/protocols" style={{ textDecoration: "none" }}>
-  Protocols
-</Link>
-
-              <span className="sf-sep">|</span>
-
-              <Link href="/protected/profile" style={{ textDecoration: "none" }}>
-                Profile
-              </Link>
-
-              <span className="sf-sep">|</span>
-
-              <Link href="/protected/feedback" style={{ textDecoration: "none" }}>
-                Feedback
-              </Link>
-
-              <span className="sf-sep">|</span>
-
-              <Link href="/protected/faq" style={{ textDecoration: "none" }}>
-                FAQ
-              </Link>
-
-              <span className="sf-sep">|</span>
-
-              <Link href="/protected/admin" style={{ textDecoration: "none" }}>
-                Admin
-              </Link>
-            </div>
-          </nav>
-        </header>
-
-        <main style={{ maxWidth: 980, margin: "0 auto" }}>{children}</main>
-
-       <footer
-  style={{
-    maxWidth: 980,
-    margin: "0 auto",
-    padding: "22px 0 30px",
-    borderTop: "1px solid #d7d7d7",
-    fontSize: 14,
-    color: "#444",
-    fontWeight: 500,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 12,
-  }}
->
-          <div>
-            All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
-          </div>
-
-          <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/terms" style={{ textDecoration: "none" }}>
-              Terms
-            </Link>
-
-            <span>|</span>
-
-            <Link href="/privacy" style={{ textDecoration: "none" }}>
-              Privacy
-            </Link>
-
-            <span>|</span>
-
-            <Link href="/medical-disclaimer" style={{ textDecoration: "none" }}>
-              Medical Disclaimer
-            </Link>
-          </div>
-        </footer>
-      </div>
-    </>
+      <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5 text-sm text-gray-700">
+        <div className="font-bold text-gray-900">Why this matters</div>
+        <p className="mt-1">
+          SleepFix is being refined through real sleep records and real user
+          corrections. If the app misses something, that feedback helps identify
+          the next engine improvement.
+        </p>
+      </section>
+    </main>
   );
 }
