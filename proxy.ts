@@ -4,7 +4,9 @@ import { type NextRequest } from "next/server";
 export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }
-
+if (request.nextUrl.pathname.startsWith("/api/cron")) {
+  return NextResponse.next();
+}
 export const config = {
   matcher: [
     /*
