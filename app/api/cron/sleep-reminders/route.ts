@@ -207,13 +207,13 @@ export async function GET(req: Request) {
       checked: users.length,
       results,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { ok: false, error: err?.message ?? "Unexpected reminder error" },
-      { status: 500 },
-    );
+    } catch (err: any) {
+      return NextResponse.json(
+        { ok: false, error: err?.message ?? "Unexpected reminder error" },
+        { status: 500 },
+      );
+    }
   }
-}
 }
 
 export async function POST(req: Request) {
