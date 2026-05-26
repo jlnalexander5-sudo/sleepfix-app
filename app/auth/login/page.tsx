@@ -17,25 +17,31 @@ export default function LoginPage() {
     setLoading(true);
     setMsg("");
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: cleanEmail,
           password,
         });
         if (error) throw error;
         window.location.href = "/protected/dashboard";
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) throw error;
-        setMsg("Check your email to confirm your sign up.");
+        return;
       }
+
+      const emailRedirectTo = `${window.location.origin}/auth/callback?next=/protected/dashboard`;
+      const { error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: { emailRedirectTo },
+      });
+
+      if (error) throw error;
+
+      window.location.href = `/auth/sign-up-success?email=${encodeURIComponent(cleanEmail)}`;
     } catch (err: any) {
       setMsg(err?.message ?? "Something went wrong.");
-    } finally {
       setLoading(false);
     }
   }
@@ -76,6 +82,7 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 required
+                minLength={6}
               />
             </label>
 
