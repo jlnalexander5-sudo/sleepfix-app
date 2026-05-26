@@ -246,6 +246,24 @@ function hasGeneralBodyDiscomfortSignal(night: NightWithOptionalProtocol | undef
   ]);
 }
 
+function hasBodyPressureAdaptationSignal(night: NightWithOptionalProtocol | undefined) {
+  const text = `${joinedNightText(night as RRSMMetricsNight)} ${joinedBodyText(night)} ${joinedBedText(night)}`;
+  return lowerIncludes(text, [
+    "body discomfort",
+    "discomfort",
+    "pressure",
+    "compression",
+    "position",
+    "positional",
+    "mattress too hard",
+    "mattress too soft",
+    "new mattress",
+    "still adjusting",
+    "pillow / position",
+    "pillow / position issue",
+  ]);
+}
+
 
 function hasBedThermalSignal(night: NightWithOptionalProtocol | undefined) {
   const bedText = joinedBedText(night);
@@ -325,6 +343,8 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const wakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3;
   const bedThermalSignal = hasBedThermalSignal(night);
   const thermalSystemSignal = hasThermalSystemSignal(night);
+  const bodyPressureAdaptationSignal = hasBodyPressureAdaptationSignal(night);
+  const bodyPressureWakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3 && bodyPressureAdaptationSignal;
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
@@ -337,6 +357,7 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
 return Boolean(
   majorLatencyIssue ||
     (wakeIssue && wakeDamage.damageLevel !== "low") ||
+    bodyPressureWakeIssue ||
     maintenanceIssue ||
     prolongedWakeRecovery ||
     majorWakeRecovery ||
@@ -430,8 +451,12 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.body_physiology += 2;
   }
 
-  if (typeof night.wakeUps === "number" && night.wakeUps >= 3) {
-    scores.body_physiology += hasGeneralBodyDiscomfortSignal(night) && !hasDomsOrMuscleSorenessSignal(night) ? 0 : 1;
+  if (hasBodyPressureAdaptationSignal(night) && typeof night.wakeUps === "number" && night.wakeUps >= 3) {
+    // Repeated short wake-ups from pressure/position/new mattress are a real body/bed adaptation signal,
+    // but they are not DOMS and should not be routed into emotional downshift protocols.
+    scores.body_physiology += 3;
+  } else if (typeof night.wakeUps === "number" && night.wakeUps >= 3) {
+    scores.body_physiology += 1;
   }
 
   if (maintenanceIssue && scores.body_physiology > 0 && !hasThermalSystemSignal(night)) {
@@ -566,10 +591,12 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   }
 
   if (adaptation.state === "new_setup_adaptation" || adaptation.state === "active_self_correction") {
-    scores.environment += 2;
-
-    if (!lowerIncludes(combinedText, ["pain", "sore", "doms", "inflamed", "inflammation"])) {
-      scores.body_physiology = Math.max(0, scores.body_physiology - 1);
+    // New mattress/pillow adjustment is primarily a setup-adaptation signal.
+    // If pressure/position discomfort is present, keep it in body physiology rather than draining it into environment.
+    if (hasBodyPressureAdaptationSignal(night)) {
+      scores.body_physiology += 2;
+    } else {
+      scores.environment += 2;
     }
   }
 
@@ -599,6 +626,12 @@ function chooseDominantCategory(
   );
 
   if (maxScore <= 0) return "none";
+
+  // Repeated pressure/position/new-mattress wake-ups should win over generic mind/emotional routing.
+  // Example: frequent wake-ups with quick return to sleep from compression or hard-bed adaptation.
+  if (night && hasBodyPressureAdaptationSignal(night) && scores.body_physiology >= Math.max(scores.mind_emotional, scores.environment - 1, 3)) {
+    return "body_physiology";
+  }
 
   // Bed / bedding thermal disruption should win over generic body discomfort.
   // Example: user wakes repeatedly because mattress/blankets create heat/cold instability.
@@ -660,6 +693,7 @@ function protocolForCategory(category: RRSMContributorCategory, scores: ReturnTy
       return mindProtocolForNight(night);
     case "body_physiology":
       if (hasDomsOrMuscleSorenessSignal(night)) return "RRSM Body Recovery Protocol";
+      if (hasBodyPressureAdaptationSignal(night)) return "Body Pressure / Position Adaptation Protocol";
       if (
         night &&
         lowerIncludes(`${joinedNightText(night)} ${joinedBodyText(night)}`, [
@@ -671,7 +705,7 @@ function protocolForCategory(category: RRSMContributorCategory, scores: ReturnTy
       ) {
         return "RRSM Body Recovery Protocol";
       }
-      return "RRSM Body Downshift Protocol";
+      return "Body Pressure / Position Adaptation Protocol";
     case "environment": {
       const thermalProtocol = protocolForThermalSource(classifyThermalSource(night).source);
       return thermalProtocol ?? "Sleep Environment Reset Protocol";
@@ -728,6 +762,10 @@ function detailedReasonForLatestNight(category: RRSMContributorCategory, latestN
       return "SleepFix detected heat/humidity-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is thermal stability without overcooling the body.";
     }
     return "SleepFix detected room-related sleep maintenance disruption: repeated wake-ups plus longer awake time after waking. The main target is removing the room factor that kept reactivating you.";
+  }
+
+  if (category === "body_physiology" && wakeUps >= 3 && hasBodyPressureAdaptationSignal(latestNight) && (!wakeRecovery || wakeRecovery < 15)) {
+    return "SleepFix detected body pressure / position-related wake-ups with preserved return-to-sleep. The target is adapting the bed, pillow, and body position gently without treating this as emotional activation or severe fragmentation.";
   }
 
   if (category === "body_physiology" && wakeUps >= 2 && typeof wakeRecovery === "number" && wakeRecovery >= 15) {
@@ -1092,9 +1130,10 @@ function classifyWakeDamage(night: NightWithOptionalProtocol | undefined): RRSMW
   const estimatedAwake = time.estimatedAwakeMin;
   const efficiency = time.sleepEfficiencyPct;
 
-  const goodRecovery =
-    (quality !== null && quality >= 7) ||
-    (efficiency !== null && efficiency >= 85);
+  const preservedRecovery =
+    (quality !== null && quality >= 7) &&
+    (efficiency === null || efficiency >= 85) &&
+    (estimatedAwake === null || estimatedAwake <= 45);
 
   if (wakeUps <= 1 && (estimatedAwake === null || estimatedAwake < 30)) {
     return {
@@ -1104,28 +1143,28 @@ function classifyWakeDamage(night: NightWithOptionalProtocol | undefined): RRSMW
     };
   }
 
-  if (
-    wakeUps >= 3 &&
-    typeof estimatedAwake === "number" &&
-    estimatedAwake <= 45 &&
-    goodRecovery
-  ) {
+  if (wakeUps >= 3 && preservedRecovery) {
     return {
       wakeType: "frequent_short_wakes",
       damageLevel: "low",
       summary:
-        "Wake damage: low. You had frequent wake-ups, but total awake time stayed low and recovery appears preserved. This is different from severe insomnia-style fragmentation.",
+        "Wake damage: low. Wake-ups were frequent, but total awake time stayed low, sleep efficiency stayed preserved, and recovery quality remained acceptable. This is fragmentation, but not destructive fragmentation.",
     };
   }
 
-  if (
-    typeof estimatedAwake === "number" &&
-    estimatedAwake >= 60 &&
-    wakeUps < 5
-  ) {
+  if (wakeUps >= 3 && typeof estimatedAwake === "number" && estimatedAwake <= 45 && (efficiency === null || efficiency >= 85)) {
+    return {
+      wakeType: "frequent_short_wakes",
+      damageLevel: quality !== null && quality <= 6 ? "moderate" : "low",
+      summary:
+        "Wake damage: low-to-moderate. The night had frequent wake-ups, but the fast return-to-sleep and preserved efficiency reduce the damage score.",
+    };
+  }
+
+  if (typeof estimatedAwake === "number" && estimatedAwake >= 60) {
     return {
       wakeType: "long_awake_after_waking",
-      damageLevel: estimatedAwake >= 120 ? "high" : "moderate",
+      damageLevel: estimatedAwake >= 120 || (efficiency !== null && efficiency < 80) ? "high" : "moderate",
       summary:
         "Wake damage: moderate. The main problem is not just waking up, but staying awake after waking.",
     };
@@ -1134,7 +1173,6 @@ function classifyWakeDamage(night: NightWithOptionalProtocol | undefined): RRSMW
   if (
     wakeUps >= 5 &&
     (
-      (typeof estimatedAwake === "number" && estimatedAwake >= 60) ||
       (efficiency !== null && efficiency < 80) ||
       (quality !== null && quality <= 6)
     )
@@ -1143,7 +1181,7 @@ function classifyWakeDamage(night: NightWithOptionalProtocol | undefined): RRSMW
       wakeType: "destructive_fragmentation",
       damageLevel: "high",
       summary:
-        "Wake damage: high. Frequent wake-ups combined with longer awake time, lower efficiency, or poorer recovery suggest destructive sleep fragmentation.",
+        "Wake damage: high. Frequent wake-ups combined with lower efficiency or poorer recovery suggest destructive sleep fragmentation.",
     };
   }
 
@@ -1151,10 +1189,9 @@ function classifyWakeDamage(night: NightWithOptionalProtocol | undefined): RRSMW
     wakeType: wakeUps >= 3 ? "frequent_short_wakes" : "unknown",
     damageLevel: "moderate",
     summary:
-      "Wake damage: mixed. Wake-ups were present, but SleepFix needs more signal to separate harmless position changes from disruptive fragmentation.",
+      "Wake damage: mixed. Wake-ups were present, but SleepFix weighs them against total awake time, efficiency, and recovery before treating them as severe.",
   };
 }
-
 
 function classifyAdaptationAndCompensation(night: NightWithOptionalProtocol | undefined): {
   state: RRSMAdaptationState;
@@ -1722,7 +1759,14 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
       : 20
   );
 
-  const wakePenalty = wakeUps * 12;
+  const preservedWakeRecovery =
+    wakeDamage.damageLevel === "low" &&
+    (timeInterpretation.sleepEfficiencyPct === null || timeInterpretation.sleepEfficiencyPct >= 85) &&
+    (quality === null || quality >= 7);
+
+  // Wake-ups are not all equal. Five quick position-change wake-ups with 0–5 min awake time
+  // should not score like five destructive insomnia awakenings.
+  const wakePenalty = preservedWakeRecovery ? wakeUps * 4 : wakeUps * 12;
   const recoveryPenalty =
     wakeRecovery === null
       ? 0
@@ -1733,17 +1777,20 @@ function calculateSleepDimensions(night: NightWithOptionalProtocol | undefined):
       : wakeRecovery >= 15
       ? 20
       : wakeRecovery >= 5
-      ? 8
+      ? (preservedWakeRecovery ? 2 : 8)
       : 0;
 
-  const wakeMaintenance = clamp100(100 - wakePenalty - recoveryPenalty);
+  const efficiencyPenalty =
+    timeInterpretation.sleepEfficiencyPct !== null && timeInterpretation.sleepEfficiencyPct < 85 ? 15 : 0;
+
+  const wakeMaintenance = clamp100(100 - wakePenalty - recoveryPenalty - efficiencyPenalty);
 
   const sleepStability = clamp100(
     100 -
-      (latency !== null && latency >= 30 ? 18 : 0) -
-      (wakeDamage.damageLevel === "low" ? Math.round(wakePenalty * 0.35) : wakePenalty) -
-      (wakeDamage.damageLevel === "low" ? Math.round(recoveryPenalty * 0.35) : recoveryPenalty) -
-      (timeInterpretation.sleepEfficiencyPct !== null && timeInterpretation.sleepEfficiencyPct < 85 ? 15 : 0)
+      (latency !== null && latency >= 45 ? 18 : latency !== null && latency >= 30 ? 10 : 0) -
+      wakePenalty -
+      recoveryPenalty -
+      efficiencyPenalty
   );
 
   const thermalSystem = classifyThermalSystem(night);
