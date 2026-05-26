@@ -30,6 +30,7 @@ export function SignUpForm({
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const supabase = createClient();
+    const cleanEmail = email.trim().toLowerCase();
     setIsLoading(true);
     setError(null);
 
@@ -40,15 +41,14 @@ export function SignUpForm({
     }
 
     try {
+      const emailRedirectTo = `${window.location.origin}/auth/callback?next=/protected/dashboard`;
       const { error } = await supabase.auth.signUp({
-        email,
+        email: cleanEmail,
         password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
-        },
+        options: { emailRedirectTo },
       });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
+      router.push(`/auth/sign-up-success?email=${encodeURIComponent(cleanEmail)}`);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
@@ -75,35 +75,36 @@ export function SignUpForm({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
                 />
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                </div>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
                   required
+                  minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
                 />
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
-                </div>
+                <Label htmlFor="repeat-password">Repeat Password</Label>
                 <Input
                   id="repeat-password"
                   type="password"
                   required
+                  minLength={6}
                   value={repeatPassword}
                   onChange={(e) => setRepeatPassword(e.target.value)}
+                  autoComplete="new-password"
                 />
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
+                {isLoading ? "Creating account..." : "Sign up"}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">
