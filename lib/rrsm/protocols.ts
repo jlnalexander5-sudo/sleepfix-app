@@ -54,6 +54,28 @@ const PROTOCOLS: RRSMProtocol[] = [
     ],
   },
   {
+    id: "body-pressure-position-adaptation",
+    name: "Body Pressure / Position Adaptation Protocol",
+    family: "Stabilization",
+    oneLine: "Reduce pressure and position-triggered wake-ups while the body adapts to the bed setup.",
+    steps: [
+      "Keep the hard-bed setup stable tonight; do not change several variables at once.",
+      "Before sleep, test one small position adjustment that reduces compression without removing the support you want.",
+      "Use a thin targeted layer only where pressure is sharp, rather than softening the whole bed.",
+      "If you wake from compression, change position calmly and return to sleep without starting a full reset routine.",
+      "Track whether wake-ups are brief or whether they turn into long awake periods."
+    ],
+    avoid: [
+      "Do not treat brief position-change wake-ups as emotional activation.",
+      "Do not abandon the bed adaptation after one fragmented but efficient night.",
+      "Do not add heavy cushioning everywhere if the hard-bed warmth/support is intentional."
+    ],
+    notes: [
+      "Use this when wake-ups are caused by pressure, compression, mattress hardness, pillow/position issues, or new-bed adaptation with fast return to sleep."
+    ],
+  },
+
+  {
     id: "bed-thermal-retention",
     name: "Bed Thermal Retention Protocol",
     family: "Stabilization",
