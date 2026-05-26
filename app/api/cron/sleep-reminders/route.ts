@@ -7,9 +7,6 @@ import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import { buildAdaptiveReminderState, toLocalYMD } from "@/lib/rrsm/adaptive-reminder";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 type NightRow = {
   created_at: string | null;
   local_date: string | null;
