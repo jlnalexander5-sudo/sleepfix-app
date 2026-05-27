@@ -18,7 +18,13 @@ type AuthUser = {
   created_at?: string;
 };
 
-const REMINDER_TIME_ZONE = "Australia/Sydney";
+type ReminderPreferenceRow = {
+  enabled: boolean | null;
+  max_emails_per_day: number | null;
+  timezone: string | null;
+};
+
+const DEFAULT_TIMEZONE = "UTC";
 
 function requiredEnv(name: string) {
   const value = process.env[name];
@@ -40,9 +46,23 @@ function htmlEscape(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+function isValidTimeZone(timezone: string | null | undefined) {
+  if (!timezone) return false;
+  try {
+    new Intl.DateTimeFormat("en-AU", { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function fallbackTimezone() {
+  return process.env.SLEEPFIX_DEFAULT_TIMEZONE || DEFAULT_TIMEZONE;
+}
+
 function buildEmailHtml(opts: { appUrl: string; expectedWindowLabel: string | null }) {
   const windowLine = opts.expectedWindowLabel
-    ? `<p style="margin:0 0 16px;color:#333;">You usually log <strong>${htmlEscape(opts.expectedWindowLabel)}</strong>. No sleep entry is saved for today yet.</p>`
+    ? `<p style="margin:0 0 16px;color:#333;">You usually log around <strong>${htmlEscape(opts.expectedWindowLabel)}</strong>. No sleep entry is saved for today yet.</p>`
     : `<p style="margin:0 0 16px;color:#333;">No sleep entry is saved for today yet.</p>`;
 
   return `
@@ -87,7 +107,7 @@ async function sendReminderEmail(opts: {
     to: opts.to,
     subject: "SleepFixMe reminder: log last night's sleep",
     text: opts.expectedWindowLabel
-      ? `You usually log ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
+      ? `You usually log around ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
       : `No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`,
     html: buildEmailHtml({ appUrl, expectedWindowLabel: opts.expectedWindowLabel }),
   });
@@ -111,8 +131,6 @@ export async function GET(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const todayYMD = toLocalYMD(startedAt, REMINDER_TIME_ZONE);
-
     const { data: usersResp, error: usersErr } = await supabase.auth.admin.listUsers({
       page: 1,
       perPage: 1000,
@@ -121,16 +139,17 @@ export async function GET(req: Request) {
     if (usersErr) throw usersErr;
 
     const users = (usersResp.users ?? []) as AuthUser[];
-
     const results: Array<{
       user_id: string;
       email: string;
-      action: "sent" | "not_due" | "skipped" | "error";
+      action: string;
       reason?: string;
+      timezone?: string;
+      todayYMD?: string;
       expectedWindowLabel?: string | null;
       minutesLate?: number | null;
       sampleSize?: number;
-      confidence?: string;
+      loggedToday?: boolean;
     }> = [];
 
     for (const user of users) {
@@ -138,9 +157,9 @@ export async function GET(req: Request) {
 
       const { data: pref, error: prefErr } = await supabase
         .from("sleep_reminder_preferences")
-        .select("enabled,max_emails_per_day")
+        .select("enabled,max_emails_per_day,timezone")
         .eq("user_id", user.id)
-        .maybeSingle();
+        .maybeSingle<ReminderPreferenceRow>();
 
       if (prefErr) {
         results.push({ user_id: user.id, email: user.email, action: "skipped", reason: prefErr.message });
@@ -152,16 +171,24 @@ export async function GET(req: Request) {
         continue;
       }
 
-      const { data: existingLog } = await supabase
+      const timezone = isValidTimeZone(pref?.timezone) ? String(pref?.timezone) : fallbackTimezone();
+      const todayYMD = toLocalYMD(startedAt, timezone);
+
+      const { data: existingLogs, error: logErr } = await supabase
         .from("sleep_reminder_logs")
-        .select("id,status")
+        .select("id")
         .eq("user_id", user.id)
         .eq("reminder_date", todayYMD)
-        .eq("status", "sent")
-        .maybeSingle();
+        .limit(pref?.max_emails_per_day ?? 1);
 
-      if (existingLog?.id) {
-        results.push({ user_id: user.id, email: user.email, action: "skipped", reason: "already_sent_today" });
+      if (logErr) {
+        results.push({ user_id: user.id, email: user.email, action: "skipped", reason: logErr.message, timezone, todayYMD });
+        continue;
+      }
+
+      const maxEmails = pref?.max_emails_per_day ?? 1;
+      if ((existingLogs ?? []).length >= maxEmails) {
+        results.push({ user_id: user.id, email: user.email, action: "skipped", reason: "already_sent_today", timezone, todayYMD });
         continue;
       }
 
@@ -173,25 +200,23 @@ export async function GET(req: Request) {
         .limit(30);
 
       if (nightsErr) {
-        results.push({ user_id: user.id, email: user.email, action: "skipped", reason: nightsErr.message });
+        results.push({ user_id: user.id, email: user.email, action: "skipped", reason: nightsErr.message, timezone, todayYMD });
         continue;
       }
 
-      const reminder = buildAdaptiveReminderState(
-        (nights ?? []) as NightRow[],
-        startedAt,
-        REMINDER_TIME_ZONE,
-      );
+      const reminder = buildAdaptiveReminderState((nights ?? []) as NightRow[], startedAt, timezone);
 
       if (!reminder.shouldShow) {
         results.push({
           user_id: user.id,
           email: user.email,
           action: "not_due",
+          timezone,
+          todayYMD: reminder.todayYMD,
           expectedWindowLabel: reminder.expectedWindowLabel,
           minutesLate: reminder.minutesLate,
           sampleSize: reminder.sampleSize,
-          confidence: reminder.confidence,
+          loggedToday: reminder.loggedToday,
         });
         continue;
       }
@@ -204,7 +229,7 @@ export async function GET(req: Request) {
 
         await supabase.from("sleep_reminder_logs").insert({
           user_id: user.id,
-          reminder_date: todayYMD,
+          reminder_date: reminder.todayYMD,
           expected_window_label: reminder.expectedWindowLabel,
           minutes_late: reminder.minutesLate,
           email_to: user.email,
@@ -215,15 +240,17 @@ export async function GET(req: Request) {
           user_id: user.id,
           email: user.email,
           action: "sent",
+          timezone,
+          todayYMD: reminder.todayYMD,
           expectedWindowLabel: reminder.expectedWindowLabel,
           minutesLate: reminder.minutesLate,
           sampleSize: reminder.sampleSize,
-          confidence: reminder.confidence,
+          loggedToday: reminder.loggedToday,
         });
       } catch (err: any) {
         await supabase.from("sleep_reminder_logs").insert({
           user_id: user.id,
-          reminder_date: todayYMD,
+          reminder_date: reminder.todayYMD,
           expected_window_label: reminder.expectedWindowLabel,
           minutes_late: reminder.minutesLate,
           email_to: user.email,
@@ -236,19 +263,25 @@ export async function GET(req: Request) {
           email: user.email,
           action: "error",
           reason: err?.message ?? "Unknown error",
+          timezone,
+          todayYMD: reminder.todayYMD,
           expectedWindowLabel: reminder.expectedWindowLabel,
           minutesLate: reminder.minutesLate,
           sampleSize: reminder.sampleSize,
-          confidence: reminder.confidence,
+          loggedToday: reminder.loggedToday,
         });
       }
     }
 
+    const summary = results.reduce<Record<string, number>>((acc, row) => {
+      acc[row.action] = (acc[row.action] ?? 0) + 1;
+      return acc;
+    }, {});
+
     return NextResponse.json({
       ok: true,
       checked: users.length,
-      timezone: REMINDER_TIME_ZONE,
-      todayYMD,
+      summary,
       results,
     });
   } catch (err: any) {
