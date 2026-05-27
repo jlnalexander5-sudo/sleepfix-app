@@ -333,7 +333,7 @@ export default function AdminPage() {
     <div style={{ width: "100%", maxWidth: 1200, margin: "0 auto", padding: "28px 18px" }}>
       <h1 style={{ fontSize: 34, fontWeight: 900, color: "var(--sf-brand)" }}>Admin Intelligence</h1>
       <p style={{ marginTop: 6, color: "#555" }}>
-        Platform-level sleep-pattern and protocol-use view. Current version uses sleep_nights records only.
+        Calibration and pattern-observation console for SleepFix interpretation systems. Current version uses sleep_nights records only.
       </p>
 
       {error ? <div style={{ marginTop: 18, color: "#b00020", fontWeight: 700 }}>{error}</div> : null}
