@@ -1,10 +1,14 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client"; 
+import { createClient } from "@/lib/supabase/client";
 import { runRRSMEngineV4, type RRSMProtocolResult } from "@/lib/rrsm/engine-v4";
 import type { RRSMMetricsNight } from "@/lib/rrsm/engine-v2";
-import { getStandardProtocolByTitle, getEscalatedProtocolForTitle, type SleepFixProtocol } from "@/lib/protocols";
+import {
+  getStandardProtocolByTitle,
+  getEscalatedProtocolForTitle,
+  type SleepFixProtocol,
+} from "@/lib/protocols";
 
 type SleepNightRow = {
   id: string;
@@ -28,22 +32,16 @@ type SleepNightRow = {
   protocol_followed?: string | null;
 };
 
-
-function parseLatency(choice: string | null): number | null {
+function parseNumberChoice(choice: string | null): number | null {
   if (!choice) return null;
   const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
   return Number.isFinite(n) ? n : null;
 }
-
-function parseWakeUps(choice: string | null): number | null {
-  if (!choice) return null;
-  const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
-  return Number.isFinite(n) ? n : null;
-}
-
 
 function deriveDurationMin(row: SleepNightRow): number | null {
-  if (typeof row.duration_min === "number" && Number.isFinite(row.duration_min)) return row.duration_min;
+  if (typeof row.duration_min === "number" && Number.isFinite(row.duration_min)) {
+    return row.duration_min;
+  }
 
   if (row.sleep_start && row.sleep_end) {
     const start = new Date(row.sleep_start).getTime();
@@ -56,23 +54,14 @@ function deriveDurationMin(row: SleepNightRow): number | null {
   return null;
 }
 
-function formatHours(min: number | null | undefined) {
-  if (typeof min !== "number" || !Number.isFinite(min)) return "—";
-  return `${Math.round((min / 60) * 10) / 10}h`;
-}
-
-
 function parseWakeRecovery(choice: string | null | undefined): number | null {
   if (!choice) return null;
-
   const cleaned = choice.toLowerCase().trim();
-
   if (cleaned.includes("0-5")) return 5;
   if (cleaned.includes("5-15")) return 15;
   if (cleaned.includes("15-30")) return 30;
   if (cleaned.includes("30-60")) return 60;
   if (cleaned.includes("60+")) return 90;
-
   const n = parseInt(cleaned.replace(/[^0-9]/g, ""), 10);
   return Number.isFinite(n) ? n : null;
 }
@@ -109,8 +98,8 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
   return {
     dateKey: row.local_date ?? row.created_at?.slice(0, 10),
     quality: row.sleep_quality == null ? null : Number(row.sleep_quality),
-    latencyMin: parseLatency(row.sleep_latency_choice),
-    wakeUps: parseWakeUps(row.wake_ups_choice),
+    latencyMin: parseNumberChoice(row.sleep_latency_choice),
+    wakeUps: parseNumberChoice(row.wake_ups_choice),
     durationMin: deriveDurationMin(row),
     wakeRecoveryMin: parseWakeRecovery(row.wake_recovery_choice),
     primaryTrigger: row.primary_trigger ?? null,
@@ -127,9 +116,9 @@ function prettyCategory(category: string) {
     case "body_physiology":
       return "Body / physiology activation";
     case "environment":
-      return "Room temperature / environment disruption";
+      return "Room / bed environment disruption";
     case "sleep_hygiene":
-      return "Personal sleep-hygiene disruption";
+      return "Sleep-rhythm habit disruption";
     case "circadian_context":
       return "Timing / life-context limitation";
     default:
@@ -137,159 +126,12 @@ function prettyCategory(category: string) {
   }
 }
 
-
-function prettyWakeCause(cause: string) {
-  switch (cause) {
-    case "thermal_bed":
-      return "Bed / bedding thermal disruption";
-    case "room_environment":
-      return "Room environment";
-    case "body_discomfort":
-      return "Body discomfort / physiology";
-    case "mental_reactivation":
-      return "Mental reactivation";
-    case "emotional_activation":
-      return "Emotional activation";
-    case "sleep_hygiene":
-      return "Sleep hygiene / habits";
-    case "circadian_timing":
-      return "Timing / life-context";
-    default:
-      return "Unknown / still learning";
-  }
-}
-
-
-function prettyThermalSystem(state: string) {
-  switch (state) {
-    case "heat_load":
-      return "Heat load";
-    case "cold_exposure":
-      return "Cold exposure";
-    case "thermal_oscillation":
-      return "Hot/cold oscillation";
-    case "mixed_or_unclear":
-      return "Mixed or unclear";
-    default:
-      return "No strong thermal signal";
-  }
-}
-
-
-
-function prettyThermalSource(source: string) {
-  switch (source) {
-    case "bed_heat":
-      return "Bed / bedding heat";
-    case "bed_cold":
-      return "Bed / bedding cold";
-    case "room_heat":
-      return "Hot room";
-    case "room_cold":
-      return "Cold room";
-    case "mixed_thermal":
-      return "Mixed thermal signal";
-    default:
-      return "No clear thermal source";
-  }
-}
-
-function prettyAdaptationState(state: string) {
-  switch (state) {
-    case "new_setup_adaptation":
-      return "New setup adaptation";
-    case "active_self_correction":
-      return "Active self-correction";
-    case "overcorrection":
-      return "Possible overcorrection";
-    case "unresolved_instability":
-      return "Unresolved instability";
-    default:
-      return "No clear adaptation signal";
-  }
-}
-
-
-function prettyWakeDamageType(type: string) {
-  switch (type) {
-    case "few_wakes":
-      return "Few wake-ups";
-    case "frequent_short_wakes":
-      return "Frequent short wake-ups";
-    case "long_awake_after_waking":
-      return "Long awake after waking";
-    case "destructive_fragmentation":
-      return "Destructive fragmentation";
-    default:
-      return "Unknown";
-  }
-}
-
-function evaluationText(value: RRSMProtocolResult["protocolEvaluation"]) {
-  switch (value) {
-    case "case_a_working":
-      return "Case A: the protocol appears to be helping.";
-    case "case_b_hidden_factor":
-      return "Case B: protocol was followed but sleep did not improve; another factor may be present.";
-    case "case_c_not_followed":
-      return "Case C: protocol was not fully followed, so effectiveness cannot be judged yet.";
-    default:
-      return "Not enough data yet to judge whether the protocol worked.";
-  }
-}
-
-
-function DimensionBox({
-  label,
-  score,
-  status,
-}: {
-  label: string;
-  score: number;
-  status: string;
-}) {
+function cleanReason(result: RRSMProtocolResult) {
   return (
-    <div className="rounded-xl border border-gray-200 p-3">
-      <div className="text-sm font-bold text-gray-500">{label}</div>
-      <div className="mt-1 text-xl font-extrabold text-gray-900">{score}/100</div>
-      <div className="mt-1 text-sm font-semibold text-gray-700">{status}</div>
-    </div>
+    result.protocolReason ||
+    result.userSummary ||
+    "SleepFix selected this protocol from your recent sleep pattern."
   );
-}
-
-function statusFor(score: number, good: string, mid: string, low: string) {
-  if (score >= 75) return good;
-  if (score >= 50) return mid;
-  return low;
-}
-
-function simpleStatus(score: number, good: string, mid: string, low: string) {
-  if (score >= 75) return good;
-  if (score >= 50) return mid;
-  return low;
-}
-
-function getStabilityHeadline(result: RRSMProtocolResult) {
-  const d = result.sleepDimensions;
-  if (!d) return result.sleepIssueDetected ? "Sleep issue detected" : "No strong sleep issue detected";
-
-  const recovery = simpleStatus(d.sleepRecovery, "Good recovery", "Mixed recovery", "Low recovery");
-  const stability = simpleStatus(d.sleepStability, "stable night", "mixed night", "unstable night");
-
-  return `${recovery}, ${stability}`;
-}
-
-function getStabilitySentence(result: RRSMProtocolResult) {
-  const d = result.sleepDimensions;
-  if (!d) return result.userSummary ?? result.protocolReason;
-
-  const recovery = simpleStatus(d.sleepRecovery, "good", "mixed", "low");
-  const nightStability = simpleStatus(d.sleepStability, "stable", "mixed", "unstable");
-  const wakeMaintenance = simpleStatus(d.wakeMaintenance, "stable", "disrupted", "strongly disrupted");
-  const thermal = simpleStatus(d.thermalStability, "stable", "mixed", "unstable");
-  const onset = simpleStatus(d.sleepOnset, "settled", "delayed", "strongly delayed");
-
-  return `Your recovery looks ${recovery}, but the night pattern was ${nightStability}. Wake maintenance was ${wakeMaintenance}, thermal stability was ${thermal}, and sleep onset was ${onset}.`;
 }
 
 export default function ProtocolsPage() {
@@ -323,7 +165,9 @@ export default function ProtocolsPage() {
 
       const { data, error: rowsErr } = await supabase
         .from("sleep_nights")
-        .select("id,local_date,created_at,sleep_start,sleep_end,duration_min,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed")
+        .select(
+          "id,local_date,created_at,sleep_start,sleep_end,duration_min,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed",
+        )
         .eq("user_id", authData.user.id)
         .order("local_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -339,16 +183,13 @@ export default function ProtocolsPage() {
 
       const rows = (data ?? []) as SleepNightRow[];
       const latestRow = rows[0] ?? null;
-
-      const mapped = [...rows]
-        .reverse()
-        .map((row) => mapNight(row as SleepNightRow));
+      const mapped = [...rows].reverse().map((row) => mapNight(row));
       const protocolResult = runRRSMEngineV4(mapped);
 
       if (!cancelled) {
         setNightCount(mapped.length);
-        setResult(protocolResult);
         setLatestNightRow(latestRow);
+        setResult(protocolResult);
         setAccuracyFeedback(null);
         setMissingDetail("");
         setFeedbackMessage(null);
@@ -363,7 +204,6 @@ export default function ProtocolsPage() {
     };
   }, [supabase]);
 
-
   async function saveEngineFeedback(userAgreed: boolean, missingReasonOverride?: string) {
     if (!result) return;
 
@@ -372,7 +212,6 @@ export default function ProtocolsPage() {
     setFeedbackMessage(null);
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
-
     if (authErr || !authData?.user) {
       setFeedbackError(authErr?.message ?? "Not signed in.");
       setFeedbackSaving(false);
@@ -384,28 +223,30 @@ export default function ProtocolsPage() {
         ? missingReasonOverride.trim()
         : missingDetail.trim();
 
-    const { error: insertErr } = await supabase
-      .from("sleep_engine_feedback")
-      .insert({
-        user_id: authData.user.id,
-        sleep_night_id: latestNightRow?.id ?? null,
-        local_date: latestNightRow?.local_date ?? null,
-        engine_category: result.dominantCategory,
-        engine_protocol: result.recommendedProtocol,
-        user_agreed: userAgreed,
-        missing_reason: userAgreed ? null : missingReason || null,
-      });
+    const { error: insertErr } = await supabase.from("sleep_engine_feedback").insert({
+      user_id: authData.user.id,
+      sleep_night_id: latestNightRow?.id ?? null,
+      local_date: latestNightRow?.local_date ?? null,
+      engine_category: result.dominantCategory,
+      engine_protocol: result.recommendedProtocol,
+      user_agreed: userAgreed,
+      missing_reason: userAgreed ? null : missingReason || null,
+    });
 
     if (insertErr) {
       setFeedbackError(insertErr.message);
     } else {
-      setFeedbackMessage(userAgreed ? "Feedback saved: this matched." : "Feedback saved: missing factor recorded.");
+      setFeedbackMessage(
+        userAgreed
+          ? "Feedback saved: this matched."
+          : "Feedback saved: missing factor recorded.",
+      );
     }
 
     setFeedbackSaving(false);
   }
 
-  const protocol: SleepFixProtocol | null = useMemo(() => {
+  const standardProtocol: SleepFixProtocol | null = useMemo(() => {
     if (!result) return null;
     return getStandardProtocolByTitle(result.recommendedProtocol);
   }, [result]);
@@ -415,13 +256,14 @@ export default function ProtocolsPage() {
     return getEscalatedProtocolForTitle(result.recommendedProtocol);
   }, [result]);
 
-  const displayProtocol = escalatedProtocol ?? protocol;
+  const displayProtocol = escalatedProtocol ?? standardProtocol;
+  const protocolPaused = accuracyFeedback === "no";
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Tonight&apos;s Protocol</h1>
       <p className="mt-2 text-base text-gray-600">
-        SleepFix analyses your recent sleep patterns to recommend the best protocol for tonight.
+        One focused action for tonight. Detailed scores and trends live in Results.
       </p>
 
       {loading ? (
@@ -448,224 +290,47 @@ export default function ProtocolsPage() {
       {result && nightCount > 0 && displayProtocol ? (
         <>
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">SleepFix summary</div>
-            <h2 className="mt-2 text-2xl font-bold text-blue-900">
-              {getStabilityHeadline(result)}
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">
+              Focus for tonight
+            </div>
+
+            <h2 className="mt-2 text-2xl font-extrabold text-blue-900">
+              {displayProtocol.title}
             </h2>
 
-            <div className="mt-4 rounded-xl bg-blue-50 p-4 text-base text-blue-900">
-              {getStabilitySentence(result)}
+            {escalatedProtocol ? (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-bold">Deeper protocol</div>
+                <div className="mt-1">
+                  SleepFix is showing the deeper version because the issue appears recurring or unresolved.
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-blue-950">
+              <div className="text-sm font-bold uppercase tracking-wide text-blue-700">
+                Pattern being addressed
+              </div>
+              <div className="mt-1 text-lg font-extrabold">
+                {prettyCategory(result.dominantCategory)}
+              </div>
+              <div className="mt-2 text-sm leading-relaxed">
+                {cleanReason(result)}
+              </div>
             </div>
-
-            {result.timeInterpretation ? (
-              <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50 p-4">
-                <div className="text-sm font-bold uppercase tracking-wide text-cyan-700">
-                  Time interpretation
-                </div>
-
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <div className="text-sm font-bold text-cyan-800">In bed</div>
-                    <div className="text-lg font-extrabold text-cyan-950">{formatHours(result.timeInterpretation.timeInBedMin)}</div>
-                  </div>
-
-                  <div>
-                    <div className="text-sm font-bold text-cyan-800">Estimated awake</div>
-                    <div className="text-lg font-extrabold text-cyan-950">{result.timeInterpretation.estimatedAwakeMin ?? "—"}m</div>
-                  </div>
-
-                  <div>
-                    <div className="text-sm font-bold text-cyan-800">Estimated sleep</div>
-                    <div className="text-lg font-extrabold text-cyan-950">{formatHours(result.timeInterpretation.estimatedSleepMin)}</div>
-                  </div>
-
-                  <div>
-                    <div className="text-sm font-bold text-cyan-800">Sleep efficiency</div>
-                    <div className="text-lg font-extrabold text-cyan-950">{result.timeInterpretation.sleepEfficiencyPct ?? "—"}%</div>
-                  </div>
-                </div>
-
-                <div className="mt-3 text-sm text-cyan-950">
-                  {result.timeInterpretation.summary}
-                </div>
-              </div>
-            ) : null}
-
-            {result.wakeDamageProfile ? (
-              <div className="mt-4 rounded-xl border border-purple-100 bg-purple-50 p-4">
-                <div className="text-sm font-bold uppercase tracking-wide text-purple-700">
-                  Wake-up type vs damage
-                </div>
-
-                <div className="mt-2 text-lg font-extrabold text-purple-950">
-                  {prettyWakeDamageType(result.wakeDamageProfile.wakeType)}
-                </div>
-
-                <div className="mt-1 text-sm font-bold capitalize text-purple-900">
-                  Damage level: {result.wakeDamageProfile.damageLevel}
-                </div>
-
-                <div className="mt-2 text-sm text-purple-950">
-                  {result.wakeDamageProfile.summary}
-                </div>
-              </div>
-            ) : null}
-
-            {result.sleepDimensions ? (
-              <div className="mt-4">
-                <div className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">
-                  Sleep stability breakdown
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <DimensionBox
-                    label="Recovery"
-                    score={result.sleepDimensions.sleepRecovery}
-                    status={statusFor(result.sleepDimensions.sleepRecovery, "Good", "Mixed", "Low")}
-                  />
-
-                  <DimensionBox
-                    label="Night stability"
-                    score={result.sleepDimensions.sleepStability}
-                    status={statusFor(result.sleepDimensions.sleepStability, "Stable", "Mixed", "Unstable")}
-                  />
-
-                  <DimensionBox
-                    label="Wake maintenance"
-                    score={result.sleepDimensions.wakeMaintenance}
-                    status={statusFor(result.sleepDimensions.wakeMaintenance, "Stable", "Disrupted", "Strongly disrupted")}
-                  />
-
-                  <DimensionBox
-                    label="Thermal stability"
-                    score={result.sleepDimensions.thermalStability}
-                    status={statusFor(result.sleepDimensions.thermalStability, "Stable", "Mixed", "Unstable")}
-                  />
-
-                  <DimensionBox
-                    label="Sleep onset"
-                    score={result.sleepDimensions.sleepOnset}
-                    status={statusFor(result.sleepDimensions.sleepOnset, "Settled", "Delayed", "Strongly delayed")}
-                  />
-
-                  <DimensionBox
-                    label="Environment stress"
-                    score={result.sleepDimensions.environmentStress}
-                    status={statusFor(100 - result.sleepDimensions.environmentStress, "Low", "Moderate", "High")}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            {result.wakeCauseSummary ? (
-              <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-                <div className="text-sm font-bold uppercase tracking-wide text-indigo-700">
-                  Why you may have woken up
-                </div>
-
-                <div className="mt-2 text-lg font-extrabold text-indigo-950">
-                  {prettyWakeCause(result.wakeCause)}
-                </div>
-
-                <div className="mt-2 text-sm text-indigo-950">
-                  {result.wakeCauseSummary}
-                </div>
-
-                <div className="mt-3 text-sm font-semibold text-indigo-900">
-                  Confidence: {result.wakeCauseConfidence === "high"
-                    ? "High"
-                    : result.wakeCauseConfidence === "moderate"
-                    ? "Moderate"
-                    : "Low"}
-                </div>
-              </div>
-            ) : null}
-
-            {result.thermalSystemSummary ? (
-              <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-4">
-                <div className="text-sm font-bold uppercase tracking-wide text-orange-700">
-                  Thermal sleep system
-                </div>
-
-                <div className="mt-2 text-lg font-extrabold text-orange-950">
-                  {prettyThermalSystem(result.thermalSystemState)}
-                </div>
-
-                <div className="mt-2 text-sm text-orange-950">
-                  {result.thermalSystemSummary}
-                </div>
-              </div>
-            ) : null}
-
-            {result.thermalSourceSummary ? (
-              <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-4">
-                <div className="text-sm font-bold uppercase tracking-wide text-amber-700">
-                  Thermal source
-                </div>
-
-                <div className="mt-2 text-lg font-extrabold text-amber-950">
-                  {prettyThermalSource(result.thermalSource)}
-                </div>
-
-                <div className="mt-2 text-sm text-amber-950">
-                  {result.thermalSourceSummary}
-                </div>
-              </div>
-            ) : null}
-
-            {result.adaptationSummary ? (
-              <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-                <div className="text-sm font-bold uppercase tracking-wide text-emerald-700">
-                  Active management
-                </div>
-
-                <div className="mt-2 text-lg font-extrabold text-emerald-950">
-                  {prettyAdaptationState(result.adaptationState)}
-                </div>
-
-                <div className="mt-2 text-sm text-emerald-950">
-                  {result.adaptationSummary}
-                </div>
-              </div>
-            ) : null}
 
             <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-sm font-bold text-gray-500">Plain-English read</div>
-              <div className="mt-1 text-base font-semibold text-gray-900">
-                SleepFix is separating how recovered you feel from how stable the night was.
+              <div className="text-sm font-bold uppercase tracking-wide text-gray-500">
+                Best for
               </div>
+              <p className="mt-1 text-gray-800">{displayProtocol.bestFor}</p>
             </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Main pattern</div>
-                <div className="mt-1 font-semibold text-gray-900">{prettyCategory(result.dominantCategory)}</div>
-              </div>
-
-              <div className="rounded-xl border border-gray-200 p-3">
-                <div className="text-sm font-bold text-gray-500">Pattern strength</div>
-                <div className="mt-1 font-semibold text-gray-900">
-                  {result.protocolConfidence === "low"
-                    ? "Early pattern"
-                    : result.protocolConfidence === "moderate"
-                    ? "Pattern forming"
-                    : "Strong pattern"}
-                </div>
-              </div>
-            </div>
-
-            {result.sleepIssueDetected && result.secondaryFactors.length > 0 ? (
-              <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
-                <div className="font-bold text-gray-900">Other factors to watch</div>
-                <div className="mt-1">{result.secondaryFactors.map(prettyCategory).join(", ")}</div>
-              </div>
-            ) : null}
           </section>
 
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-bold text-gray-900">Is this accurate?</h3>
+            <h3 className="text-xl font-bold text-gray-900">Is this the right focus?</h3>
             <p className="mt-2 text-gray-700">
-              SleepFix needs your confirmation before treating this as the best explanation.
+              Confirm this so SleepFix can keep improving the interpretation engine.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-3">
@@ -722,7 +387,7 @@ export default function ProtocolsPage() {
                 <textarea
                   value={missingDetail}
                   onChange={(e) => setMissingDetail(e.target.value)}
-                  placeholder="Example: the bed felt hot, hard mattress, partner heat, noise, cold feet, bathroom wake-up..."
+                  placeholder="Example: bed felt hot, cold feet, hard mattress, partner heat, noise, bathroom wake-up..."
                   className="mt-2 min-h-[90px] w-full rounded-xl border border-gray-300 p-3 text-base"
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -751,40 +416,16 @@ export default function ProtocolsPage() {
             ) : null}
           </section>
 
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">Recommended protocol</div>
-            <h2 className="mt-2 text-2xl font-bold text-blue-900">{displayProtocol.title}</h2>
-
-            {escalatedProtocol ? (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                <div className="font-bold">Deeper protocol</div>
-                <div className="mt-1">
-                  SleepFix is showing the deeper version because the issue appears to be recurring or unresolved.
-                </div>
-              </div>
-            ) : null}
-
-            <p className="mt-2 text-base text-gray-700">{displayProtocol.bestFor}</p>
-
-            <div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
-              <div className="font-bold">Why this protocol?</div>
-              <div className="mt-1">{result.protocolReason}</div>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-gray-200 p-3 text-sm text-gray-700">
-              <div className="font-bold text-gray-900">Related RRSM system</div>
-              <div className="mt-1">{displayProtocol.related}</div>
-            </div>
-          </section>
-
-          {accuracyFeedback !== "no" ? (
+          {!protocolPaused ? (
             <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
               <h3 className="text-xl font-bold text-gray-900">What to do tonight</h3>
               <p className="mt-2 text-gray-700">{displayProtocol.focus}</p>
 
               <ol className="mt-4 list-decimal space-y-3 pl-6 text-base text-gray-800">
-                {displayProtocol.steps.map((s, idx) => (
-                  <li key={idx} className="leading-relaxed">{s}</li>
+                {displayProtocol.steps.map((step, idx) => (
+                  <li key={idx} className="leading-relaxed">
+                    {step}
+                  </li>
                 ))}
               </ol>
 
@@ -810,7 +451,7 @@ export default function ProtocolsPage() {
             <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
               <h3 className="text-xl font-bold text-amber-900">Protocol paused</h3>
               <p className="mt-2 text-amber-900">
-                Because you said the summary is missing something, do not treat this recommendation as final. Record the missing factor in the Diary, then check the next recommendation after another saved night.
+                Because you said the focus is missing something, do not treat this protocol as final. Save the missing factor, then check the next recommendation after another sleep entry.
               </p>
             </section>
           )}
