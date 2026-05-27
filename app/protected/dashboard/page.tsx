@@ -329,6 +329,194 @@ function filterToLatest7CalendarDays(rows: NightRow[]) {
     .slice(0, 7);
 }
 
+
+type OnboardingStage = {
+  label: string;
+  href: string;
+  title: string;
+  detail: string;
+  threshold: number;
+};
+
+const ONBOARDING_STAGES: OnboardingStage[] = [
+  {
+    label: "Step 1",
+    href: "/protected/sleep",
+    title: "Log your first sleep night",
+    detail: "This gives SleepFix the core sleep pattern: quality, latency, wake-ups, recovery, and context.",
+    threshold: 1,
+  },
+  {
+    label: "Step 2",
+    href: "/protected/habits",
+    title: "Add diary context",
+    detail: "Record what happened before sleep and during the night so the engine has a better explanation layer.",
+    threshold: 2,
+  },
+  {
+    label: "Step 3",
+    href: "/protected/profile",
+    title: "Set your sleep profile",
+    detail: "Tell SleepFix your normal sleep context so it does not misread stable conditions as problems.",
+    threshold: 3,
+  },
+  {
+    label: "Step 4",
+    href: "/protected/protocols",
+    title: "Review your protocol",
+    detail: "Protocols become more useful after the first few sleep entries create a baseline.",
+    threshold: 3,
+  },
+  {
+    label: "Step 5",
+    href: "/protected/dashboard",
+    title: "Watch the dashboard unlock",
+    detail: "Your dashboard becomes meaningful as the baseline fills in over 3, 7, 14, and 30 nights.",
+    threshold: 7,
+  },
+];
+
+function baselineStatus(validNightCount: number) {
+  if (validNightCount >= 30) {
+    return {
+      title: "Long-pattern analysis active",
+      message: "SleepFix now has enough history for stronger rhythm trends and recurring-pattern detection.",
+      pct: 100,
+      next: "Keep logging consistently so the model can separate one-off noise from repeated patterns.",
+    };
+  }
+
+  if (validNightCount >= 14) {
+    return {
+      title: "Confidence upgrade active",
+      message: "SleepFix has enough nights to start improving confidence around recurring signals.",
+      pct: 78,
+      next: "Next target: 30 nights for long-pattern analysis.",
+    };
+  }
+
+  if (validNightCount >= 7) {
+    return {
+      title: "7-night trend snapshot active",
+      message: "Your dashboard can now show a more useful week-level baseline.",
+      pct: 55,
+      next: "Next target: 14 nights for stronger confidence.",
+    };
+  }
+
+  if (validNightCount >= 3) {
+    return {
+      title: "Initial RRSM insight active",
+      message: "SleepFix has enough data for a first basic pattern. Treat it as early signal, not final truth.",
+      pct: 35,
+      next: "Next target: 7 nights for a clearer trend snapshot.",
+    };
+  }
+
+  if (validNightCount >= 1) {
+    return {
+      title: "Baseline started",
+      message: "Good. SleepFix has started building your rhythm profile.",
+      pct: 15,
+      next: "Next target: 3 complete nights to unlock the first RRSM insight.",
+    };
+  }
+
+  return {
+    title: "Start your SleepFix baseline",
+    message: "Your dashboard is empty because SleepFix needs at least one saved sleep night before it can show useful patterns.",
+    pct: 5,
+    next: "Start with one sleep entry. The app becomes clearer as your baseline grows.",
+  };
+}
+
+function OnboardingProgressPanel({ validNightCount }: { validNightCount: number }) {
+  const status = baselineStatus(validNightCount);
+
+  return (
+    <section
+      style={{
+        marginTop: 24,
+        marginBottom: 24,
+        border: "1px solid #c9d2ff",
+        background: "linear-gradient(135deg, #eef3ff 0%, #ffffff 65%)",
+        borderRadius: 18,
+        padding: 22,
+        boxShadow: "0 10px 30px rgba(20, 30, 90, 0.06)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+        <div style={{ maxWidth: 680 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 0.8, textTransform: "uppercase", color: "#2636b8" }}>
+            New user path
+          </div>
+          <h2 style={{ marginTop: 6, fontSize: 28, lineHeight: 1.15, fontWeight: 900, color: "#08105c" }}>
+            {status.title}
+          </h2>
+          <p style={{ marginTop: 8, color: "#374151", fontSize: 17 }}>
+            {status.message}
+          </p>
+          <p style={{ marginTop: 8, color: "#111827", fontWeight: 700 }}>
+            {status.next}
+          </p>
+        </div>
+
+        <div
+          style={{
+            minWidth: 180,
+            border: "1px solid #dbe2ff",
+            borderRadius: 16,
+            padding: 14,
+            background: "white",
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#6b7280", textTransform: "uppercase" }}>
+            Complete nights
+          </div>
+          <div style={{ fontSize: 36, fontWeight: 950, color: "#000080", lineHeight: 1.1 }}>
+            {validNightCount}
+          </div>
+          <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: "#e5e7eb", overflow: "hidden" }}>
+            <div style={{ width: `${status.pct}%`, height: "100%", background: "#4f46e5" }} />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+        {ONBOARDING_STAGES.map((stage) => {
+          const done = validNightCount >= stage.threshold;
+          const active =
+            (validNightCount === 0 && stage.threshold === 1) ||
+            (validNightCount > 0 && validNightCount < stage.threshold);
+
+          return (
+            <Link
+              key={stage.title}
+              href={stage.href}
+              style={{
+                textDecoration: "none",
+                color: "inherit",
+                border: `1px solid ${done ? "#bbf7d0" : active ? "#c7d2fe" : "#e5e7eb"}`,
+                background: done ? "#f0fdf4" : active ? "#eef2ff" : "#ffffff",
+                borderRadius: 16,
+                padding: 14,
+                display: "block",
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 900, color: done ? "#15803d" : active ? "#4338ca" : "#6b7280" }}>
+                {done ? "✓ Done" : stage.label}
+              </div>
+              <div style={{ marginTop: 6, fontWeight: 900, color: "#111827" }}>{stage.title}</div>
+              <div style={{ marginTop: 5, fontSize: 14, lineHeight: 1.35, color: "#4b5563" }}>{stage.detail}</div>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -533,6 +721,8 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
     return { level: "High", label: "At risk" };
   }, [insight]);
 
+  const validNightCount = rows.filter(isValidNight).length;
+
   return (
     <div style={{ width: "100%", maxWidth: 1400, margin: "0 auto", padding: "28px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -544,6 +734,7 @@ const uniqueRows = filterToLatest7CalendarDays(nextRows);
         </div>
       </div>
 
+      <OnboardingProgressPanel validNightCount={validNightCount} />
 
       {!loading && userId && adaptiveReminder?.shouldShow ? (
         <div
