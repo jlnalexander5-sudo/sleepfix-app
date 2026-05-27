@@ -33,39 +33,41 @@ export default function ProtectedLayout({
             padding: "14px 16px",
           }}
         >
-      <nav
-  className="sf-topnav"
-  style={{
-    display: "grid",
-    gridTemplateColumns: "1fr auto",
-    alignItems: "start",
-    gap: 18,
-  }}
->
-  <div>
-    <a href="/protected/dashboard" className="sf-brand" aria-label="SleepFixMe home">
-      SleepFixMe
-    </a>
+          <nav
+            className="sf-topnav"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              alignItems: "start",
+              gap: 18,
+            }}
+          >
+            <div>
+              <a href="/protected/onboarding" className="sf-brand" aria-label="SleepFixMe home">
+                SleepFixMe
+              </a>
 
-    <div className="sf-links" style={{ marginTop: 4 }}>
-      <Link href="/protected/sleep" style={{ textDecoration: "none" }}>Sleep</Link>
-      <span className="sf-sep">|</span>
-      <Link href="/protected/habits" style={{ textDecoration: "none" }}>Diary</Link>
-      <span className="sf-sep">|</span>
-      <Link href="/protected/protocols" style={{ textDecoration: "none" }}>Protocols</Link>
-      <span className="sf-sep">|</span>
-      <Link href="/protected/profile" style={{ textDecoration: "none" }}>Profile</Link>
-      <span className="sf-sep">|</span>
-      <Link href="/protected/dashboard" style={{ textDecoration: "none" }}>Dashboard</Link>
-    </div>
-  </div>
+              <div className="sf-links" style={{ marginTop: 4 }}>
+                <Link href="/protected/onboarding" style={{ textDecoration: "none" }}>Start</Link>
+                <span className="sf-sep">|</span>
+                <Link href="/protected/profile" style={{ textDecoration: "none" }}>Profile</Link>
+                <span className="sf-sep">|</span>
+                <Link href="/protected/sleep" style={{ textDecoration: "none" }}>Sleep</Link>
+                <span className="sf-sep">|</span>
+                <Link href="/protected/habits" style={{ textDecoration: "none" }}>Diary</Link>
+                <span className="sf-sep">|</span>
+                <Link href="/protected/protocols" style={{ textDecoration: "none" }}>Protocol</Link>
+                <span className="sf-sep">|</span>
+                <Link href="/protected/dashboard" style={{ textDecoration: "none" }}>Results</Link>
+              </div>
+            </div>
 
-  <div className="sf-links" style={{ marginTop: 42, marginRight: 28 }}>
-    <Link href="/protected/faq" style={{ textDecoration: "none" }}>FAQ</Link>
-    <span className="sf-sep">|</span>
-    <Link href="/protected/feedback" style={{ textDecoration: "none" }}>Feedback</Link>
-  </div>
-</nav>
+            <div className="sf-links" style={{ marginTop: 42, marginRight: 28 }}>
+              <Link href="/protected/faq" style={{ textDecoration: "none" }}>FAQ</Link>
+              <span className="sf-sep">|</span>
+              <Link href="/protected/feedback" style={{ textDecoration: "none" }}>Feedback</Link>
+            </div>
+          </nav>
         </header>
 
         <main style={{ maxWidth: 980, margin: "0 auto" }}>{children}</main>
