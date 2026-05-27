@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         );
       }
 
-      return NextResponse.redirect(new URL(next, origin));
+      return NextResponse.redirect(new URL("/protected/onboarding", origin));
     }
 
     if (code) {
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
         );
       }
 
-      return NextResponse.redirect(new URL(next, origin));
+     return NextResponse.redirect(new URL("/protected/onboarding", origin));
     }
 
     return NextResponse.redirect(new URL(`/auth/error?reason=missing_params`, origin));
