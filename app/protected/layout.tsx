@@ -33,41 +33,59 @@ export default function ProtectedLayout({
             padding: "14px 16px",
           }}
         >
-          <nav className="sf-topnav">
-            <a
-              href="/protected/dashboard"
-              className="sf-brand"
-              aria-label="SleepFixMe home"
-            >
-              SleepFixMe
-            </a>
+          <nav
+            className="sf-topnav"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <a
+                href="/protected/dashboard"
+                className="sf-brand"
+                aria-label="SleepFixMe home"
+              >
+                SleepFixMe
+              </a>
 
-            <div className="sf-links">
-              <Link href="/protected/dashboard" style={{ textDecoration: "none" }}>
-                Dashboard
-              </Link>
+              <div className="sf-links" style={{ marginTop: 4 }}>
+                <Link href="/protected/sleep" style={{ textDecoration: "none" }}>
+                  Sleep
+                </Link>
 
-              <span className="sf-sep">|</span>
+                <span className="sf-sep">|</span>
 
-              <Link href="/protected/habits" style={{ textDecoration: "none" }}>
-               Diary
-              </Link>
+                <Link href="/protected/habits" style={{ textDecoration: "none" }}>
+                  Diary
+                </Link>
 
-              <span className="sf-sep">|</span>
+                <span className="sf-sep">|</span>
 
-              <Link href="/protected/sleep" style={{ textDecoration: "none" }}>
-                Sleep
-              </Link>
-<span className="sf-sep">|</span>
+                <Link href="/protected/protocols" style={{ textDecoration: "none" }}>
+                  Protocols
+                </Link>
 
-<Link href="/protected/protocols" style={{ textDecoration: "none" }}>
-  Protocols
-</Link>
+                <span className="sf-sep">|</span>
 
-              <span className="sf-sep">|</span>
+                <Link href="/protected/profile" style={{ textDecoration: "none" }}>
+                  Profile
+                </Link>
 
-              <Link href="/protected/profile" style={{ textDecoration: "none" }}>
-                Profile
+                <span className="sf-sep">|</span>
+
+                <Link href="/protected/dashboard" style={{ textDecoration: "none" }}>
+                  Dashboard
+                </Link>
+              </div>
+            </div>
+
+            <div className="sf-links" style={{ marginTop: 44 }}>
+              <Link href="/protected/faq" style={{ textDecoration: "none" }}>
+                FAQ
               </Link>
 
               <span className="sf-sep">|</span>
@@ -75,35 +93,28 @@ export default function ProtectedLayout({
               <Link href="/protected/feedback" style={{ textDecoration: "none" }}>
                 Feedback
               </Link>
-
-              <span className="sf-sep">|</span>
-
-              <Link href="/protected/faq" style={{ textDecoration: "none" }}>
-                FAQ
-              </Link>
-
             </div>
           </nav>
         </header>
 
         <main style={{ maxWidth: 980, margin: "0 auto" }}>{children}</main>
 
-       <footer
-  style={{
-    maxWidth: 980,
-    margin: "0 auto",
-    padding: "22px 0 30px",
-    borderTop: "1px solid #d7d7d7",
-    fontSize: 14,
-    color: "#444",
-    fontWeight: 500,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 12,
-  }}
->
+        <footer
+          style={{
+            maxWidth: 980,
+            margin: "0 auto",
+            padding: "22px 0 30px",
+            borderTop: "1px solid #d7d7d7",
+            fontSize: 14,
+            color: "#444",
+            fontWeight: 500,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
           <div>
             All rights reserved, copyrighted, 2026, proprietary of J. Alexander.
           </div>
