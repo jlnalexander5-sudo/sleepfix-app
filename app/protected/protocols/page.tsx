@@ -134,6 +134,39 @@ function cleanReason(result: RRSMProtocolResult) {
   );
 }
 
+
+function parseYMDDate(ymd: string | null | undefined) {
+  if (!ymd) return null;
+  const [year, month, day] = ymd.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function formatProtocolDate(date: Date | null) {
+  if (!date) return "Unknown";
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function wholeDaysSince(date: Date | null) {
+  if (!date) return 999;
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86400000));
+}
+
 export default function ProtocolsPage() {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
@@ -259,12 +292,60 @@ export default function ProtocolsPage() {
   const displayProtocol = escalatedProtocol ?? standardProtocol;
   const protocolPaused = accuracyFeedback === "no";
 
+  const analysedDate = parseYMDDate(latestNightRow?.local_date ?? latestNightRow?.created_at?.slice(0, 10));
+  const recommendedDate = analysedDate ? addDays(analysedDate, 1) : null;
+  const daysSinceAnalysed = wholeDaysSince(analysedDate);
+  const freshnessStatus =
+    daysSinceAnalysed <= 1
+      ? "current"
+      : daysSinceAnalysed === 2
+      ? "aging"
+      : "stale";
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Tonight&apos;s Protocol</h1>
+      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Recommended Protocol</h1>
       <p className="mt-2 text-base text-gray-600">
-        One focused action for tonight. Detailed scores and trends live in Results.
+        One focused action based on your latest saved sleep record. Detailed scores and trends live in Results.
       </p>
+
+      {!loading && latestNightRow ? (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+          <div className="text-sm font-bold uppercase tracking-wide text-amber-700">
+            Protocol timing
+          </div>
+
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="text-sm font-bold text-amber-800">Based on sleep recorded</div>
+              <div className="mt-1 text-base font-extrabold">{formatProtocolDate(analysedDate)}</div>
+            </div>
+
+            <div>
+              <div className="text-sm font-bold text-amber-800">Intended for next sleep</div>
+              <div className="mt-1 text-base font-extrabold">{formatProtocolDate(recommendedDate)}</div>
+            </div>
+          </div>
+
+          {freshnessStatus === "current" ? (
+            <p className="mt-3 text-sm font-semibold text-amber-800">
+              Current recommendation — use this for the next sleep after that record.
+            </p>
+          ) : null}
+
+          {freshnessStatus === "aging" ? (
+            <p className="mt-3 text-sm font-semibold text-amber-800">
+              Recommendation aging — update your sleep log for a more accurate protocol.
+            </p>
+          ) : null}
+
+          {freshnessStatus === "stale" ? (
+            <p className="mt-3 text-sm font-semibold text-red-700">
+              Protocol may be out of date. SleepFix needs a newer sleep entry before treating this as the best next action.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm">
