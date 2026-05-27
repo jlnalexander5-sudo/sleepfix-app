@@ -60,7 +60,7 @@ export default function ProtectedLayout({
     </div>
   </div>
 
-  <div className="sf-links" style={{ marginTop: 52, marginRight: 28 }}>
+  <div className="sf-links" style={{ marginTop: 42, marginRight: 28 }}>
     <Link href="/protected/faq" style={{ textDecoration: "none" }}>FAQ</Link>
     <span className="sf-sep">|</span>
     <Link href="/protected/feedback" style={{ textDecoration: "none" }}>Feedback</Link>
