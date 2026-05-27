@@ -12,7 +12,6 @@ export async function GET(request: Request) {
   // Password recovery must still go to the password update screen.
   // Normal signup/email confirmation should land on the real onboarding flow.
   const defaultNext = type === "recovery" ? "/auth/update-password" : "/protected/onboarding";
-  const next = url.searchParams.get("next") ?? defaultNext;
   const supabase = await createClient();
 
   try {
