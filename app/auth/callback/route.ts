@@ -9,7 +9,9 @@ export async function GET(request: Request) {
   const type = url.searchParams.get("type");
   const origin = url.origin;
 
-  const defaultNext = type === "recovery" ? "/auth/update-password" : "/protected/dashboard";
+  // Password recovery must still go to the password update screen.
+  // Normal signup/email confirmation should land on the real onboarding flow.
+  const defaultNext = type === "recovery" ? "/auth/update-password" : "/protected/onboarding";
   const next = url.searchParams.get("next") ?? defaultNext;
   const supabase = await createClient();
 
@@ -24,8 +26,8 @@ export async function GET(request: Request) {
         return NextResponse.redirect(
           new URL(
             `/auth/error?reason=verify_failed&msg=${encodeURIComponent(error.message)}`,
-            origin
-          )
+            origin,
+          ),
         );
       }
 
@@ -39,8 +41,8 @@ export async function GET(request: Request) {
         return NextResponse.redirect(
           new URL(
             `/auth/error?reason=exchange_failed&msg=${encodeURIComponent(error.message)}`,
-            origin
-          )
+            origin,
+          ),
         );
       }
 
@@ -52,8 +54,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(
       new URL(
         `/auth/error?reason=unexpected&msg=${encodeURIComponent(e?.message ?? "Unknown error")}`,
-        origin
-      )
+        origin,
+      ),
     );
   }
 }
