@@ -18,6 +18,8 @@ type AuthUser = {
   created_at?: string;
 };
 
+const REMINDER_TIME_ZONE = "Australia/Sydney";
+
 function requiredEnv(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing env var: ${name}`);
@@ -40,15 +42,15 @@ function htmlEscape(value: string) {
 
 function buildEmailHtml(opts: { appUrl: string; expectedWindowLabel: string | null }) {
   const windowLine = opts.expectedWindowLabel
-    ? `<p style="margin:0 0 16px;color:#333;">You usually log around <strong>${htmlEscape(opts.expectedWindowLabel)}</strong>. No sleep entry is saved for today yet.</p>`
+    ? `<p style="margin:0 0 16px;color:#333;">You usually log <strong>${htmlEscape(opts.expectedWindowLabel)}</strong>. No sleep entry is saved for today yet.</p>`
     : `<p style="margin:0 0 16px;color:#333;">No sleep entry is saved for today yet.</p>`;
 
   return `
   <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111;max-width:560px;margin:0 auto;padding:24px;">
     <h1 style="color:#000080;margin:0 0 12px;">SleepFixMe</h1>
-    <h2 style="margin:0 0 12px;">Log last night&apos;s sleep</h2>
+    <h2 style="margin:0 0 12px;">Log last night's sleep</h2>
     ${windowLine}
-    <p style="margin:0 0 20px;color:#333;">Add last night&apos;s sleep so SleepFix can keep your pattern clean.</p>
+    <p style="margin:0 0 20px;color:#333;">Add last night's sleep so SleepFix can keep your pattern clean.</p>
     <p style="margin:0 0 20px;">
       <a href="${htmlEscape(opts.appUrl)}/protected/sleep" style="display:inline-block;background:#000080;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">
         Log sleep now
@@ -83,9 +85,9 @@ async function sendReminderEmail(opts: {
   await transporter.sendMail({
     from: `"${fromName}" <${fromEmail}>`,
     to: opts.to,
-    subject: "SleepFixMe reminder: log last night&apos;s sleep",
+    subject: "SleepFixMe reminder: log last night's sleep",
     text: opts.expectedWindowLabel
-      ? `You usually log around ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
+      ? `You usually log ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
       : `No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`,
     html: buildEmailHtml({ appUrl, expectedWindowLabel: opts.expectedWindowLabel }),
   });
@@ -109,7 +111,7 @@ export async function GET(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const todayYMD = toLocalYMD(startedAt);
+    const todayYMD = toLocalYMD(startedAt, REMINDER_TIME_ZONE);
 
     const { data: usersResp, error: usersErr } = await supabase.auth.admin.listUsers({
       page: 1,
@@ -119,7 +121,17 @@ export async function GET(req: Request) {
     if (usersErr) throw usersErr;
 
     const users = (usersResp.users ?? []) as AuthUser[];
-    const results: Array<{ user_id: string; email: string; action: string; reason?: string }> = [];
+
+    const results: Array<{
+      user_id: string;
+      email: string;
+      action: "sent" | "not_due" | "skipped" | "error";
+      reason?: string;
+      expectedWindowLabel?: string | null;
+      minutesLate?: number | null;
+      sampleSize?: number;
+      confidence?: string;
+    }> = [];
 
     for (const user of users) {
       if (!user.id || !user.email) continue;
@@ -142,9 +154,10 @@ export async function GET(req: Request) {
 
       const { data: existingLog } = await supabase
         .from("sleep_reminder_logs")
-        .select("id")
+        .select("id,status")
         .eq("user_id", user.id)
         .eq("reminder_date", todayYMD)
+        .eq("status", "sent")
         .maybeSingle();
 
       if (existingLog?.id) {
@@ -164,10 +177,22 @@ export async function GET(req: Request) {
         continue;
       }
 
-      const reminder = buildAdaptiveReminderState((nights ?? []) as NightRow[], startedAt);
+      const reminder = buildAdaptiveReminderState(
+        (nights ?? []) as NightRow[],
+        startedAt,
+        REMINDER_TIME_ZONE,
+      );
 
       if (!reminder.shouldShow) {
-        results.push({ user_id: user.id, email: user.email, action: "not_due" });
+        results.push({
+          user_id: user.id,
+          email: user.email,
+          action: "not_due",
+          expectedWindowLabel: reminder.expectedWindowLabel,
+          minutesLate: reminder.minutesLate,
+          sampleSize: reminder.sampleSize,
+          confidence: reminder.confidence,
+        });
         continue;
       }
 
@@ -186,7 +211,15 @@ export async function GET(req: Request) {
           status: "sent",
         });
 
-        results.push({ user_id: user.id, email: user.email, action: "sent" });
+        results.push({
+          user_id: user.id,
+          email: user.email,
+          action: "sent",
+          expectedWindowLabel: reminder.expectedWindowLabel,
+          minutesLate: reminder.minutesLate,
+          sampleSize: reminder.sampleSize,
+          confidence: reminder.confidence,
+        });
       } catch (err: any) {
         await supabase.from("sleep_reminder_logs").insert({
           user_id: user.id,
@@ -198,22 +231,33 @@ export async function GET(req: Request) {
           error_message: err?.message ?? "Unknown email error",
         });
 
-        results.push({ user_id: user.id, email: user.email, action: "error", reason: err?.message ?? "Unknown error" });
+        results.push({
+          user_id: user.id,
+          email: user.email,
+          action: "error",
+          reason: err?.message ?? "Unknown error",
+          expectedWindowLabel: reminder.expectedWindowLabel,
+          minutesLate: reminder.minutesLate,
+          sampleSize: reminder.sampleSize,
+          confidence: reminder.confidence,
+        });
       }
     }
 
     return NextResponse.json({
       ok: true,
       checked: users.length,
+      timezone: REMINDER_TIME_ZONE,
+      todayYMD,
       results,
     });
-    } catch (err: any) {
-      return NextResponse.json(
-        { ok: false, error: err?.message ?? "Unexpected reminder error" },
-        { status: 500 },
-      );
-    }
+  } catch (err: any) {
+    return NextResponse.json(
+      { ok: false, error: err?.message ?? "Unexpected reminder error" },
+      { status: 500 },
+    );
   }
+}
 
 export async function POST(req: Request) {
   return GET(req);
