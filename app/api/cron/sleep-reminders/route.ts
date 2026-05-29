@@ -125,19 +125,10 @@ const receivedSecret =
   req.headers.get("x-cron-secret") ??
   url.searchParams.get("secret");
 
-  if (!receivedSecret || receivedSecret !== expectedSecret) {
+if (!receivedSecret || receivedSecret !== expectedSecret) {
   return NextResponse.json(
-    {
-      ok: false,
-      error: "Unauthorized",
-      debug: {
-        hasExpectedSecret: Boolean(expectedSecret),
-        expectedSecretLength: expectedSecret?.length ?? 0,
-        receivedSecretLength: receivedSecret?.length ?? 0,
-        receivedStartsWith: receivedSecret?.slice(0, 8) ?? null,
-      },
-    },
-    { status: 401 },
+    { ok: false, error: "Unauthorized" },
+    { status: 401 }
   );
 }
 
