@@ -372,9 +372,6 @@ export default function ResultsPage() {
             <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: 0.8, textTransform: "uppercase", color: "#2636b8" }}>
               Last night result
             </div>
-          <h1 style={{ marginTop: 6, marginBottom: 8, fontSize: 30, lineHeight: 1.15, color: "#08105c" }}>
-  Latest sleep result
-</h1>
             <p style={{ margin: 0, color: "#374151" }}>
               Night date: <strong>{fmtDate(latestNight.local_date ?? latestNight.created_at)}</strong>
             </p>
