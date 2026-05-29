@@ -117,8 +117,13 @@ export async function GET(req: Request) {
   const startedAt = new Date();
 
   try {
-    const expectedSecret = requiredEnv("SLEEPFIX_CRON_SECRET");
-    const receivedSecret = getBearerToken(req) ?? req.headers.get("x-cron-secret");
+  const expectedSecret = "sleepfixcron123";
+
+const url = new URL(req.url);
+const receivedSecret =
+  getBearerToken(req) ??
+  req.headers.get("x-cron-secret") ??
+  url.searchParams.get("secret");
 
   if (!receivedSecret || receivedSecret !== expectedSecret) {
   return NextResponse.json(
