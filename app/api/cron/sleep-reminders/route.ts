@@ -120,9 +120,21 @@ export async function GET(req: Request) {
     const expectedSecret = requiredEnv("SLEEPFIX_CRON_SECRET");
     const receivedSecret = getBearerToken(req) ?? req.headers.get("x-cron-secret");
 
-    if (!receivedSecret || receivedSecret !== expectedSecret) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    }
+  if (!receivedSecret || receivedSecret !== expectedSecret) {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "Unauthorized",
+      debug: {
+        hasExpectedSecret: Boolean(expectedSecret),
+        expectedSecretLength: expectedSecret?.length ?? 0,
+        receivedSecretLength: receivedSecret?.length ?? 0,
+        receivedStartsWith: receivedSecret?.slice(0, 8) ?? null,
+      },
+    },
+    { status: 401 },
+  );
+}
 
     const supabaseUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
