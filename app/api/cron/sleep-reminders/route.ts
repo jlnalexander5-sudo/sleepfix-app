@@ -102,15 +102,23 @@ async function sendReminderEmail(opts: {
     },
   });
 
-  await transporter.sendMail({
-    from: `"${fromName}" <${fromEmail}>`,
-    to: opts.to,
-    subject: "SleepFixMe reminder: log last night's sleep",
-    text: opts.expectedWindowLabel
-      ? `You usually log around ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
-      : `No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`,
-    html: buildEmailHtml({ appUrl, expectedWindowLabel: opts.expectedWindowLabel }),
-  });
+ const info = await transporter.sendMail({
+  from: `"${fromName}" <${fromEmail}>`,
+  to: opts.to,
+  subject: "TEST SleepFix reminder email",
+  text: opts.expectedWindowLabel
+    ? `You usually log around ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
+    : `No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`,
+  html: buildEmailHtml({ appUrl, expectedWindowLabel: opts.expectedWindowLabel }),
+});
+
+console.log("SleepFix reminder email accepted:", {
+  to: opts.to,
+  messageId: info.messageId,
+  accepted: info.accepted,
+  rejected: info.rejected,
+  response: info.response,
+});
 }
 
 export async function GET(req: Request) {
