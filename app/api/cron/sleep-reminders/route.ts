@@ -105,7 +105,7 @@ async function sendReminderEmail(opts: {
  const info = await transporter.sendMail({
   from: `"${fromName}" <${fromEmail}>`,
   to: opts.to,
-  subject: "TEST SleepFix reminder email",
+  subject: "SleepFix reminder to log last night's sleep",
   text: opts.expectedWindowLabel
     ? `You usually log around ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
     : `No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`,
