@@ -107,7 +107,6 @@ async function sendReminderEmail(opts: {
   to: opts.to,
   subject: "SleepFix reminder to log last night's sleep",
   text: opts.expectedWindowLabel
-  text: opts.expectedWindowLabel
   ? `You haven’t logged last night’s sleep yet. You usually log around ${opts.expectedWindowLabel}. Keeping your entries consistent helps SleepFix spot patterns more accurately.`
   : `You haven’t logged last night’s sleep yet. Keeping your entries consistent helps SleepFix spot patterns more accurately.`,
   html: buildEmailHtml({ appUrl, expectedWindowLabel: opts.expectedWindowLabel }),
