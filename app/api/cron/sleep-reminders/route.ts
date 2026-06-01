@@ -63,7 +63,7 @@ function fallbackTimezone() {
 function buildEmailHtml(opts: { appUrl: string; expectedWindowLabel: string | null }) {
   const windowLine = opts.expectedWindowLabel
     ? `<p style="margin:0 0 16px;color:#333;">You usually log around <strong>${htmlEscape(opts.expectedWindowLabel)}</strong>. No sleep entry is saved for today yet.</p>`
-    : `<p style="margin:0 0 16px;color:#333;">No sleep entry is saved for today yet.</p>`;
+    : `<p style="margin:0 0 16px;color:#333;">You haven’t logged last night’s sleep yet.</p>`;
 
   return `
   <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111;max-width:560px;margin:0 auto;padding:24px;">
@@ -107,8 +107,9 @@ async function sendReminderEmail(opts: {
   to: opts.to,
   subject: "SleepFix reminder to log last night's sleep",
   text: opts.expectedWindowLabel
-    ? `You usually log around ${opts.expectedWindowLabel}. No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`
-    : `No sleep entry is saved for today yet. Log here: ${appUrl}/protected/sleep`,
+  text: opts.expectedWindowLabel
+  ? `You haven’t logged last night’s sleep yet. You usually log around ${opts.expectedWindowLabel}. Keeping your entries consistent helps SleepFix spot patterns more accurately.`
+  : `You haven’t logged last night’s sleep yet. Keeping your entries consistent helps SleepFix spot patterns more accurately.`,
   html: buildEmailHtml({ appUrl, expectedWindowLabel: opts.expectedWindowLabel }),
 });
 
