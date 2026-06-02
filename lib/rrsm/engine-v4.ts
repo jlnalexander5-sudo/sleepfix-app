@@ -332,9 +332,85 @@ function isStableRecoveryNight(night: NightWithOptionalProtocol | undefined): bo
   return highQuality && efficient && lowWakeDamage && acceptableOnset;
 }
 
+
+function hasMindOrEmotionalActivationSignal(night: NightWithOptionalProtocol | undefined): boolean {
+  if (!night) return false;
+
+  const text = `${joinedNightText(night as RRSMMetricsNight)} ${joinedProfileText(night)}`;
+  return lowerIncludes(text, [
+    "stress",
+    "worry",
+    "worried",
+    "anxious",
+    "anxiety",
+    "racing",
+    "thought",
+    "thoughts",
+    "overstimulated",
+    "wired",
+    "alert",
+    "mental",
+    "emotion",
+    "emotional",
+    "upset",
+    "overwhelmed",
+    "confrontation",
+  ]);
+}
+
+function hasSleepHygieneActivationSignal(night: NightWithOptionalProtocol | undefined): boolean {
+  if (!night) return false;
+
+  const text = `${joinedNightText(night as RRSMMetricsNight)} ${joinedProfileText(night)}`;
+  return lowerIncludes(text, [
+    "caffeine",
+    "coffee",
+    "alcohol",
+    "nicotine",
+    "smoking",
+    "smoke",
+    "screen",
+    "phone",
+    "tv",
+    "scroll",
+    "late meal",
+    "food",
+    "eating",
+    "exercise late",
+    "gym",
+  ]);
+}
+
+function isMinorOrNeutralIssueNight(night: NightWithOptionalProtocol | undefined): boolean {
+  if (!night) return false;
+
+  const quality = typeof night.quality === "number" ? night.quality : null;
+  const latency = typeof night.latencyMin === "number" ? night.latencyMin : null;
+  const wakeUps = typeof night.wakeUps === "number" ? night.wakeUps : 0;
+  const wakeRecovery = parseWakeRecoveryToMinutes(night);
+  const timeInterpretation = buildTimeInterpretation(night);
+  const efficiency = timeInterpretation.sleepEfficiencyPct;
+  const estimatedAwake = timeInterpretation.estimatedAwakeMin;
+
+  const goodRecovery = quality !== null && quality >= 8;
+  const onsetOk = latency === null || latency <= 30;
+  const efficiencyOk = efficiency === null || efficiency >= 85;
+
+  // User-selected tags can be observations, not actual sleep problems.
+  // If the sleep result is good and wake damage is low, do not prescribe a protocol.
+  // This covers: calm / clear / relaxed, not sure / none, no room issue,
+  // no bed issue, minor dry room, minor body pressure, or hard-bed adaptation.
+  const wakeDamageLow =
+    wakeUps <= 4 &&
+    (wakeRecovery === null || wakeRecovery <= 15) &&
+    (estimatedAwake === null || estimatedAwake <= 45);
+
+  return goodRecovery && onsetOk && efficiencyOk && wakeDamageLow;
+}
+
 function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean {
   if (!night) return false;
-  if (isStableRecoveryNight(night)) return false;
+  if (isStableRecoveryNight(night) || isMinorOrNeutralIssueNight(night)) return false;
 
   const qualityIssue = typeof night.quality === "number" && night.quality <= 6;
   const majorQualityIssue = typeof night.quality === "number" && night.quality <= 3;
@@ -1875,6 +1951,10 @@ function buildUserSummary(
   const timeInterpretation = buildTimeInterpretation(latestNight);
   const wakeDamage = classifyWakeDamage(latestNight);
 
+  if (isMinorOrNeutralIssueNight(latestNight)) {
+    return "Good recovery night. Only minor or neutral signals were logged, so no corrective protocol is needed. Keep the same sleep behaviour tonight and continue building the pattern.";
+  }
+
   if (isStableRecoveryNight(latestNight)) {
     return "Good recovery night. Your current setup appears stable. Repeat the same sleep conditions tonight rather than introducing new changes.";
   }
@@ -2001,7 +2081,7 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
     recurring
       ? "This contributor appears to be recurring in recent entries."
       : "This does not yet look like a recurring pattern.",
-    sleepIssueDetected ? protocolReason : "Good recovery — keep current setup stable tonight.",
+    sleepIssueDetected ? protocolReason : "No corrective protocol is needed from the latest sleep record.",
     protocolEvaluation.reason,
     hiddenFactorReason ? hiddenFactorReason : null,
     investigationPrompt ? investigationPrompt : null,
