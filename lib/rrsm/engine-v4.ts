@@ -474,6 +474,9 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
   const majorWakeRecovery = hasMajorWakeRecovery(night);
   const timeInterpretation = buildTimeInterpretation(night);
   const wakeDamage = classifyWakeDamage(night);
+  const benignFragmentation =
+    wakeDamage.damageLevel === "low" &&
+    (wakeDamage.wakeType === "frequent_short_wakes" || wakeDamage.wakeType === "few_wakes");
   const poorSleepEfficiency =
     typeof timeInterpretation.sleepEfficiencyPct === "number" &&
     timeInterpretation.sleepEfficiencyPct < 85;
