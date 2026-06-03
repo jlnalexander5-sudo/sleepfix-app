@@ -420,12 +420,19 @@ function detectSleepIssue(night: NightWithOptionalProtocol | undefined): boolean
   const bedThermalSignal = hasBedThermalSignal(night);
   const thermalSystemSignal = hasThermalSystemSignal(night);
   const bodyPressureAdaptationSignal = hasBodyPressureAdaptationSignal(night);
-  const bodyPressureWakeIssue = typeof night.wakeUps === "number" && night.wakeUps >= 3 && bodyPressureAdaptationSignal;
+  const bodyPressureWakeIssue =
+    typeof night.wakeUps === "number" &&
+    night.wakeUps >= 3 &&
+    bodyPressureAdaptationSignal &&
+    classifyWakeDamage(night).damageLevel !== "low";
   const maintenanceIssue = hasMaintenanceIssue(night);
   const prolongedWakeRecovery = hasProlongedWakeRecovery(night);
   const majorWakeRecovery = hasMajorWakeRecovery(night);
   const timeInterpretation = buildTimeInterpretation(night);
   const wakeDamage = classifyWakeDamage(night);
+  const benignFragmentation =
+    wakeDamage.damageLevel === "low" &&
+    (wakeDamage.wakeType === "frequent_short_wakes" || wakeDamage.wakeType === "few_wakes");
   const poorSleepEfficiency =
     typeof timeInterpretation.sleepEfficiencyPct === "number" &&
     timeInterpretation.sleepEfficiencyPct < 85;
@@ -496,7 +503,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.mind_emotional += 1;
   }
 
-  if (prolongedWakeRecovery && scores.mind_emotional > 0) {
+  if (prolongedWakeRecovery && scores.mind_emotional > 0 && !benignFragmentation) {
     scores.mind_emotional += 1;
   }
 
@@ -535,7 +542,7 @@ function scoreNightCategories(night: NightWithOptionalProtocol | undefined) {
     scores.body_physiology += 1;
   }
 
-  if (maintenanceIssue && scores.body_physiology > 0 && !hasThermalSystemSignal(night)) {
+  if (maintenanceIssue && scores.body_physiology > 0 && !hasThermalSystemSignal(night) && wakeDamage.damageLevel !== "low") {
     scores.body_physiology += majorWakeRecovery ? 3 : 2;
   }
 
@@ -764,6 +771,10 @@ function mindProtocolForNight(night: NightWithOptionalProtocol | undefined) {
 
 
 function protocolForCategory(category: RRSMContributorCategory, scores: ReturnType<typeof scoreNightCategories>, night?: NightWithOptionalProtocol) {
+  if (!night || category === "none" || isStableRecoveryNight(night) || isMinorOrNeutralIssueNight(night)) {
+    return "No protocol needed tonight";
+  }
+
   switch (category) {
     case "mind_emotional":
       return mindProtocolForNight(night);
@@ -791,7 +802,7 @@ function protocolForCategory(category: RRSMContributorCategory, scores: ReturnTy
     case "circadian_context":
       return "RRSM Rhythm Support Protocol";
     default:
-      return "Good recovery — keep current setup stable tonight.";
+      return "No protocol needed tonight";
   }
 }
 
@@ -2044,7 +2055,9 @@ export function runRRSMEngineV4(nights: NightWithOptionalProtocol[]): RRSMProtoc
   const sleepIssueDetected = detectSleepIssue(latestNight);
   const categoryScores = scoreNightCategories(latestNight);
   const dominantCategory = sleepIssueDetected ? chooseDominantCategory(categoryScores, latestNight) : "none";
-  const recommendedProtocol = protocolForCategory(dominantCategory, categoryScores, latestNight);
+  const recommendedProtocol = sleepIssueDetected
+    ? protocolForCategory(dominantCategory, categoryScores, latestNight)
+    : "No protocol needed tonight";
   const recurring = recurringIssue(nights, dominantCategory);
   const secondaryFactors = secondaryFactorsFor(categoryScores, dominantCategory);
   const protocolEvaluation = evaluateProtocol(nights);
