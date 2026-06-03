@@ -41,8 +41,10 @@ export function getStandardProtocolByTitle(title: string) {
   if (lower.includes("shutdown")) return hygieneStandardProtocol;
   if (lower.includes("rhythm")) return rhythmSupportProtocol;
   if (lower.includes("no protocol")) return noProtocolNeeded;
+  if (lower.includes("good recovery")) return noProtocolNeeded;
+  if (lower.includes("keep current setup stable")) return noProtocolNeeded;
 
-  return mindStandardProtocol;
+  return noProtocolNeeded;
 }
 
 export function getEscalatedProtocolForTitle(title: string) {
@@ -54,6 +56,9 @@ export function getEscalatedProtocolForTitle(title: string) {
   if (lower.includes("environment")) return environmentEscalatedProtocol;
   if (lower.includes("shutdown")) return hygieneEscalatedProtocol;
   if (lower.includes("rhythm")) return rhythmSupportProtocol;
+  if (lower.includes("no protocol")) return noProtocolNeeded;
+  if (lower.includes("good recovery")) return noProtocolNeeded;
+  if (lower.includes("keep current setup stable")) return noProtocolNeeded;
 
-  return mindEscalatedProtocol;
+  return noProtocolNeeded;
 }
