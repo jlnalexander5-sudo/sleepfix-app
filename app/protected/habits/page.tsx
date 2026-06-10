@@ -344,10 +344,9 @@ export default function HabitsPage() {
 
         <div className="mt-5 grid gap-6">
           <section className="rounded-xl border border-neutral-200 p-4">
-            <h3 className="text-lg font-bold">Before Bed / During the Day</h3>
+            <h3 className="text-lg font-bold">During the Day</h3>
             <p className="mt-1 text-sm text-neutral-600">
-              Record specific factors from the day or before bed that may have
-              influenced sleep.
+              Record specific factors from the day that may have influenced sleep.
             </p>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -384,10 +383,9 @@ export default function HabitsPage() {
           </section>
 
           <section className="rounded-xl border border-neutral-200 p-4">
-            <h3 className="text-lg font-bold">During the Night</h3>
+            <h3 className="text-lg font-bold">During the Night / Just Before Bedtime</h3>
             <p className="mt-1 text-sm text-neutral-600">
-              Record specific factors that appeared to help or disrupt sleep
-              during the night.
+              Record specific factors from just before bedtime or during the night that appeared to help or disrupt sleep.
             </p>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -449,66 +447,65 @@ export default function HabitsPage() {
       </section>
 
       <section className="mt-8 rounded-xl border bg-white p-4">
-        <h2 className="text-xl font-semibold">Diary history — last 30 days</h2>
+        <h2 className="text-xl font-semibold">Diary History</h2>
         <p className="mt-2 text-base text-neutral-600">
-          Compare good and poor nights. Look for factors that stayed the same
-          and factors that changed.
+          Only recorded diary entries are shown. Compare good and poor nights. Look for factors that stayed the same and factors that changed.
         </p>
 
         <div className="mt-4 grid gap-3">
           {dayList
             .slice()
             .reverse()
-            .map((d) => {
-              const entry = diaryByDate[d] ?? emptyDiary(d);
-
-              return (
-                <div key={d} className="rounded-lg border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-bold">{formatDisplayDate(d)}</div>
-                    <div className="text-sm text-neutral-600">
-                      {diarySignal(entry)}
-                    </div>
+            .map((d) => diaryByDate[d] ?? emptyDiary(d))
+            .filter(hasDiaryEntry)
+            .map((entry) => (
+              <div key={entry.entry_date} className="rounded-lg border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-bold">
+                    {formatDisplayDate(entry.entry_date)}
                   </div>
-
-                  {hasDiaryEntry(entry) ? (
-                    <div className="mt-2 grid gap-2 text-sm text-neutral-700">
-                      {entry.day_good_factors.trim() ? (
-                        <div>
-                          <strong>Day good factors:</strong>{" "}
-                          {entry.day_good_factors}
-                        </div>
-                      ) : null}
-
-                      {entry.day_bad_factors.trim() ? (
-                        <div>
-                          <strong>Day bad factors:</strong>{" "}
-                          {entry.day_bad_factors}
-                        </div>
-                      ) : null}
-
-                      {entry.night_good_factors.trim() ? (
-                        <div>
-                          <strong>Night good factors:</strong>{" "}
-                          {entry.night_good_factors}
-                        </div>
-                      ) : null}
-
-                      {entry.night_bad_factors.trim() ? (
-                        <div>
-                          <strong>Night bad factors:</strong>{" "}
-                          {entry.night_bad_factors}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-sm text-neutral-500">
-                      No diary entry recorded.
-                    </div>
-                  )}
+                  <div className="text-sm text-neutral-600">
+                    {diarySignal(entry)}
+                  </div>
                 </div>
-              );
-            })}
+
+                <div className="mt-2 grid gap-2 text-sm text-neutral-700">
+                  {entry.day_good_factors.trim() ? (
+                    <div>
+                      <strong>Day good factors:</strong>{" "}
+                      {entry.day_good_factors}
+                    </div>
+                  ) : null}
+
+                  {entry.day_bad_factors.trim() ? (
+                    <div>
+                      <strong>Day bad factors:</strong>{" "}
+                      {entry.day_bad_factors}
+                    </div>
+                  ) : null}
+
+                  {entry.night_good_factors.trim() ? (
+                    <div>
+                      <strong>Night good factors:</strong>{" "}
+                      {entry.night_good_factors}
+                    </div>
+                  ) : null}
+
+                  {entry.night_bad_factors.trim() ? (
+                    <div>
+                      <strong>Night bad factors:</strong>{" "}
+                      {entry.night_bad_factors}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+
+          {!dayList.some((d) => hasDiaryEntry(diaryByDate[d] ?? emptyDiary(d))) ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-neutral-500">
+              No diary entries recorded in the last 30 days.
+            </div>
+          ) : null}
         </div>
       </section>
     </main>
