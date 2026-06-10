@@ -7,8 +7,10 @@ type DiaryEntry = {
   id?: string;
   user_id?: string;
   entry_date: string;
-  before_sleep: string;
-  during_night: string;
+  day_good_factors: string;
+  day_bad_factors: string;
+  night_good_factors: string;
+  night_bad_factors: string;
 };
 
 function toYMD(d: Date) {
@@ -40,8 +42,10 @@ function buildDayList(fromYMD: string, toYMDStr: string) {
 function emptyDiary(date: string): DiaryEntry {
   return {
     entry_date: date,
-    before_sleep: "",
-    during_night: "",
+    day_good_factors: "",
+    day_bad_factors: "",
+    night_good_factors: "",
+    night_bad_factors: "",
   };
 }
 
@@ -59,12 +63,23 @@ function formatDisplayDate(ymd: string) {
 
 function diarySignal(entry: DiaryEntry) {
   const filled =
-    Number(Boolean(entry.before_sleep.trim())) +
-    Number(Boolean(entry.during_night.trim()));
+    Number(Boolean(entry.day_good_factors.trim())) +
+    Number(Boolean(entry.day_bad_factors.trim())) +
+    Number(Boolean(entry.night_good_factors.trim())) +
+    Number(Boolean(entry.night_bad_factors.trim()));
 
-  if (filled >= 2) return "Saved diary entry";
+  if (filled >= 3) return "Detailed diary entry";
   if (filled >= 1) return "Partial diary entry";
   return "No diary entry";
+}
+
+function hasDiaryEntry(entry: DiaryEntry) {
+  return Boolean(
+    entry.day_good_factors.trim() ||
+      entry.day_bad_factors.trim() ||
+      entry.night_good_factors.trim() ||
+      entry.night_bad_factors.trim(),
+  );
 }
 
 export default function HabitsPage() {
@@ -76,8 +91,10 @@ export default function HabitsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [diaryByDate, setDiaryByDate] = useState<Record<string, DiaryEntry>>({});
-  const [draftBeforeSleep, setDraftBeforeSleep] = useState("");
-  const [draftDuringNight, setDraftDuringNight] = useState("");
+  const [draftDayGoodFactors, setDraftDayGoodFactors] = useState("");
+  const [draftDayBadFactors, setDraftDayBadFactors] = useState("");
+  const [draftNightGoodFactors, setDraftNightGoodFactors] = useState("");
+  const [draftNightBadFactors, setDraftNightBadFactors] = useState("");
   const [isDirty, setIsDirty] = useState(false);
   const [diarySavedMessage, setDiarySavedMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +104,7 @@ export default function HabitsPage() {
   }, []);
 
   const fromYMD = useMemo(
-    () => (todayYMD ? addDays(todayYMD, -6) : ""),
+    () => (todayYMD ? addDays(todayYMD, -29) : ""),
     [todayYMD],
   );
 
@@ -124,7 +141,9 @@ export default function HabitsPage() {
 
       const { data, error: fetchErr } = await supabase
         .from("sleep_diary_entries")
-        .select("id,user_id,entry_date,before_sleep,during_night")
+        .select(
+          "id,user_id,entry_date,day_good_factors,day_bad_factors,night_good_factors,night_bad_factors",
+        )
         .eq("user_id", uid)
         .gte("entry_date", fromYMD)
         .lte("entry_date", todayYMD)
@@ -149,8 +168,10 @@ export default function HabitsPage() {
           id: row.id,
           user_id: row.user_id,
           entry_date: row.entry_date,
-          before_sleep: row.before_sleep ?? "",
-          during_night: row.during_night ?? "",
+          day_good_factors: row.day_good_factors ?? "",
+          day_bad_factors: row.day_bad_factors ?? "",
+          night_good_factors: row.night_good_factors ?? "",
+          night_bad_factors: row.night_bad_factors ?? "",
         };
       });
 
@@ -171,20 +192,34 @@ export default function HabitsPage() {
     if (!selectedDate) return;
 
     const savedEntry = diaryByDate[selectedDate] ?? emptyDiary(selectedDate);
-    setDraftBeforeSleep(savedEntry.before_sleep);
-    setDraftDuringNight(savedEntry.during_night);
+    setDraftDayGoodFactors(savedEntry.day_good_factors);
+    setDraftDayBadFactors(savedEntry.day_bad_factors);
+    setDraftNightGoodFactors(savedEntry.night_good_factors);
+    setDraftNightBadFactors(savedEntry.night_bad_factors);
     setIsDirty(false);
     setDiarySavedMessage("");
   }, [selectedDate, diaryByDate]);
 
-  function updateDraftBeforeSleep(value: string) {
-    setDraftBeforeSleep(value);
+  function updateDraftDayGoodFactors(value: string) {
+    setDraftDayGoodFactors(value);
     setDiarySavedMessage("");
     setIsDirty(true);
   }
 
-  function updateDraftDuringNight(value: string) {
-    setDraftDuringNight(value);
+  function updateDraftDayBadFactors(value: string) {
+    setDraftDayBadFactors(value);
+    setDiarySavedMessage("");
+    setIsDirty(true);
+  }
+
+  function updateDraftNightGoodFactors(value: string) {
+    setDraftNightGoodFactors(value);
+    setDiarySavedMessage("");
+    setIsDirty(true);
+  }
+
+  function updateDraftNightBadFactors(value: string) {
+    setDraftNightBadFactors(value);
     setDiarySavedMessage("");
     setIsDirty(true);
   }
@@ -198,10 +233,10 @@ export default function HabitsPage() {
     const payload = {
       user_id: userId,
       entry_date: selectedDate,
-      before_sleep: draftBeforeSleep.trim() || null,
-      during_night: draftDuringNight.trim() || null,
-      what_helped: null,
-      personal_note: null,
+      day_good_factors: draftDayGoodFactors.trim() || null,
+      day_bad_factors: draftDayBadFactors.trim() || null,
+      night_good_factors: draftNightGoodFactors.trim() || null,
+      night_bad_factors: draftNightBadFactors.trim() || null,
     };
 
     const { data: existing, error: existingErr } = await supabase
@@ -237,8 +272,10 @@ export default function HabitsPage() {
         id: existing?.id ?? prev[selectedDate]?.id,
         user_id: userId,
         entry_date: selectedDate,
-        before_sleep: draftBeforeSleep,
-        during_night: draftDuringNight,
+        day_good_factors: draftDayGoodFactors,
+        day_bad_factors: draftDayBadFactors,
+        night_good_factors: draftNightGoodFactors,
+        night_bad_factors: draftNightBadFactors,
       },
     }));
 
@@ -253,18 +290,18 @@ export default function HabitsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Sleep Diary</h1>
         <p className="mt-2 text-base text-neutral-600">
-          Record what happened before sleep and during the night. Over time, this
-          becomes a useful history for spotting what is helping or working
-          against your sleep.
+          Record the specific factors that may have helped or disrupted sleep so
+          you can compare good and poor nights and identify recurring patterns
+          over time.
         </p>
 
         <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
           <div className="text-sm font-bold text-neutral-900">
-            Diary page = nightly observations and pattern tracking.
+            Diary page = factor tracking and future reference.
           </div>
           <div className="mt-1 text-sm text-neutral-700">
-            Keep it simple: write what happened before bed and what happened
-            during the night.
+            Focus on specific elements, not conditions. For example: write
+            “used two blankets and a doona”, not just “too warm”.
           </div>
         </div>
       </div>
@@ -280,7 +317,8 @@ export default function HabitsPage() {
           <div>
             <h2 className="text-xl font-semibold">Diary entry</h2>
             <p className="mt-1 text-base text-neutral-600">
-              Choose the day/night, write the entry, then save before leaving.
+              Choose the day/night, write the factor notes, then save before
+              leaving.
             </p>
           </div>
 
@@ -304,28 +342,86 @@ export default function HabitsPage() {
           </label>
         </div>
 
-        <div className="mt-4 grid gap-4">
-          <label className="grid gap-2">
-            <span className="font-semibold">Before sleep</span>
-            <textarea
-              value={draftBeforeSleep}
-              onChange={(e) => updateDraftBeforeSleep(e.target.value)}
-              rows={4}
-              className="w-full rounded-lg border p-3 text-base"
-              placeholder="Example: screen time, food, drink, caffeine, exercise, stress, relaxation, room temperature..."
-            />
-          </label>
+        <div className="mt-5 grid gap-6">
+          <section className="rounded-xl border border-neutral-200 p-4">
+            <h3 className="text-lg font-bold">Before Bed / During the Day</h3>
+            <p className="mt-1 text-sm text-neutral-600">
+              Record specific factors from the day or before bed that may have
+              influenced sleep.
+            </p>
 
-          <label className="grid gap-2">
-            <span className="font-semibold">During the night / after waking</span>
-            <textarea
-              value={draftDuringNight}
-              onChange={(e) => updateDraftDuringNight(e.target.value)}
-              rows={5}
-              className="w-full rounded-lg border p-3 text-base"
-              placeholder="Example: woke up at 3am, bathroom trip, cold/hot, noise, pain, dreams, racing thoughts, how you felt after waking..."
-            />
-          </label>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2">
+                <span className="font-semibold">Good Factors</span>
+                <span className="text-sm text-neutral-600">
+                  What factors may have contributed to a good night's sleep?
+                  Write those factors in for future reference.
+                </span>
+                <textarea
+                  value={draftDayGoodFactors}
+                  onChange={(e) => updateDraftDayGoodFactors(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-lg border p-3 text-base"
+                  placeholder="Examples: finished dinner at 5pm; went for a 10-minute walk after dinner; did some gardening at 8pm; read a book before bed; turned the heater off at 7pm..."
+                />
+              </label>
+
+              <label className="grid gap-2">
+                <span className="font-semibold">Bad Factors</span>
+                <span className="text-sm text-neutral-600">
+                  What factors may have contributed to a poor night's sleep?
+                  Write those factors in for future reference.
+                </span>
+                <textarea
+                  value={draftDayBadFactors}
+                  onChange={(e) => updateDraftDayBadFactors(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-lg border p-3 text-base"
+                  placeholder="Examples: ate dinner at 8pm instead of 5pm; exercised too late; drank tea at 9pm instead of 4pm; smoked at 10pm instead of finishing at 5pm; watched a horror movie..."
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-neutral-200 p-4">
+            <h3 className="text-lg font-bold">During the Night</h3>
+            <p className="mt-1 text-sm text-neutral-600">
+              Record specific factors that appeared to help or disrupt sleep
+              during the night.
+            </p>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2">
+                <span className="font-semibold">Good Factors</span>
+                <span className="text-sm text-neutral-600">
+                  What factors do you think contributed to a good night's sleep?
+                  Record the elements that appeared to help.
+                </span>
+                <textarea
+                  value={draftNightGoodFactors}
+                  onChange={(e) => updateDraftNightGoodFactors(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-lg border p-3 text-base"
+                  placeholder="Examples: used two blankets instead of one; opened the window slightly; used a different pillow; removed an extra blanket; rearranged bedding and slept comfortably afterwards..."
+                />
+              </label>
+
+              <label className="grid gap-2">
+                <span className="font-semibold">Bad Factors</span>
+                <span className="text-sm text-neutral-600">
+                  What factors do you think contributed to a poor night's sleep?
+                  Record the elements that appeared to disturb sleep.
+                </span>
+                <textarea
+                  value={draftNightBadFactors}
+                  onChange={(e) => updateDraftNightBadFactors(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-lg border p-3 text-base"
+                  placeholder="Examples: added an extra bed cover before sleep; used doona plus two blankets plus main bed cover; heater stayed on too long; pillow was uncomfortable; bedding needed rearranging several times..."
+                />
+              </label>
+            </div>
+          </section>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -353,9 +449,10 @@ export default function HabitsPage() {
       </section>
 
       <section className="mt-8 rounded-xl border bg-white p-4">
-        <h2 className="text-xl font-semibold">Diary history — last 7 days</h2>
+        <h2 className="text-xl font-semibold">Diary history — last 30 days</h2>
         <p className="mt-2 text-base text-neutral-600">
-          Only saved diary entries appear here.
+          Compare good and poor nights. Look for factors that stayed the same
+          and factors that changed.
         </p>
 
         <div className="mt-4 grid gap-3">
@@ -374,18 +471,33 @@ export default function HabitsPage() {
                     </div>
                   </div>
 
-                  {entry.before_sleep.trim() || entry.during_night.trim() ? (
-                    <div className="mt-2 grid gap-1 text-sm text-neutral-700">
-                      {entry.before_sleep.trim() ? (
+                  {hasDiaryEntry(entry) ? (
+                    <div className="mt-2 grid gap-2 text-sm text-neutral-700">
+                      {entry.day_good_factors.trim() ? (
                         <div>
-                          <strong>Before sleep:</strong> {entry.before_sleep}
+                          <strong>Day good factors:</strong>{" "}
+                          {entry.day_good_factors}
                         </div>
                       ) : null}
 
-                      {entry.during_night.trim() ? (
+                      {entry.day_bad_factors.trim() ? (
                         <div>
-                          <strong>During the night:</strong>{" "}
-                          {entry.during_night}
+                          <strong>Day bad factors:</strong>{" "}
+                          {entry.day_bad_factors}
+                        </div>
+                      ) : null}
+
+                      {entry.night_good_factors.trim() ? (
+                        <div>
+                          <strong>Night good factors:</strong>{" "}
+                          {entry.night_good_factors}
+                        </div>
+                      ) : null}
+
+                      {entry.night_bad_factors.trim() ? (
+                        <div>
+                          <strong>Night bad factors:</strong>{" "}
+                          {entry.night_bad_factors}
                         </div>
                       ) : null}
                     </div>
