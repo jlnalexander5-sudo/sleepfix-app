@@ -98,6 +98,7 @@ export default function HabitsPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [diarySavedMessage, setDiarySavedMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const clearDraftsAfterSaveRef = React.useRef(false);
 
   useEffect(() => {
     setTodayYMD(toYMD(new Date()));
@@ -191,6 +192,16 @@ export default function HabitsPage() {
   useEffect(() => {
     if (!selectedDate) return;
 
+    if (clearDraftsAfterSaveRef.current) {
+      clearDraftsAfterSaveRef.current = false;
+      setDraftDayGoodFactors("");
+      setDraftDayBadFactors("");
+      setDraftNightGoodFactors("");
+      setDraftNightBadFactors("");
+      setIsDirty(false);
+      return;
+    }
+
     const savedEntry = diaryByDate[selectedDate] ?? emptyDiary(selectedDate);
     setDraftDayGoodFactors(savedEntry.day_good_factors);
     setDraftDayBadFactors(savedEntry.day_bad_factors);
@@ -265,6 +276,8 @@ export default function HabitsPage() {
       return;
     }
 
+    clearDraftsAfterSaveRef.current = true;
+
     setDiaryByDate((prev) => ({
       ...prev,
       [selectedDate]: {
@@ -279,6 +292,10 @@ export default function HabitsPage() {
       },
     }));
 
+    setDraftDayGoodFactors("");
+    setDraftDayBadFactors("");
+    setDraftNightGoodFactors("");
+    setDraftNightBadFactors("");
     setDiarySavedMessage("Saved ✅");
     setIsDirty(false);
     setSaving(false);
