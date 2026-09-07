@@ -8,6 +8,7 @@ type RRSMProfileRow = {
   user_id?: string;
   sleep_context?: string[] | null;
   work_context?: string[] | null;
+  suspected_factors?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -97,6 +98,7 @@ export default function ProfilePage() {
 
   const [sleepContext, setSleepContext] = useState<string[]>([]);
   const [workContext, setWorkContext] = useState<string[]>([]);
+  const [suspectedFactors, setSuspectedFactors] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +120,7 @@ export default function ProfilePage() {
 
       const { data, error: profileErr } = await supabase
         .from("rrsm_profiles")
-        .select("sleep_context,work_context")
+        .select("sleep_context,work_context,suspected_factors")
         .eq("user_id", authData.user.id)
         .maybeSingle();
 
@@ -129,6 +131,7 @@ export default function ProfilePage() {
           const profile = (data ?? {}) as RRSMProfileRow;
           setSleepContext(Array.isArray(profile.sleep_context) ? profile.sleep_context : []);
           setWorkContext(Array.isArray(profile.work_context) ? profile.work_context : []);
+          setSuspectedFactors(typeof profile.suspected_factors === "string" ? profile.suspected_factors : "");
         }
 
         setLoading(false);
@@ -159,6 +162,7 @@ export default function ProfilePage() {
       user_id: authData.user.id,
       sleep_context: sleepContext,
       work_context: workContext,
+      suspected_factors: suspectedFactors.trim() || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -179,7 +183,9 @@ export default function ProfilePage() {
     <main className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Profile</h1>
       <p className="mt-2 text-base text-gray-600">
-        Tell SleepFix about your usual sleep context so the engine can interpret your nightly records more accurately.
+        Tell SleepFix about your usual sleep and lifestyle context. These background details help the engine interpret
+        nightly records, while your own view of what affects your sleep is stored separately for later comparison with
+        Investigation findings.
       </p>
 
       {loading ? (
@@ -204,7 +210,7 @@ export default function ProfilePage() {
         <div className="mt-6 grid gap-6">
           <CheckboxGrid
             title="Sleep context"
-            description="Choose the patterns that commonly affect your sleep."
+            description="Choose the items that describe your usual sleep context. These are background clues, not confirmed causes."
             options={SLEEP_CONTEXT_OPTIONS}
             values={sleepContext}
             onChange={setSleepContext}
@@ -212,17 +218,43 @@ export default function ProfilePage() {
 
           <CheckboxGrid
             title="Work / lifestyle context"
-            description="Choose the usual work or lifestyle context that may affect sleep."
+            description="Choose the work or lifestyle conditions that are commonly part of your routine."
             options={WORK_CONTEXT_OPTIONS}
             values={workContext}
             onChange={setWorkContext}
           />
 
+
+          <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-6 shadow-sm">
+            <h2 className="text-xl font-extrabold text-gray-900">Your own view</h2>
+            <p className="mt-1 text-gray-700">
+              What do you currently think affects your sleep?
+            </p>
+            <p className="mt-2 text-sm text-gray-600">
+              This is your starting hypothesis. SleepFix stores it separately from the engine&apos;s profile weighting so
+              your own suspicion does not become evidence simply because you entered it here. Later, it can be compared with
+              what your Investigation actually shows.
+            </p>
+
+            <textarea
+              value={suspectedFactors}
+              onChange={(e) => setSuspectedFactors(e.target.value)}
+              maxLength={1200}
+              placeholder="Example: I think bedroom temperature, late caffeine, work stress, or exercise timing may be affecting my sleep..."
+              className="mt-4 min-h-[130px] w-full rounded-xl border border-gray-300 bg-white p-3 text-base text-gray-900"
+            />
+
+            <div className="mt-2 text-right text-xs text-gray-500">
+              {suspectedFactors.length}/1200
+            </div>
+          </section>
+
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-extrabold text-gray-900">Why this matters</h2>
             <p className="mt-2 text-gray-700">
-              The profile does not replace your nightly sleep record. It gives SleepFix background context so it can
-              separate repeated patterns from one-off disruptions.
+              The profile does not decide what is causing your insomnia. It gives SleepFix background context that can
+              modify the engine&apos;s interpretation when the nightly sleep record points in the same direction. Your own
+              suspected factors remain separate so they can be tested through Investigation rather than assumed to be true.
             </p>
 
          <div className="mt-5 flex flex-wrap items-center gap-4">
