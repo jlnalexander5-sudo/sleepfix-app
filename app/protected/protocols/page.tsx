@@ -32,6 +32,11 @@ type SleepNightRow = {
   protocol_followed?: string | null;
 };
 
+type ProfileContextRow = {
+  sleep_context?: string[] | null;
+  work_context?: string[] | null;
+};
+
 function parseNumberChoice(choice: string | null): number | null {
   if (!choice) return null;
   const n = parseInt(choice.replace(/[^0-9]/g, ""), 10);
@@ -70,11 +75,16 @@ function textFromArray(value?: string[] | null) {
   return Array.isArray(value) ? value.join(", ") : "";
 }
 
-function mapNight(row: SleepNightRow): RRSMMetricsNight & {
+function mapNight(
+  row: SleepNightRow,
+  profile: ProfileContextRow | null,
+): RRSMMetricsNight & {
   durationMin?: number | null;
   wakeRecoveryMin?: number | null;
   primaryTrigger?: string | null;
   protocolFollowed?: "yes" | "partial" | "no" | "none" | null;
+  sleepContext?: string[] | null;
+  workContext?: string[] | null;
 } {
   const drivers = [
     row.primary_driver,
@@ -106,6 +116,8 @@ function mapNight(row: SleepNightRow): RRSMMetricsNight & {
     primaryDriver: drivers || row.primary_driver || "(no driver logged)",
     secondaryDriver: row.secondary_driver ?? null,
     protocolFollowed,
+    sleepContext: Array.isArray(profile?.sleep_context) ? profile.sleep_context : [],
+    workContext: Array.isArray(profile?.work_context) ? profile.work_context : [],
   };
 }
 
@@ -196,27 +208,44 @@ export default function ProtocolsPage() {
         return;
       }
 
-      const { data, error: rowsErr } = await supabase
-        .from("sleep_nights")
-        .select(
-          "id,local_date,created_at,sleep_start,sleep_end,duration_min,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed",
-        )
-        .eq("user_id", authData.user.id)
-        .order("local_date", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false })
-        .limit(14);
+      const [nightsRes, profileRes] = await Promise.all([
+        supabase
+          .from("sleep_nights")
+          .select(
+            "id,local_date,created_at,sleep_start,sleep_end,duration_min,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,primary_trigger,mind_tags,environment_tags,bed_tags,body_tags,primary_driver,secondary_driver,protocol_used_name,protocol_followed",
+          )
+          .eq("user_id", authData.user.id)
+          .order("local_date", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .limit(14),
 
-      if (rowsErr) {
+        supabase
+          .from("rrsm_profiles")
+          .select("sleep_context,work_context")
+          .eq("user_id", authData.user.id)
+          .maybeSingle(),
+      ]);
+
+      if (nightsRes.error) {
         if (!cancelled) {
-          setError(rowsErr.message);
+          setError(nightsRes.error.message);
           setLoading(false);
         }
         return;
       }
 
-      const rows = (data ?? []) as SleepNightRow[];
+      if (profileRes.error) {
+        if (!cancelled) {
+          setError(profileRes.error.message);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const rows = (nightsRes.data ?? []) as SleepNightRow[];
+      const profile = (profileRes.data ?? null) as ProfileContextRow | null;
       const latestRow = rows[0] ?? null;
-      const mapped = [...rows].reverse().map((row) => mapNight(row));
+      const mapped = [...rows].reverse().map((row) => mapNight(row, profile));
       const protocolResult = runRRSMEngineV4(mapped);
 
       if (!cancelled) {
