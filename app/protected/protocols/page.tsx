@@ -290,7 +290,7 @@ export default function ProtocolsPage() {
       sleep_night_id: latestNightRow?.id ?? null,
       local_date: latestNightRow?.local_date ?? null,
       engine_category: result.dominantCategory,
-      engine_protocol: result.recommendedProtocol,
+      engine_protocol: result.recommendedProtocol.replace(/^RRSM\b/, "RSM"),
       user_agreed: userAgreed,
       missing_reason: userAgreed ? null : missingReason || null,
     });
@@ -335,7 +335,7 @@ export default function ProtocolsPage() {
     <main className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Recommended Protocol</h1>
       <p className="mt-2 text-base text-gray-600">
-        One focused action based on your latest saved sleep record. Detailed scores and trends live in Results.
+        One focused action based on what SleepFix currently understands from your latest sleep record, profile context, and developing investigation.
       </p>
 
       {!loading && latestNightRow ? (
@@ -399,13 +399,13 @@ export default function ProtocolsPage() {
 
       {result && nightCount > 0 && displayProtocol ? (
         <>
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">
+          <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/45 p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-emerald-700">
               Focus for tonight
             </div>
 
-            <h2 className="mt-2 text-2xl font-extrabold text-blue-900">
-              {displayProtocol.title}
+            <h2 className="mt-2 text-2xl font-extrabold text-emerald-950">
+              {displayProtocol.title.replace(/^RRSM\b/, "RSM")}
             </h2>
 
             {escalatedProtocol ? (
@@ -429,16 +429,16 @@ export default function ProtocolsPage() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-sm font-bold uppercase tracking-wide text-gray-500">
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-white/85 p-4">
+              <div className="text-sm font-bold uppercase tracking-wide text-emerald-700">
                 Best for
               </div>
               <p className="mt-1 text-gray-800">{displayProtocol.bestFor}</p>
             </div>
           </section>
 
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-bold text-gray-900">Is this the right focus?</h3>
+          <section className="mt-6 rounded-2xl border border-violet-200 bg-violet-50/45 p-6 shadow-sm">
+            <h3 className="text-xl font-bold text-violet-900">Is this the right focus?</h3>
             <p className="mt-2 text-gray-700">
               Confirm this so SleepFix can keep improving the interpretation engine.
             </p>
@@ -527,8 +527,8 @@ export default function ProtocolsPage() {
           </section>
 
           {!protocolPaused ? (
-            <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-bold text-gray-900">What to do tonight</h3>
+            <section className="mt-6 rounded-2xl border border-green-200 bg-green-50/45 p-6 shadow-sm">
+              <h3 className="text-xl font-bold text-green-900">What to do tonight</h3>
               <p className="mt-2 text-gray-700">{displayProtocol.focus}</p>
 
               <ol className="mt-4 list-decimal space-y-3 pl-6 text-base text-gray-800">
@@ -540,8 +540,8 @@ export default function ProtocolsPage() {
               </ol>
 
               {displayProtocol.doNot?.length ? (
-                <div className="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-                  <div className="font-bold text-gray-900">Do not</div>
+                <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900">
+                  <div className="font-bold text-rose-900">Do not</div>
                   <ul className="mt-2 list-disc space-y-1 pl-5">
                     {displayProtocol.doNot.map((item) => (
                       <li key={item}>{item}</li>
@@ -551,9 +551,14 @@ export default function ProtocolsPage() {
               ) : null}
 
               {displayProtocol.diaryPrompt ? (
-                <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                  <div className="font-bold text-gray-900">Diary follow-up</div>
-                  <div className="mt-1">{displayProtocol.diaryPrompt}</div>
+                <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/70 p-4 text-sm text-violet-950">
+                  <div className="font-bold text-violet-900">If this does not work</div>
+                  <div className="mt-1">
+                    Record anything that remained active or seemed unusual. If a possible factor keeps appearing, add it to Possible Factor Notes and investigate it separately if needed.
+                  </div>
+                  <div className="mt-2 text-xs text-violet-800">
+                    Protocol note: {displayProtocol.diaryPrompt}
+                  </div>
                 </div>
               ) : null}
             </section>
@@ -561,7 +566,7 @@ export default function ProtocolsPage() {
             <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
               <h3 className="text-xl font-bold text-amber-900">Protocol paused</h3>
               <p className="mt-2 text-amber-900">
-                Because you said the focus is missing something, do not treat this protocol as final. Save the missing factor, then check the next recommendation after another sleep entry.
+                Because you said the focus is missing something, do not treat this protocol as final. Save what SleepFix missed, add any recurring possibility to Possible Factor Notes, and investigate it separately if needed before relying on the next recommendation.
               </p>
             </section>
           )}
