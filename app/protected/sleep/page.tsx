@@ -279,7 +279,7 @@ function OptionalContextSection({
   const selectedCount = value.length;
 
   return (
-    <details className="rounded-xl border border-gray-200 bg-white">
+    <details className="rounded-xl border border-amber-200 bg-white/90">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 font-extrabold text-gray-900">
         <span>{title}</span>
         <span className="text-sm font-semibold text-gray-500">
@@ -288,7 +288,7 @@ function OptionalContextSection({
             : "Optional"}
         </span>
       </summary>
-      <div className="border-t border-gray-100 px-4 pt-4">
+      <div className="border-t border-amber-100 px-4 pt-4">
         {children}
       </div>
     </details>
@@ -702,8 +702,8 @@ const canSaveNight = missingRequired.length === 0;
 
 
       {/* Night window */}
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-section-title">Night recording</div>
+      <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/45 p-6 shadow-sm">
+        <div className="sf-section-title text-blue-900">Night recording</div>
         <div className="sf-help">Log when you went to sleep and when you woke up.</div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -759,13 +759,13 @@ const canSaveNight = missingRequired.length === 0;
 
 
       {/* Required metrics */}
-      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-section-title">Sleep Check-In — How Was Your Sleep?</div>
+      <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/45 p-6 shadow-sm">
+        <div className="sf-section-title text-emerald-900">Sleep Check-In — How Was Your Sleep?</div>
         <div className="sf-help">Tap what applies.</div>
 
         <div className="space-y-5 mt-4">
           {/* Sleep initiation + result */}
-          <div className="rounded-xl border border-gray-200 p-4">
+          <div className="rounded-xl border border-emerald-200 bg-white/85 p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div className="sf-field-label" style={{ marginBottom: 10 }}>
@@ -812,7 +812,7 @@ const canSaveNight = missingRequired.length === 0;
           </div>
 
           {/* Sleep maintenance */}
-          <div className="rounded-xl border border-gray-200 p-4">
+          <div className="rounded-xl border border-emerald-200 bg-white/85 p-4">
             <div className="sf-field-label" style={{ marginBottom: 14 }}>
               Sleep maintenance
             </div>
@@ -862,8 +862,8 @@ const canSaveNight = missingRequired.length === 0;
           </div>
         </div>
 
-        <div className="mt-6">
-          <div className="sf-section-title">Optional context</div>
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/55 p-4">
+          <div className="sf-section-title text-amber-900">Optional context</div>
           <div className="sf-help" style={{ marginBottom: 14 }}>
             Add only what was noticeable or relevant. These observations are not treated as confirmed causes.
           </div>
@@ -925,8 +925,8 @@ const canSaveNight = missingRequired.length === 0;
             </OptionalContextSection>
           </div>
 
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-            <div className="sf-field-label">Anything unusual or different last night?</div>
+          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+            <div className="sf-field-label text-violet-900">Anything unusual or different last night?</div>
             <div className="sf-help" style={{ marginBottom: 12 }}>
               Optional — note anything that stood out, even if you are not sure whether it mattered. You can list several
               possibilities here and, if needed, investigate them one at a time later.
@@ -946,8 +946,8 @@ const canSaveNight = missingRequired.length === 0;
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-field-label">Was last night's recommended protocol followed?</div>
+      <div className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50/45 p-6 shadow-sm">
+        <div className="sf-field-label text-indigo-900">Was last night's recommended protocol followed?</div>
         <div className="sf-help">This helps SleepFix learn whether the recommendation worked, partly worked, or was not tested.</div>
         <select
           className="sf-select"
@@ -972,8 +972,8 @@ const canSaveNight = missingRequired.length === 0;
         <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600, color: "#B00020" }}>{saveError}</div>
       )}
 
-      <section className="mt-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="sf-section-title">Saved notes</div>
+      <section className="mt-8 rounded-2xl border border-sky-200 bg-sky-50/40 p-6 shadow-sm">
+        <div className="sf-section-title text-sky-900">Saved notes</div>
         <div className="sf-help" style={{ marginBottom: 14 }}>
           Only nights where you recorded something unusual or different appear here. Use Edit night if you need to correct or add to a saved note.
         </div>
@@ -982,7 +982,7 @@ const canSaveNight = missingRequired.length === 0;
           {recentNights
             .filter((night) => Boolean(night.notes?.trim()))
             .map((night) => (
-              <details key={night.id} className="rounded-xl border border-gray-200 bg-white">
+              <details key={night.id} className="rounded-xl border border-sky-200 bg-white/90">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
                   <div className="font-extrabold text-gray-900">
                     {formatSavedNightDate(night.local_date, night.created_at)}
