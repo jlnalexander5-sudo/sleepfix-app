@@ -868,7 +868,7 @@ export default function HabitsPage() {
 
       {!loading ? (
         <section className="mb-8 rounded-xl border border-blue-200 bg-blue-50/30 p-5">
-          <h2 className="text-xl font-semibold">Possible Factor Notes</h2>
+          <h2 className="text-xl font-semibold text-blue-900">Possible Factor Notes</h2>
 
           <p className="mt-1 text-neutral-700">
             Keep a reference of anything you may want to investigate later, including factors that appeared to have no effect this time. A note is not treated as a cause or a completed investigation.
@@ -1010,8 +1010,8 @@ export default function HabitsPage() {
       ) : null}
 
       {!loading && !activeInvestigation ? (
-        <section className="rounded-xl border bg-white p-5">
-          <h2 className="text-xl font-semibold">Start an Investigation</h2>
+        <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-5">
+          <h2 className="text-xl font-semibold text-amber-900">Start an Investigation</h2>
 
           <p className="mt-1 text-neutral-600">
             Begin with a main contributing factor in the bedroom or bed
@@ -1076,7 +1076,7 @@ export default function HabitsPage() {
       ) : null}
 
       {!loading && activeInvestigation ? (
-        <section className="rounded-xl border bg-white p-5">
+        <section className="rounded-xl border border-emerald-200 bg-emerald-50/45 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-bold uppercase tracking-wide text-green-700">
@@ -1194,7 +1194,7 @@ export default function HabitsPage() {
             </div>
           </div>
 
-          <div className="mt-6 rounded-xl border border-neutral-200 p-4">
+          <div className="mt-6 rounded-xl border border-emerald-200 bg-white/85 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-lg font-bold">
                 {editingObservationId
@@ -1312,8 +1312,8 @@ export default function HabitsPage() {
             </button>
           </div>
 
-          <div className="mt-6">
-            <h3 className="text-lg font-bold">Investigation History</h3>
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+            <h3 className="text-lg font-bold text-amber-900">Investigation History</h3>
 
             <p className="mt-1 text-sm text-neutral-600">
               All observations remain attached to this investigation. Edit any
@@ -1323,7 +1323,7 @@ export default function HabitsPage() {
 
             <div className="mt-4 overflow-x-auto rounded-xl border">
               <table className="min-w-full border-collapse text-sm">
-                <thead className="bg-neutral-50">
+                <thead className="bg-amber-100/70">
                   <tr className="border-b text-left">
                     <th className="px-3 py-3">Threshold</th>
                     <th className="px-3 py-3">Date</th>
@@ -1438,8 +1438,8 @@ export default function HabitsPage() {
       ) : null}
 
       {!loading ? (
-        <section className="mt-8 rounded-xl border bg-white p-5">
-          <h2 className="text-xl font-semibold">Investigation Records</h2>
+        <section className="mt-8 rounded-xl border border-indigo-200 bg-indigo-50/45 p-5">
+          <h2 className="text-xl font-semibold text-indigo-900">Investigation Records</h2>
 
           <p className="mt-1 text-neutral-600">
             Completed investigations remain here as inactive records. Nothing
@@ -1456,7 +1456,7 @@ export default function HabitsPage() {
               return (
                 <div
                   key={investigation.id}
-                  className="rounded-xl border border-neutral-200"
+                  className="rounded-xl border border-indigo-200 bg-white"
                 >
                   <button
                     type="button"
@@ -1582,8 +1582,8 @@ export default function HabitsPage() {
       ) : null}
 
       {!loading ? (
-        <section className="mt-8 rounded-xl border bg-white p-5">
-          <h2 className="text-xl font-semibold">
+        <section className="mt-8 rounded-xl border border-violet-200 bg-violet-50/45 p-5">
+          <h2 className="text-xl font-semibold text-violet-900">
             Contributing Factors Disrupting Your Sleep
           </h2>
 
@@ -1594,7 +1594,7 @@ export default function HabitsPage() {
 
           <div className="mt-4 overflow-x-auto rounded-xl border">
             <table className="min-w-full border-collapse text-sm">
-              <thead className="bg-neutral-50">
+              <thead className="bg-violet-100/70">
                 <tr className="border-b text-left">
                   <th className="px-3 py-3">Contributing factor</th>
                   <th className="px-3 py-3">Type</th>
