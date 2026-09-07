@@ -54,7 +54,7 @@ export default function ProtectedLayout({
                 <span className="sf-sep">|</span>
                 <Link href="/protected/sleep" style={{ textDecoration: "none" }}>Sleep</Link>
                 <span className="sf-sep">|</span>
-                <Link href="/protected/habits" style={{ textDecoration: "none" }}>Diary</Link>
+                <Link href="/protected/habits" style={{ textDecoration: "none" }}>Investigation</Link>
                 <span className="sf-sep">|</span>
                 <Link href="/protected/protocols" style={{ textDecoration: "none" }}>Protocol</Link>
                 <span className="sf-sep">|</span>
