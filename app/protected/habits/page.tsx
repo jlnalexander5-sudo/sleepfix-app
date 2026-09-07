@@ -40,6 +40,19 @@ type Observation = {
   created_at: string;
 };
 
+type CandidateNoteEffect = "unknown" | "no_noticeable_effect" | "possible_effect";
+
+type CandidateNote = {
+  id: string;
+  user_id: string;
+  note_date: string;
+  factor_name: string;
+  effect_observed: CandidateNoteEffect;
+  note_text: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 const AREA_OPTIONS = [
   { value: "bedroom_bed", label: "Bedroom / bed environment" },
   { value: "house", label: "Other factors within the house" },
@@ -86,6 +99,12 @@ function formatMinutes(minutes: number | null) {
 
 function areaLabel(value: string) {
   return AREA_OPTIONS.find((item) => item.value === value)?.label ?? value;
+}
+
+function candidateEffectLabel(value: CandidateNoteEffect) {
+  if (value === "no_noticeable_effect") return "No noticeable sleep effect";
+  if (value === "possible_effect") return "Possible sleep effect";
+  return "Not sure yet";
 }
 
 function timezoneOffsetMinutesForLocalDateTime(
@@ -183,6 +202,7 @@ export default function HabitsPage() {
 
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [candidateNotes, setCandidateNotes] = useState<CandidateNote[]>([]);
   const [expandedInvestigationId, setExpandedInvestigationId] = useState<
     string | null
   >(null);
@@ -210,6 +230,14 @@ export default function HabitsPage() {
   const [editInvestigationArea, setEditInvestigationArea] =
     useState("bedroom_bed");
 
+  const [candidateDate, setCandidateDate] = useState("");
+  const [candidateFactorName, setCandidateFactorName] = useState("");
+  const [candidateEffect, setCandidateEffect] =
+    useState<CandidateNoteEffect>("unknown");
+  const [candidateNoteText, setCandidateNoteText] = useState("");
+  const [editingCandidateNoteId, setEditingCandidateNoteId] =
+    useState<string | null>(null);
+
   const activeInvestigation =
     investigations.find((item) => item.status === "active") ?? null;
 
@@ -232,29 +260,40 @@ export default function HabitsPage() {
     );
 
   useEffect(() => {
-    setObservationDate(toYMD(new Date()));
+    const today = toYMD(new Date());
+    setObservationDate(today);
+    setCandidateDate(today);
   }, []);
 
   async function reloadData(uid: string) {
-    const [investigationResult, observationResult] = await Promise.all([
-      supabase
-        .from("sleep_investigations")
-        .select("*")
-        .eq("user_id", uid)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("sleep_investigation_observations")
-        .select("*")
-        .eq("user_id", uid)
-        .order("observation_date", { ascending: true })
-        .order("factor_time_local", { ascending: true }),
-    ]);
+    const [investigationResult, observationResult, candidateResult] =
+      await Promise.all([
+        supabase
+          .from("sleep_investigations")
+          .select("*")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("sleep_investigation_observations")
+          .select("*")
+          .eq("user_id", uid)
+          .order("observation_date", { ascending: true })
+          .order("factor_time_local", { ascending: true }),
+        supabase
+          .from("sleep_investigation_candidate_notes")
+          .select("*")
+          .eq("user_id", uid)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+      ]);
 
     if (investigationResult.error) throw investigationResult.error;
     if (observationResult.error) throw observationResult.error;
+    if (candidateResult.error) throw candidateResult.error;
 
     setInvestigations((investigationResult.data ?? []) as Investigation[]);
     setObservations((observationResult.data ?? []) as Observation[]);
+    setCandidateNotes((candidateResult.data ?? []) as CandidateNote[]);
   }
 
   useEffect(() => {
@@ -303,6 +342,107 @@ export default function HabitsPage() {
     setFactorTime("");
     setSleepOnsetMinutes("");
     setSleepQuality("");
+  }
+
+  function clearCandidateForm() {
+    setEditingCandidateNoteId(null);
+    setCandidateDate(toYMD(new Date()));
+    setCandidateFactorName("");
+    setCandidateEffect("unknown");
+    setCandidateNoteText("");
+  }
+
+  function beginEditCandidateNote(note: CandidateNote) {
+    setEditingCandidateNoteId(note.id);
+    setCandidateDate(note.note_date);
+    setCandidateFactorName(note.factor_name);
+    setCandidateEffect(note.effect_observed);
+    setCandidateNoteText(note.note_text ?? "");
+    setError(null);
+    setMessage("");
+  }
+
+  async function saveCandidateNote() {
+    if (!userId || !candidateDate || !candidateFactorName.trim()) {
+      setError("Enter a date and possible factor before saving the note.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage("");
+
+    const payload = {
+      user_id: userId,
+      note_date: candidateDate,
+      factor_name: candidateFactorName.trim(),
+      effect_observed: candidateEffect,
+      note_text: candidateNoteText.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const result = editingCandidateNoteId
+      ? await supabase
+          .from("sleep_investigation_candidate_notes")
+          .update(payload)
+          .eq("id", editingCandidateNoteId)
+          .eq("user_id", userId)
+      : await supabase
+          .from("sleep_investigation_candidate_notes")
+          .insert(payload);
+
+    if (result.error) {
+      setError(result.error.message);
+      setSaving(false);
+      return;
+    }
+
+    const wasEditing = Boolean(editingCandidateNoteId);
+    clearCandidateForm();
+    setMessage(wasEditing ? "Possible factor note updated." : "Possible factor note saved.");
+    await reloadData(userId);
+    setSaving(false);
+  }
+
+  async function deleteCandidateNote(noteId: string) {
+    if (!userId) return;
+
+    setSaving(true);
+    setError(null);
+    setMessage("");
+
+    const { error: deleteError } = await supabase
+      .from("sleep_investigation_candidate_notes")
+      .delete()
+      .eq("id", noteId)
+      .eq("user_id", userId);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      setSaving(false);
+      return;
+    }
+
+    if (editingCandidateNoteId === noteId) clearCandidateForm();
+    setMessage("Possible factor note deleted.");
+    await reloadData(userId);
+    setSaving(false);
+  }
+
+  function useCandidateForInvestigation(note: CandidateNote) {
+    if (activeInvestigation) {
+      setError(
+        `Finish the current investigation of "${activeInvestigation.factor_name}" before starting another factor.`,
+      );
+      return;
+    }
+
+    setFactorName(note.factor_name);
+    setError(null);
+    setMessage(
+      `"${note.factor_name}" is ready in Start an Investigation. Choose its classification and area, then start when you are ready.`,
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function startInvestigation() {
@@ -724,6 +864,149 @@ export default function HabitsPage() {
         <div className="rounded-xl border bg-white p-6">
           Loading investigation…
         </div>
+      ) : null}
+
+      {!loading ? (
+        <section className="mb-8 rounded-xl border border-blue-200 bg-blue-50/30 p-5">
+          <h2 className="text-xl font-semibold">Possible Factor Notes</h2>
+
+          <p className="mt-1 text-neutral-700">
+            Keep a reference of anything you may want to investigate later, including factors that appeared to have no effect this time. A note is not treated as a cause or a completed investigation.
+          </p>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-12">
+            <label className="grid gap-2 xl:col-span-2">
+              <span className="font-semibold">Date</span>
+              <input
+                type="date"
+                value={candidateDate}
+                max={toYMD(new Date())}
+                onChange={(e) => setCandidateDate(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2"
+              />
+            </label>
+
+            <label className="grid gap-2 xl:col-span-3">
+              <span className="font-semibold">Possible factor</span>
+              <input
+                value={candidateFactorName}
+                onChange={(e) => setCandidateFactorName(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2"
+                placeholder="e.g. cashew nuts"
+              />
+            </label>
+
+            <label className="grid gap-2 xl:col-span-3">
+              <span className="font-semibold">What happened to sleep?</span>
+              <select
+                value={candidateEffect}
+                onChange={(e) =>
+                  setCandidateEffect(e.target.value as CandidateNoteEffect)
+                }
+                className="w-full rounded-lg border px-3 py-2"
+              >
+                <option value="unknown">Not sure yet</option>
+                <option value="no_noticeable_effect">No noticeable sleep effect</option>
+                <option value="possible_effect">Possible sleep effect</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2 md:col-span-2 xl:col-span-4">
+              <span className="font-semibold">Reference note</span>
+              <textarea
+                value={candidateNoteText}
+                onChange={(e) => setCandidateNoteText(e.target.value)}
+                maxLength={1000}
+                className="min-h-[90px] w-full rounded-lg border px-3 py-2"
+                placeholder="e.g. Ate a handful in the evening. Fell asleep normally and sleep seemed unaffected."
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={saveCandidateNote}
+              disabled={saving || !candidateDate || !candidateFactorName.trim()}
+              className="rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
+            >
+              {saving
+                ? "Saving…"
+                : editingCandidateNoteId
+                  ? "Update factor note"
+                  : "Save factor note"}
+            </button>
+
+            {editingCandidateNoteId ? (
+              <button
+                type="button"
+                onClick={clearCandidateForm}
+                className="rounded-xl border border-neutral-300 px-5 py-3 font-bold"
+              >
+                Cancel edit
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-6 grid gap-3">
+            {candidateNotes.map((note) => (
+              <div key={note.id} className="rounded-xl border bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-bold">{note.factor_name}</div>
+                    <div className="mt-1 text-sm text-neutral-600">
+                      {formatDate(note.note_date)} · {candidateEffectLabel(note.effect_observed)}
+                    </div>
+                  </div>
+
+                  <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-semibold text-neutral-700">
+                    Possible factor
+                  </span>
+                </div>
+
+                {note.note_text ? (
+                  <div className="mt-3 whitespace-pre-wrap rounded-lg bg-neutral-50 p-3 text-sm text-neutral-700">
+                    {note.note_text}
+                  </div>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => beginEditCandidateNote(note)}
+                    className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold"
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => useCandidateForInvestigation(note)}
+                    disabled={Boolean(activeInvestigation)}
+                    className="rounded-lg border border-black px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                  >
+                    Use for investigation
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => deleteCandidateNote(note.id)}
+                    disabled={saving}
+                    className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {!candidateNotes.length ? (
+              <div className="rounded-lg border border-dashed bg-white p-4 text-sm text-neutral-500">
+                No possible factor notes saved yet.
+              </div>
+            ) : null}
+          </div>
+        </section>
       ) : null}
 
       {!loading && !activeInvestigation ? (
