@@ -925,24 +925,25 @@ const canSaveNight = missingRequired.length === 0;
             </OptionalContextSection>
           </div>
 
-          <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
-            <div className="sf-field-label text-violet-900">Anything unusual or different last night?</div>
-            <div className="sf-help" style={{ marginBottom: 12 }}>
-              Optional — note anything that stood out, even if you are not sure whether it mattered. You can list several
-              possibilities here and, if needed, investigate them one at a time later.
-            </div>
-            <textarea
-              value={unusualNotes}
-              onChange={(e) => setUnusualNotes(e.target.value)}
-              maxLength={1500}
-              placeholder="Example: room felt warmer than usual, late coffee, argument before bed, different pillow, hard workout..."
-              className="w-full rounded-xl border border-gray-300 bg-white p-3 text-base text-gray-900"
-              style={{ minHeight: 120, resize: "vertical" }}
-            />
-            <div className="mt-2 text-right text-xs text-gray-500">
-              {unusualNotes.length}/1500
-            </div>
-          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50/60 p-6 shadow-sm">
+        <div className="sf-field-label text-violet-900">Anything unusual or different last night?</div>
+        <div className="sf-help" style={{ marginBottom: 12 }}>
+          Optional — note anything that stood out, even if you are not sure whether it mattered. You can list several
+          possibilities here and, if needed, investigate them one at a time later.
+        </div>
+        <textarea
+          value={unusualNotes}
+          onChange={(e) => setUnusualNotes(e.target.value)}
+          maxLength={1500}
+          placeholder="Example: room felt warmer than usual, late coffee, argument before bed, different pillow, hard workout..."
+          className="w-full rounded-xl border border-gray-300 bg-white p-3 text-base text-gray-900"
+          style={{ minHeight: 120, resize: "vertical" }}
+        />
+        <div className="mt-2 text-right text-xs text-gray-500">
+          {unusualNotes.length}/1500
         </div>
       </div>
 
