@@ -861,70 +861,69 @@ const canSaveNight = missingRequired.length === 0;
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/55 p-4">
-          <div className="sf-section-title text-amber-900">Optional context</div>
-          <div className="sf-help" style={{ marginBottom: 14 }}>
-            Add only what was noticeable or relevant. These observations are not treated as confirmed causes.
-          </div>
+      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/55 p-6 shadow-sm">
+        <div className="sf-section-title text-amber-900">Optional context</div>
+        <div className="sf-help" style={{ marginBottom: 14 }}>
+          Add only what was noticeable or relevant. These observations are not treated as confirmed causes.
+        </div>
 
-          <div className="grid gap-3">
-            <OptionalContextSection title="Emotional state" value={emotionalTags}>
-              <MultiCheckGroup
-                title=""
-                options={["Not sure / none", ...EMOTIONAL_TAGS]}
-                value={emotionalTags}
-                onChange={setEmotionalTags}
-                allowEmpty
-                help="What was your emotional state?"
-              />
-            </OptionalContextSection>
+        <div className="grid gap-3">
+          <OptionalContextSection title="Emotional state" value={emotionalTags}>
+            <MultiCheckGroup
+              title=""
+              options={["Not sure / none", ...EMOTIONAL_TAGS]}
+              value={emotionalTags}
+              onChange={setEmotionalTags}
+              allowEmpty
+              help="What was your emotional state?"
+            />
+          </OptionalContextSection>
 
-            <OptionalContextSection title="Mental state" value={mentalTags}>
-              <MultiCheckGroup
-                title=""
-                options={["Not sure / none", ...MENTAL_TAGS]}
-                value={mentalTags}
-                onChange={setMentalTags}
-                allowEmpty
-                help="What was your thinking state?"
-              />
-            </OptionalContextSection>
+          <OptionalContextSection title="Mental state" value={mentalTags}>
+            <MultiCheckGroup
+              title=""
+              options={["Not sure / none", ...MENTAL_TAGS]}
+              value={mentalTags}
+              onChange={setMentalTags}
+              allowEmpty
+              help="What was your thinking state?"
+            />
+          </OptionalContextSection>
 
-            <OptionalContextSection title="Room conditions" value={environmentTags}>
-              <MultiCheckGroup
-                title=""
-                options={[ROOM_NO_ISSUE, ...ENV_TAGS]}
-                value={environmentTags}
-                onChange={setEnvironmentTags}
-                allowEmpty
-                help="What room conditions were present or noticeable during the night?"
-              />
-            </OptionalContextSection>
+          <OptionalContextSection title="Room conditions" value={environmentTags}>
+            <MultiCheckGroup
+              title=""
+              options={[ROOM_NO_ISSUE, ...ENV_TAGS]}
+              value={environmentTags}
+              onChange={setEnvironmentTags}
+              allowEmpty
+              help="What room conditions were present or noticeable during the night?"
+            />
+          </OptionalContextSection>
 
-            <OptionalContextSection title="Bed / bedding" value={bedTags}>
-              <MultiCheckGroup
-                title=""
-                options={[...BED_TAGS]}
-                value={bedTags}
-                onChange={setBedTags}
-                allowEmpty
-                help="What bed or bedding conditions were present or noticeable?"
-              />
-            </OptionalContextSection>
+          <OptionalContextSection title="Bed / bedding" value={bedTags}>
+            <MultiCheckGroup
+              title=""
+              options={[...BED_TAGS]}
+              value={bedTags}
+              onChange={setBedTags}
+              allowEmpty
+              help="What bed or bedding conditions were present or noticeable?"
+            />
+          </OptionalContextSection>
 
-            <OptionalContextSection title="Body state" value={bodyTags}>
-              <MultiCheckGroup
-                title=""
-                options={["Not sure / none", ...BODY_TAGS]}
-                value={bodyTags}
-                onChange={setBodyTags}
-                allowEmpty
-                help="What did you notice physically?"
-              />
-            </OptionalContextSection>
-          </div>
-
+          <OptionalContextSection title="Body state" value={bodyTags}>
+            <MultiCheckGroup
+              title=""
+              options={["Not sure / none", ...BODY_TAGS]}
+              value={bodyTags}
+              onChange={setBodyTags}
+              allowEmpty
+              help="What did you notice physically?"
+            />
+          </OptionalContextSection>
         </div>
       </div>
 
