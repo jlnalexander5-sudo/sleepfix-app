@@ -31,12 +31,12 @@ type Observation = {
   user_id: string;
   observation_date: string;
   amount_degree: string;
-  factor_time_local: string;
-  sleep_onset_minutes: number;
-  sleep_quality: number;
+  factor_time_local: string | null;
+  sleep_onset_minutes: number | null;
+  sleep_quality: number | null;
   timezone: string;
-  utc_offset_minutes: number;
-  is_dst: boolean;
+  utc_offset_minutes: number | null;
+  is_dst: boolean | null;
   created_at: string;
 };
 
@@ -198,10 +198,17 @@ export default function HabitsPage() {
   const [amountDegree, setAmountDegree] = useState("");
   const [factorTime, setFactorTime] = useState("");
   const [sleepOnsetMinutes, setSleepOnsetMinutes] = useState("");
-  const [sleepQuality, setSleepQuality] = useState("5");
+  const [sleepQuality, setSleepQuality] = useState("");
   const [editingObservationId, setEditingObservationId] = useState<
     string | null
   >(null);
+
+  const [editingInvestigation, setEditingInvestigation] = useState(false);
+  const [editFactorName, setEditFactorName] = useState("");
+  const [editFactorClassification, setEditFactorClassification] =
+    useState<FactorClassification>("main");
+  const [editInvestigationArea, setEditInvestigationArea] =
+    useState("bedroom_bed");
 
   const activeInvestigation =
     investigations.find((item) => item.status === "active") ?? null;
@@ -210,8 +217,8 @@ export default function HabitsPage() {
     ? observations
         .filter((item) => item.investigation_id === activeInvestigation.id)
         .sort((a, b) =>
-          `${a.observation_date}T${a.factor_time_local}`.localeCompare(
-            `${b.observation_date}T${b.factor_time_local}`,
+          `${a.observation_date}T${a.factor_time_local ?? ""}`.localeCompare(
+            `${b.observation_date}T${b.factor_time_local ?? ""}`,
           ),
         )
     : [];
@@ -295,7 +302,7 @@ export default function HabitsPage() {
     setAmountDegree("");
     setFactorTime("");
     setSleepOnsetMinutes("");
-    setSleepQuality("5");
+    setSleepQuality("");
   }
 
   async function startInvestigation() {
@@ -334,13 +341,75 @@ export default function HabitsPage() {
     setSaving(false);
   }
 
+  function beginEditInvestigation() {
+    if (!activeInvestigation) return;
+
+    setEditFactorName(activeInvestigation.factor_name);
+    setEditFactorClassification(
+      activeInvestigation.factor_classification,
+    );
+    setEditInvestigationArea(activeInvestigation.investigation_area);
+    setEditingInvestigation(true);
+    setError(null);
+    setMessage("");
+  }
+
+  function cancelEditInvestigation() {
+    setEditingInvestigation(false);
+    setEditFactorName("");
+  }
+
+  async function saveInvestigationDetails() {
+    if (!userId || !activeInvestigation || !editFactorName.trim()) {
+      setError("Enter the contributing factor name.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage("");
+
+    const { error: updateError } = await supabase
+      .from("sleep_investigations")
+      .update({
+        factor_name: editFactorName.trim(),
+        factor_classification: editFactorClassification,
+        investigation_area: editInvestigationArea,
+      })
+      .eq("id", activeInvestigation.id)
+      .eq("user_id", userId);
+
+    if (updateError) {
+      setError(updateError.message);
+      setSaving(false);
+      return;
+    }
+
+    setEditingInvestigation(false);
+    setMessage("Investigation details updated.");
+    await reloadData(userId);
+    setSaving(false);
+  }
+
   function beginEditObservation(observation: Observation) {
     setEditingObservationId(observation.id);
     setObservationDate(observation.observation_date);
     setAmountDegree(observation.amount_degree);
-    setFactorTime(observation.factor_time_local.slice(0, 5));
-    setSleepOnsetMinutes(String(observation.sleep_onset_minutes));
-    setSleepQuality(String(observation.sleep_quality));
+    setFactorTime(
+      observation.factor_time_local
+        ? observation.factor_time_local.slice(0, 5)
+        : "",
+    );
+    setSleepOnsetMinutes(
+      observation.sleep_onset_minutes != null
+        ? String(observation.sleep_onset_minutes)
+        : "",
+    );
+    setSleepQuality(
+      observation.sleep_quality != null
+        ? String(observation.sleep_quality)
+        : "",
+    );
     setError(null);
     setMessage("");
 
@@ -353,38 +422,50 @@ export default function HabitsPage() {
   async function saveObservation() {
     if (!userId || !activeInvestigation) return;
 
-    const onset = Number(sleepOnsetMinutes);
-    const quality = Number(sleepQuality);
+    const onset =
+      sleepOnsetMinutes.trim() === ""
+        ? null
+        : Number(sleepOnsetMinutes);
+    const quality =
+      sleepQuality.trim() === ""
+        ? null
+        : Number(sleepQuality);
+
+    if (!observationDate || !amountDegree.trim()) {
+      setError("Enter the date and amount / degree before saving.");
+      return;
+    }
 
     if (
-      !observationDate ||
-      !amountDegree.trim() ||
-      !factorTime ||
-      !Number.isFinite(onset) ||
-      onset < 0 ||
-      !Number.isInteger(onset) ||
-      !Number.isFinite(quality) ||
-      quality < 1 ||
-      quality > 10
+      onset != null &&
+      (!Number.isFinite(onset) || onset < 0 || !Number.isInteger(onset))
     ) {
-      setError(
-        "Complete the date, amount/degree, time, time taken to fall asleep, and sleep quality fields.",
-      );
+      setError("Time to fall asleep must be a whole number of minutes.");
+      return;
+    }
+
+    if (
+      quality != null &&
+      (!Number.isFinite(quality) || quality < 1 || quality > 10)
+    ) {
+      setError("After-sleep quality must be between 1 and 10.");
       return;
     }
 
     const timezone =
       Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    const utcOffsetMinutes = timezoneOffsetMinutesForLocalDateTime(
-      observationDate,
-      factorTime,
-      timezone,
-    );
-    const isDst = isDstForLocalDate(
-      observationDate,
-      factorTime,
-      timezone,
-    );
+
+    const utcOffsetMinutes = factorTime
+      ? timezoneOffsetMinutesForLocalDateTime(
+          observationDate,
+          factorTime,
+          timezone,
+        )
+      : null;
+
+    const isDst = factorTime
+      ? isDstForLocalDate(observationDate, factorTime, timezone)
+      : null;
 
     setSaving(true);
     setError(null);
@@ -395,7 +476,7 @@ export default function HabitsPage() {
       user_id: userId,
       observation_date: observationDate,
       amount_degree: amountDegree.trim(),
-      factor_time_local: factorTime,
+      factor_time_local: factorTime || null,
       sleep_onset_minutes: onset,
       sleep_quality: quality,
       timezone,
@@ -441,6 +522,17 @@ export default function HabitsPage() {
 
     if (!thresholdObservation) {
       setError("The selected threshold observation could not be found.");
+      return;
+    }
+
+    if (
+      !thresholdObservation.factor_time_local ||
+      thresholdObservation.sleep_onset_minutes == null ||
+      thresholdObservation.sleep_quality == null
+    ) {
+      setError(
+        "Complete the selected observation before using it as the threshold.",
+      );
       return;
     }
 
@@ -523,8 +615,8 @@ export default function HabitsPage() {
     return observations
       .filter((item) => item.investigation_id === investigationId)
       .sort((a, b) =>
-        `${a.observation_date}T${a.factor_time_local}`.localeCompare(
-          `${b.observation_date}T${b.factor_time_local}`,
+        `${a.observation_date}T${a.factor_time_local ?? ""}`.localeCompare(
+          `${b.observation_date}T${b.factor_time_local ?? ""}`,
         ),
       );
   }
@@ -703,26 +795,119 @@ export default function HabitsPage() {
       {!loading && activeInvestigation ? (
         <section className="rounded-xl border bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-bold uppercase tracking-wide text-green-700">
                 Active investigation
               </div>
 
-              <h2 className="mt-1 text-2xl font-bold">
-                {activeInvestigation.factor_name}
-              </h2>
+              {!editingInvestigation ? (
+                <>
+                  <h2 className="mt-1 text-2xl font-bold">
+                    {activeInvestigation.factor_name}
+                  </h2>
 
-              <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                <span className="rounded-full bg-neutral-100 px-3 py-1">
-                  {activeInvestigation.factor_classification === "main"
-                    ? "Main contributing factor"
-                    : "Secondary contributing factor"}
-                </span>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="rounded-full bg-neutral-100 px-3 py-1">
+                      {activeInvestigation.factor_classification === "main"
+                        ? "Main contributing factor"
+                        : "Secondary contributing factor"}
+                    </span>
 
-                <span className="rounded-full bg-neutral-100 px-3 py-1">
-                  {areaLabel(activeInvestigation.investigation_area)}
-                </span>
-              </div>
+                    <span className="rounded-full bg-neutral-100 px-3 py-1">
+                      {areaLabel(activeInvestigation.investigation_area)}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={beginEditInvestigation}
+                      className="rounded-lg border border-neutral-300 px-3 py-1.5 font-semibold hover:bg-neutral-50"
+                    >
+                      Edit investigation
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-3 rounded-xl border border-neutral-200 p-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="grid gap-2">
+                      <span className="font-semibold">
+                        Contributing factor
+                      </span>
+                      <input
+                        value={editFactorName}
+                        onChange={(e) =>
+                          setEditFactorName(e.target.value)
+                        }
+                        className="rounded-lg border px-3 py-2"
+                      />
+                    </label>
+
+                    <label className="grid gap-2">
+                      <span className="font-semibold">
+                        Factor classification
+                      </span>
+                      <select
+                        value={editFactorClassification}
+                        onChange={(e) =>
+                          setEditFactorClassification(
+                            e.target.value as FactorClassification,
+                          )
+                        }
+                        className="rounded-lg border px-3 py-2"
+                      >
+                        <option value="main">
+                          Main contributing factor
+                        </option>
+                        <option value="secondary">
+                          Secondary contributing factor
+                        </option>
+                      </select>
+                    </label>
+
+                    <label className="grid gap-2">
+                      <span className="font-semibold">
+                        Investigation area
+                      </span>
+                      <select
+                        value={editInvestigationArea}
+                        onChange={(e) =>
+                          setEditInvestigationArea(e.target.value)
+                        }
+                        className="rounded-lg border px-3 py-2"
+                      >
+                        {AREA_OPTIONS.map((option) => (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                          >
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={saveInvestigationDetails}
+                      disabled={saving || !editFactorName.trim()}
+                      className="rounded-xl bg-black px-4 py-2 font-bold text-white disabled:opacity-50"
+                    >
+                      {saving ? "Saving…" : "Save investigation changes"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={cancelEditInvestigation}
+                      disabled={saving}
+                      className="rounded-xl border border-neutral-300 px-4 py-2 font-bold disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -807,6 +992,7 @@ export default function HabitsPage() {
                   onChange={(e) => setSleepQuality(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2"
                 >
+                  <option value="">No entry yet</option>
                   {Array.from({ length: 10 }, (_, i) => i + 1).map(
                     (score) => (
                       <option key={score} value={score}>
@@ -821,6 +1007,13 @@ export default function HabitsPage() {
                 </span>
               </label>
             </div>
+
+            <p className="mt-4 text-sm text-neutral-600">
+              You can save the observation before the night is complete. Date
+              and amount / degree are enough to save it. Return later and use
+              Edit to add the factor time, time taken to fall asleep, and how
+              you felt after sleeping.
+            </p>
 
             <button
               type="button"
@@ -904,13 +1097,15 @@ export default function HabitsPage() {
                       </td>
 
                       <td className="px-3 py-3">
-                        {observation.sleep_quality} / 10
+                        {observation.sleep_quality != null ? `${observation.sleep_quality} / 10` : "—"}
                       </td>
 
                       <td className="px-3 py-3">
-                        {observation.is_dst
-                          ? "DST"
-                          : "Standard time"}
+                        {observation.is_dst == null
+                          ? "—"
+                          : observation.is_dst
+                            ? "DST"
+                            : "Standard time"}
                       </td>
 
                       <td className="px-3 py-3">
@@ -1059,12 +1254,14 @@ export default function HabitsPage() {
                                   )}
                                 </td>
                                 <td className="px-3 py-2">
-                                  {row.sleep_quality} / 10
+                                  {row.sleep_quality != null ? `${row.sleep_quality} / 10` : "—"}
                                 </td>
                                 <td className="px-3 py-2">
-                                  {row.is_dst
-                                    ? "DST"
-                                    : "Standard time"}
+                                  {row.is_dst == null
+                                    ? "—"
+                                    : row.is_dst
+                                      ? "DST"
+                                      : "Standard time"}
                                 </td>
                               </tr>
                             ))}
