@@ -17,11 +17,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { buildAdaptiveReminderState, type AdaptiveReminderState } from "@/lib/rrsm/adaptive-reminder";
-function buildDriverNotes(drivers: string[]) {
-  const selectedDrivers = drivers.filter((d) => d !== "Nothing / none");
-  if (selectedDrivers.length === 0) return null;
-  return "Sleep hygiene: " + selectedDrivers.join(", ");
-}
 const DatePicker = dynamic(
   () => import("react-datepicker").then((m) => m.default as any),
   { ssr: false }
@@ -154,6 +149,7 @@ function MultiCheckGroup({
   onChange,
   required,
   help,
+  allowEmpty = false,
 }: {
   title: string;
   options: string[];
@@ -161,9 +157,19 @@ function MultiCheckGroup({
   onChange: (next: string[]) => void;
   required?: boolean;
   help?: string;
+  allowEmpty?: boolean;
 }) {
   // Mutually exclusive "none" option (if present)
-  const NONE = options.find((o) => o.toLowerCase().includes("not sure") || o.toLowerCase().includes("no clear")) ?? null;
+  const NONE =
+    options.find((o) => {
+      const lower = o.toLowerCase();
+      return (
+        lower.includes("not sure") ||
+        lower.includes("no clear") ||
+        lower.includes("no bed / bedding issue") ||
+        lower.includes("nothing / none")
+      );
+    }) ?? null;
 
   function toggle(opt: string) {
     const isSelected = value.includes(opt);
@@ -181,8 +187,8 @@ function MultiCheckGroup({
       else if (opt !== NONE && !isSelected && hasNone) {
         next = others;
       }
-      // If user unselects all -> fall back to NONE if it exists
-      if (next.length === 0 && NONE) next = [NONE];
+      // Optional groups may be left completely blank.
+      if (next.length === 0 && NONE && !allowEmpty) next = [NONE];
     }
 
     onChange(next);
@@ -221,6 +227,35 @@ function MultiCheckGroup({
   );
 }
 
+
+function OptionalContextSection({
+  title,
+  value,
+  children,
+}: {
+  title: string;
+  value: string[];
+  children: React.ReactNode;
+}) {
+  const selectedCount = value.length;
+
+  return (
+    <details className="rounded-xl border border-gray-200 bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 font-extrabold text-gray-900">
+        <span>{title}</span>
+        <span className="text-sm font-semibold text-gray-500">
+          {selectedCount > 0
+            ? `${selectedCount} selected`
+            : "Optional"}
+        </span>
+      </summary>
+      <div className="border-t border-gray-100 px-4 pt-4">
+        {children}
+      </div>
+    </details>
+  );
+}
+
 export default function SleepPage() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [userId, setUserId] = useState<string | null>(null);
@@ -240,8 +275,9 @@ export default function SleepPage() {
   const [emotionalTags, setEmotionalTags] = useState<string[]>([]);
   const [mentalTags, setMentalTags] = useState<string[]>([]);
   const [environmentTags, setEnvironmentTags] = useState<string[]>([]);
-  const [bedTags, setBedTags] = useState<string[]>(["No bed / bedding issue"]);
+  const [bedTags, setBedTags] = useState<string[]>([]);
   const [bodyTags, setBodyTags] = useState<string[]>([]);
+  const [unusualNotes, setUnusualNotes] = useState<string>("");
   const [protocolUsedName, setProtocolUsedName] = useState<string>("");
   const [protocolFollowed, setProtocolFollowed] = useState<string>("");
 
@@ -250,8 +286,6 @@ export default function SleepPage() {
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
   const [adaptiveReminder, setAdaptiveReminder] = useState<AdaptiveReminderState | null>(null);
 
-  // Driver confirmation (simple fields)
-  const [drivers, setDrivers] = useState<string[]>(["Nothing / none"]);
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -265,11 +299,11 @@ export default function SleepPage() {
     setEmotionalTags([]);
     setMentalTags([]);
     setEnvironmentTags([]);
-    setBedTags(["No bed / bedding issue"]);
+    setBedTags([]);
     setBodyTags([]);
+    setUnusualNotes("");
     setProtocolUsedName("");
     setProtocolFollowed("");
-    setDrivers(["Nothing / none"]);
 
     // Put dates back to a sensible “last night” default
     // Start = yesterday 11:30 PM, End = today 7:30 AM
@@ -308,8 +342,9 @@ export default function SleepPage() {
     setEmotionalTags([]);
     setMentalTags([]);
     setEnvironmentTags([]);
-    setBedTags(["No bed / bedding issue"]);
+    setBedTags([]);
     setBodyTags([]);
+    setUnusualNotes("");
     setProtocolUsedName("");
     setProtocolFollowed("");
   }, []);
@@ -427,12 +462,10 @@ export default function SleepPage() {
         return;
       }
 
-      const primaryDriver = drivers.find((d) => d !== "Nothing / none") ?? null;
-      const extraDrivers = drivers.filter((d) => d !== primaryDriver && d !== "Nothing / none");
-
-      // Important: room/environment choices are now impact signals, not neutral observations.
-      // If the user says there was no clear room issue, do not send an environment driver to the engine.
-      const environmentIssueTags = environmentTags.includes(ROOM_NO_ISSUE) ? [] : environmentTags;
+      // Optional context is recorded as observation, not as a confirmed cause.
+      const environmentObservationTags = environmentTags.includes(ROOM_NO_ISSUE)
+        ? []
+        : environmentTags;
 
       const payload = {
         user_id: userId,
@@ -446,14 +479,14 @@ export default function SleepPage() {
         wake_ups_choice: wakeUpsChoice,
         wake_recovery_choice: wakeRecoveryChoice,
         mind_tags: [...emotionalTags, ...mentalTags],
-        environment_tags: environmentIssueTags,
+        environment_tags: environmentObservationTags,
         bed_tags: bedTags,
         body_tags: bodyTags,
-        primary_driver: primaryDriver,
-        secondary_driver: extraDrivers.length ? extraDrivers.join(", ") : null,
+        primary_driver: null,
+        secondary_driver: null,
         protocol_used_name: !protocolUsedName || protocolUsedName === "none" ? null : protocolUsedName,
         protocol_followed: protocolFollowed || null,
-        notes: buildDriverNotes(drivers),
+        notes: unusualNotes.trim() || null,
       };
 
       const { data: inserted, error } = await supabase
@@ -491,11 +524,6 @@ if (!sleepQuality) missingRequired.push("Sleep Quality");
 if (!sleepLatencyChoice) missingRequired.push("Sleep Latency");
 if (!wakeUpsChoice) missingRequired.push("Wake Ups");
 if (!wakeRecoveryChoice) missingRequired.push("Total awake time after wake-ups");
-if (!emotionalTags || emotionalTags.length === 0) missingRequired.push("Emotional state");
-if (!mentalTags || mentalTags.length === 0) missingRequired.push("Mental state");
-if (!environmentTags || environmentTags.length === 0) missingRequired.push("Room environment impact");
-if (!bedTags || bedTags.length === 0) missingRequired.push("Bed / bedding factor");
-if (!bodyTags || bodyTags.length === 0) missingRequired.push("Body state");
 const canSaveNight = missingRequired.length === 0;
 
   return (
@@ -526,6 +554,9 @@ const canSaveNight = missingRequired.length === 0;
           background: #2b2b2b;
           color: white;
           border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        details > summary::-webkit-details-marker {
+          display: none;
         }
       `}</style>
 
@@ -709,80 +740,88 @@ const canSaveNight = missingRequired.length === 0;
           </div>
         </div>
 
-        <div style={{ marginTop: 14 }}>
-          <MultiCheckGroup
-            title="Emotional state"
-            options={["Not sure / none", ...EMOTIONAL_TAGS]}
-            value={emotionalTags}
-            onChange={setEmotionalTags}
-            required
-            help="Choose what best describes your emotional state."
-          />
+        <div className="mt-6">
+          <div className="sf-section-title">Optional context</div>
+          <div className="sf-help" style={{ marginBottom: 14 }}>
+            Add only what was noticeable or relevant. These observations are not treated as confirmed causes.
+          </div>
 
-          <MultiCheckGroup
-            title="Mental state"
-            options={["Not sure / none", ...MENTAL_TAGS]}
-            value={mentalTags}
-            onChange={setMentalTags}
-            required
-            help="Choose what best describes your thinking state."
-          />
+          <div className="grid gap-3">
+            <OptionalContextSection title="Emotional state" value={emotionalTags}>
+              <MultiCheckGroup
+                title=""
+                options={["Not sure / none", ...EMOTIONAL_TAGS]}
+                value={emotionalTags}
+                onChange={setEmotionalTags}
+                allowEmpty
+                help="What was your emotional state?"
+              />
+            </OptionalContextSection>
 
-          <MultiCheckGroup
-            title="Room environment issue?"
-            options={[ROOM_NO_ISSUE, ...ENV_TAGS]}
-            value={environmentTags}
-            onChange={setEnvironmentTags}
-            required
-            help="Was the room environment disturbing or affecting your sleep tonight? Only tick items that felt disruptive or contributed to wake-ups, discomfort, or unstable sleep."
-          />
+            <OptionalContextSection title="Mental state" value={mentalTags}>
+              <MultiCheckGroup
+                title=""
+                options={["Not sure / none", ...MENTAL_TAGS]}
+                value={mentalTags}
+                onChange={setMentalTags}
+                allowEmpty
+                help="What was your thinking state?"
+              />
+            </OptionalContextSection>
 
-          <MultiCheckGroup
-            title="Bed / bedding factor"
-            options={[...BED_TAGS]}
-            value={bedTags}
-            onChange={setBedTags}
-            required
-            help="Choose what affected the mattress, pillow, blankets, sleepwear, or sleeping setup."
-          />
+            <OptionalContextSection title="Room conditions" value={environmentTags}>
+              <MultiCheckGroup
+                title=""
+                options={[ROOM_NO_ISSUE, ...ENV_TAGS]}
+                value={environmentTags}
+                onChange={setEnvironmentTags}
+                allowEmpty
+                help="What room conditions were present or noticeable during the night?"
+              />
+            </OptionalContextSection>
 
-          <MultiCheckGroup
-            title="Body state"
-            options={["Not sure / none", ...BODY_TAGS]}
-            value={bodyTags}
-            onChange={setBodyTags}
-            required
-            help="Choose what best describes your body state."
-          />
+            <OptionalContextSection title="Bed / bedding" value={bedTags}>
+              <MultiCheckGroup
+                title=""
+                options={[...BED_TAGS]}
+                value={bedTags}
+                onChange={setBedTags}
+                allowEmpty
+                help="What bed or bedding conditions were present or noticeable?"
+              />
+            </OptionalContextSection>
 
+            <OptionalContextSection title="Body state" value={bodyTags}>
+              <MultiCheckGroup
+                title=""
+                options={["Not sure / none", ...BODY_TAGS]}
+                value={bodyTags}
+                onChange={setBodyTags}
+                allowEmpty
+                help="What did you notice physically?"
+              />
+            </OptionalContextSection>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+            <div className="sf-field-label">Anything unusual or different last night?</div>
+            <div className="sf-help" style={{ marginBottom: 12 }}>
+              Optional — note anything that stood out, even if you are not sure whether it mattered. You can list several
+              possibilities here and, if needed, investigate them one at a time later.
+            </div>
+            <textarea
+              value={unusualNotes}
+              onChange={(e) => setUnusualNotes(e.target.value)}
+              maxLength={1500}
+              placeholder="Example: room felt warmer than usual, late coffee, argument before bed, different pillow, hard workout..."
+              className="w-full rounded-xl border border-gray-300 bg-white p-3 text-base text-gray-900"
+              style={{ minHeight: 120, resize: "vertical" }}
+            />
+            <div className="mt-2 text-right text-xs text-gray-500">
+              {unusualNotes.length}/1500
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <div className="sf-section-title" style={{ fontWeight: 800 }}>
-  Sleep hygiene<span className="sf-req">*</span>
-</div>
-        <div className="sf-help" style={{ marginBottom: 12 }}>
-          Choose anything that happened before bed.
-        </div>
-
-        <MultiCheckGroup
-          title=""
-          options={[
-            "Nothing / none",
-            "Late caffeine",
-            "Alcohol",
-            "Nicotine / smoking",
-            "Late meal",
-            "Screen time",
-            "Late intense exercise",
-            "Night vitamins / supplements / electrolytes",
-            "Other",
-          ]}
-          value={drivers}
-          onChange={(next) => setDrivers(next)}
-          help="Choose one or more."
-        />
       </div>
 
       <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
