@@ -367,6 +367,7 @@ export default function SleepPage() {
         "id,local_date,created_at,sleep_start,sleep_end,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,mind_tags,environment_tags,bed_tags,body_tags,protocol_followed,notes",
       )
       .eq("user_id", uid)
+      .gte("local_date", toIsoLocalDate(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)))
       .order("local_date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(14);
