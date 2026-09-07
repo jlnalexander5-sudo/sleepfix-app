@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import Link from "next/link";
 
 type FAQItem = {
   question: string;
@@ -96,8 +95,8 @@ export default function FAQPage() {
             answer: (
               <>
                 <p>
-                  SleepFixMe is a sleep analysis app that helps you track, interpret, and improve your sleep using the
-                  <strong> RRSM model</strong>.
+                  SleepFixMe is an RSM-based sleep investigation and analysis app designed to help you understand
+                  <strong> why your sleep problems occur</strong>, not just how they appear.
                 </p>
                 <p>
                   It does more than simply track sleep time. It looks for patterns in:
@@ -106,8 +105,8 @@ export default function FAQPage() {
                   <li>sleep quality</li>
                   <li>time to fall asleep</li>
                   <li>night awakenings</li>
-                  <li>daily behaviors</li>
                   <li>possible sleep drivers</li>
+                  <li>investigation observations and threshold limits</li>
                   <li>protocol responses over time</li>
                 </ul>
               </>
@@ -118,7 +117,7 @@ export default function FAQPage() {
             answer: (
               <>
                 <p>
-                  SleepFixMe needs at least <strong>3 complete nights</strong> to begin generating a basic RRSM insight.
+                  SleepFixMe needs at least <strong>3 complete nights</strong> to begin generating a basic RSM insight.
                 </p>
                 <p>The more complete nights you log, the more reliable the analysis becomes.</p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
@@ -139,7 +138,7 @@ export default function FAQPage() {
                   real trend.
                 </p>
                 <p>
-                  Multiple nights help SleepFixME detect whether your issues are mainly about:
+                  Multiple nights help SleepFixMe detect whether your issues are mainly about:
                 </p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
                   <li>recovery quality</li>
@@ -183,7 +182,7 @@ export default function FAQPage() {
             answer: (
               <>
                 <p>
-                  Some fields are required because the RRSM engine needs a minimum set of inputs to calculate a sleep
+                  Some fields are required because SleepFixMe needs a minimum set of inputs to calculate a usable sleep
                   pattern.
                 </p>
                 <p>The most important required fields are:</p>
@@ -233,96 +232,134 @@ export default function FAQPage() {
         ],
       },
       {
-        id: "habits-page",
-        title: "Understanding the Habits Page",
-        intro: "Questions about why habits are separate from the sleep-page drivers.",
+        id: "investigation-page",
+        title: "Understanding the Investigation Page",
+        intro: "Questions about how to investigate possible contributing factors and identify your own threshold limits.",
         items: [
           {
-            question: "What is the Habits page for?",
+            question: "What is the Investigation page for?",
             answer: (
               <>
                 <p>
-                  The Habits page records <strong>objective daily behaviors</strong>.
+                  The Investigation page helps you examine <strong>one possible contributing factor at a time</strong> and
+                  build a record of how much of that factor your sleep appears able to tolerate before it changes.
                 </p>
-                <p>Examples include:</p>
-                <ul style={{ margin: "10px 0 0 20px" }}>
-                  <li>caffeine after 2pm</li>
-                  <li>alcohol</li>
-                  <li>exercise</li>
-                  <li>screens in the last hour</li>
-                </ul>
                 <p>
-                  These are logged separately so SleepFixMe can compare daytime inputs with nighttime outcomes.
+                  For each observation you can record the factor&apos;s amount or degree, when it occurred, how long it took
+                  you to fall asleep, and how you felt after sleeping.
                 </p>
               </>
             ),
           },
           {
-            question: "Why are Habits different from Drivers?",
+            question: "What should I investigate first?",
             answer: (
               <>
                 <p>
-                  Habits are <strong>objective inputs</strong>. Drivers are your <strong>interpretation</strong>.
+                  Start with the <strong>main contributing factors closest to sleep itself</strong>, especially the bedroom
+                  and bed environment.
                 </p>
-                <p>Example:</p>
-                <ul style={{ margin: "10px 0 0 20px" }}>
-                  <li>Habit: you ticked “Caffeine after 2pm”</li>
-                  <li>Driver: you selected “Late caffeine” as something you think affected the night</li>
-                </ul>
                 <p>
-                  SleepFixMe separates these on purpose, so it can compare what actually happened with what you believe
-                  happened.
+                  Examples include bedroom or bed temperature, noise, light, bedding, pillow or other conditions in the
+                  immediate sleep environment. Once the main factors have been investigated, you can move on to secondary
+                  factors such as food and drink, physical activity, household conditions and other environmental influences.
                 </p>
               </>
             ),
           },
           {
-            question: "Why does SleepFixMe need both habits and drivers?",
+            question: "Why should I investigate only one factor at a time?",
+            answer: (
+              <p>
+                If several factors are changed or tested at the same time, it becomes difficult to know which one was
+                associated with the change in sleep. Investigating one factor at a time gives you a clearer comparison.
+              </p>
+            ),
+          },
+          {
+            question: "What does a threshold mean?",
             answer: (
               <>
                 <p>
-                  Because the actual pattern is not always obvious from memory or intuition.
+                  A threshold is the <strong>degree, amount, timing, duration or exposure</strong> at which a particular
+                  disturbance appears to begin affecting your sleep.
                 </p>
                 <p>
-                  Sometimes users believe stress was the cause, but the repeated pattern may show stronger links with
-                  caffeine timing, screens, or alcohol. Keeping both allows SleepFixMe to detect mismatches and hidden
-                  drivers.
+                  The relevant threshold is individual. The same factor can be present without disrupting sleep when it
+                  remains within your apparent tolerance, and become disruptive when that tolerance is exceeded.
                 </p>
               </>
+            ),
+          },
+          {
+            question: "Why can I continue a completed investigation?",
+            answer: (
+              <p>
+                Your investigation record is meant to remain revisable. If you want to test a lower amount, a different
+                timing, or gather more observations, you can continue the same investigation without losing the earlier
+                record.
+              </p>
             ),
           },
         ],
       },
       {
-        id: "rrsm",
-        title: "RRSM Explained",
-        intro: "Questions about the RRSM model, scores, confidence, and risk.",
+        id: "rsm",
+        title: "RSM Explained",
+        intro: "Questions about the Rhythmic Systems Model and how SleepFixMe applies it to sleep.",
         items: [
           {
-            question: "What is RRSM?",
+            question: "What is RSM?",
             answer: (
               <>
                 <p>
-                  RRSM stands for <strong>Radial Resonance Sleep Model</strong>.
+                  RSM stands for <strong>Rhythmic Systems Model</strong>. It is an explanatory model concerned with how
+                  organised systems establish, maintain, lose and recover rhythmic coherence.
                 </p>
                 <p>
-                  In SleepFixMe, RRSM organizes sleep analysis into four practical domains:
+                  SleepFixMe is the first practical RSM application. In sleep, the model asks whether different disturbances
+                  are acting on the same underlying rhythmic system and whether a particular disturbance exceeds the
+                  individual&apos;s tolerance sufficiently to disrupt sleep.
                 </p>
-                <ul style={{ margin: "10px 0 0 20px" }}>
-                  <li><strong>Recovery</strong> — how restorative sleep felt</li>
-                  <li><strong>Onset</strong> — how easily you fell asleep</li>
-                  <li><strong>Fragmentation</strong> — how often sleep was interrupted</li>
-                  <li><strong>Stability</strong> — how consistent sleep is across nights</li>
-                </ul>
+                <p>
+                  For a fuller explanation of the model, its development, applications and research, visit{" "}
+                  <a
+                    href="https://rhythmicsystems.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "var(--sf-brand)", fontWeight: 700 }}
+                  >
+                    rhythmicsystems.com
+                  </a>.
+                </p>
               </>
             ),
           },
           {
-            question: "What is the RRSM risk score?",
+            question: "How does RSM explain contributing factors in insomnia?",
             answer: (
               <>
                 <p>
-                  RRSM risk is a simple signal of how disrupted your current sleep pattern appears to be.
+                  RSM does not assume that a factor causes poor sleep simply because it was present.
+                </p>
+                <p>
+                  A disturbance may remain within your individual tolerance and be accommodated. When its amount, degree,
+                  timing or exposure moves beyond that tolerance, rhythmic disruption may emerge.
+                </p>
+                <p>
+                  The practical task is therefore to identify the relevant disturbance and map the range at which your sleep
+                  begins to change.
+                </p>
+              </>
+            ),
+          },
+          {
+            question: "What is the SleepFix risk score?",
+            answer: (
+              <>
+                <p>
+                  The SleepFix risk score is an app-level signal of how disrupted your current sleep pattern appears to be.
+                  It is not the RSM model itself.
                 </p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
                   <li><strong>Low</strong>: sleep looks relatively stable</li>
@@ -340,8 +377,8 @@ export default function FAQPage() {
                   The Stability Score measures how consistent your sleep metrics are from night to night.
                 </p>
                 <p>
-                  If your sleep quality, latency, and wake ups vary wildly across nights, the score drops. If those
-                  metrics stay more consistent, the score rises.
+                  If your sleep quality, latency, and wake ups vary widely across nights, the score drops. If those metrics
+                  stay more consistent, the score rises.
                 </p>
               </>
             ),
@@ -355,8 +392,8 @@ export default function FAQPage() {
                   nights have been logged.
                 </p>
                 <p>
-                  Low confidence does not mean the insight is wrong. It means the app still needs more data before it
-                  can speak more strongly.
+                  Low confidence does not mean the insight is wrong. It means the app still needs more data before it can
+                  speak more strongly.
                 </p>
               </>
             ),
@@ -368,13 +405,11 @@ export default function FAQPage() {
                 <p>
                   That means no clearly dominant driver has emerged yet from the information logged.
                 </p>
-                <p>
-                  This can happen when:
-                </p>
+                <p>This can happen when:</p>
                 <ul style={{ margin: "10px 0 0 20px" }}>
                   <li>not enough nights have been logged</li>
-                  <li>different drivers are appearing on different nights</li>
-                  <li>the real pattern is still too mixed to identify confidently</li>
+                  <li>different possible drivers are appearing on different nights</li>
+                  <li>the relevant pattern is still too mixed to identify clearly</li>
                 </ul>
               </>
             ),
@@ -410,8 +445,8 @@ export default function FAQPage() {
             question: "Are drivers confirmed causes?",
             answer: (
               <p>
-                No. Drivers are not medical or scientific proof by themselves. They are signals that SleepFixMe combines
-                with patterns and habits over time.
+                No. Drivers are possible contributing factors, not confirmed causes by themselves. SleepFixMe compares
+                them with your sleep patterns and investigation observations over time.
               </p>
             ),
           },
@@ -420,7 +455,7 @@ export default function FAQPage() {
             answer: (
               <p>
                 You can choose <strong>Nothing / no clear driver</strong>. SleepFixMe can still work with your sleep
-                metrics and habits data.
+                metrics and investigation data.
               </p>
             ),
           },
@@ -594,7 +629,7 @@ export default function FAQPage() {
                 <ul style={{ margin: "10px 0 0 20px" }}>
                   <li>nightly sleep metrics</li>
                   <li>sleep tags and possible drivers</li>
-                  <li>daily habits</li>
+                  <li>investigation observations and threshold records</li>
                   <li>pattern scoring across multiple nights</li>
                   <li>protocol matching</li>
                 </ul>
@@ -617,8 +652,8 @@ export default function FAQPage() {
             question: "Why does SleepFixMe recommend one change at a time?",
             answer: (
               <p>
-                Because changing multiple things at once makes it hard to know what actually helped. A targeted protocol
-                or one clear adjustment gives cleaner feedback.
+                Because changing or investigating multiple factors at once makes it hard to know what actually changed.
+                One factor, one targeted protocol, or one clear adjustment gives cleaner feedback.
               </p>
             ),
           },
@@ -779,7 +814,7 @@ export default function FAQPage() {
         <div>
           <div style={{ fontSize: 18, fontWeight: 800 }}>Still not sure about something?</div>
           <div style={{ color: "#555", marginTop: 4 }}>
-            Use the Dashboard, Sleep, Habits, and Protocols pages together — the FAQ is here to explain how those
+            Use the Results, Sleep, Investigation, and Protocol pages together — the FAQ is here to explain how those
             pieces fit.
           </div>
         </div>
