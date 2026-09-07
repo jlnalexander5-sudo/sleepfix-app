@@ -3,528 +3,546 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type DiaryEntry = {
-  id?: string;
-  user_id?: string;
-  entry_date: string;
-  day_good_factors: string;
-  day_bad_factors: string;
-  night_good_factors: string;
-  night_bad_factors: string;
+type InvestigationStatus = "active" | "completed";
+type FactorClassification = "main" | "secondary";
+
+type Investigation = {
+  id: string;
+  user_id: string;
+  factor_name: string;
+  factor_classification: FactorClassification;
+  investigation_area: string;
+  status: InvestigationStatus;
+  created_at: string;
+  completed_at: string | null;
+  threshold_observation_id: string | null;
+  threshold_amount_degree: string | null;
+  threshold_time_local: string | null;
+  threshold_sleep_onset_minutes: number | null;
+  threshold_sleep_quality: number | null;
+  threshold_timezone: string | null;
+  threshold_utc_offset_minutes: number | null;
+  threshold_is_dst: boolean | null;
 };
 
-function toYMD(d: Date) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
+type Observation = {
+  id: string;
+  investigation_id: string;
+  user_id: string;
+  observation_date: string;
+  amount_degree: string;
+  factor_time_local: string;
+  sleep_onset_minutes: number;
+  sleep_quality: number;
+  timezone: string;
+  utc_offset_minutes: number;
+  is_dst: boolean;
+  created_at: string;
+};
+
+const AREA_OPTIONS = [
+  { value: "bedroom_bed", label: "Bedroom / bed environment" },
+  { value: "house", label: "Other factors within the house" },
+  { value: "food_drink", label: "Food / drink" },
+  { value: "physical_activity", label: "Physical activity" },
+  { value: "environment", label: "Other environmental factors" },
+  { value: "other", label: "Other" },
+];
+
+function toYMD(date: Date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function addDays(ymd: string, delta: number) {
+function formatDate(ymd: string) {
   const [y, m, d] = ymd.split("-").map(Number);
-  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-  dt.setDate(dt.getDate() + delta);
-  return toYMD(dt);
-}
-
-function buildDayList(fromYMD: string, toYMDStr: string) {
-  const out: string[] = [];
-  let cur = fromYMD;
-
-  while (cur <= toYMDStr) {
-    out.push(cur);
-    cur = addDays(cur, 1);
-  }
-
-  return out;
-}
-
-function emptyDiary(date: string): DiaryEntry {
-  return {
-    entry_date: date,
-    day_good_factors: "",
-    day_bad_factors: "",
-    night_good_factors: "",
-    night_bad_factors: "",
-  };
-}
-
-function formatDisplayDate(ymd: string) {
-  if (!ymd) return "";
-  const [y, m, d] = ymd.split("-").map(Number);
-  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
-  return date.toLocaleDateString("en-AU", {
-    weekday: "short",
+  return new Date(y, (m ?? 1) - 1, d ?? 1).toLocaleDateString("en-AU", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
 }
 
-function diarySignal(entry: DiaryEntry) {
-  const filled =
-    Number(Boolean(entry.day_good_factors.trim())) +
-    Number(Boolean(entry.day_bad_factors.trim())) +
-    Number(Boolean(entry.night_good_factors.trim())) +
-    Number(Boolean(entry.night_bad_factors.trim()));
-
-  if (filled >= 3) return "Detailed diary entry";
-  if (filled >= 1) return "Partial diary entry";
-  return "No diary entry";
+function formatClock(time: string | null) {
+  if (!time) return "—";
+  const [h, m] = time.split(":").map(Number);
+  const date = new Date(2000, 0, 1, h ?? 0, m ?? 0);
+  return date.toLocaleTimeString("en-AU", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-function hasDiaryEntry(entry: DiaryEntry) {
-  return Boolean(
-    entry.day_good_factors.trim() ||
-      entry.day_bad_factors.trim() ||
-      entry.night_good_factors.trim() ||
-      entry.night_bad_factors.trim(),
+function formatMinutes(minutes: number | null) {
+  if (minutes == null) return "—";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (!remainder) return `${hours} hr`;
+  return `${hours} hr ${remainder} min`;
+}
+
+function areaLabel(value: string) {
+  return AREA_OPTIONS.find((item) => item.value === value)?.label ?? value;
+}
+
+function timezoneOffsetMinutesForLocalDateTime(
+  dateYMD: string,
+  timeHM: string,
+  timeZone: string,
+) {
+  const [y, mo, d] = dateYMD.split("-").map(Number);
+  const [h, mi] = timeHM.split(":").map(Number);
+  const assumedUtc = new Date(Date.UTC(y, (mo ?? 1) - 1, d ?? 1, h ?? 0, mi ?? 0));
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(assumedUtc);
+
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const representedAsUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
   );
+
+  let offset = Math.round((representedAsUtc - assumedUtc.getTime()) / 60000);
+  const correctedInstant = new Date(assumedUtc.getTime() - offset * 60000);
+  const correctedParts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(correctedInstant);
+
+  const correctedMap = Object.fromEntries(correctedParts.map((p) => [p.type, p.value]));
+  const correctedRepresented = Date.UTC(
+    Number(correctedMap.year),
+    Number(correctedMap.month) - 1,
+    Number(correctedMap.day),
+    Number(correctedMap.hour),
+    Number(correctedMap.minute),
+  );
+
+  offset = Math.round((correctedRepresented - correctedInstant.getTime()) / 60000);
+  return offset;
+}
+
+function isDstForLocalDate(dateYMD: string, timeHM: string, timeZone: string) {
+  const [year] = dateYMD.split("-").map(Number);
+  const currentOffset = timezoneOffsetMinutesForLocalDateTime(dateYMD, timeHM, timeZone);
+  const janOffset = timezoneOffsetMinutesForLocalDateTime(`${year}-01-15`, "12:00", timeZone);
+  const julOffset = timezoneOffsetMinutesForLocalDateTime(`${year}-07-15`, "12:00", timeZone);
+  const standardOffset = Math.min(janOffset, julOffset);
+  return currentOffset > standardOffset;
 }
 
 export default function HabitsPage() {
   const supabase = useMemo(() => createClient(), []);
 
-  const [todayYMD, setTodayYMD] = useState<string>("");
-  const [selectedDate, setSelectedDate] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [diaryByDate, setDiaryByDate] = useState<Record<string, DiaryEntry>>({});
-  const [draftDayGoodFactors, setDraftDayGoodFactors] = useState("");
-  const [draftDayBadFactors, setDraftDayBadFactors] = useState("");
-  const [draftNightGoodFactors, setDraftNightGoodFactors] = useState("");
-  const [draftNightBadFactors, setDraftNightBadFactors] = useState("");
-  const [isDirty, setIsDirty] = useState(false);
-  const [diarySavedMessage, setDiarySavedMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const clearDraftsAfterSaveRef = React.useRef(false);
+  const [message, setMessage] = useState("");
+
+  const [investigations, setInvestigations] = useState<Investigation[]>([]);
+  const [observations, setObservations] = useState<Observation[]>([]);
+  const [expandedInvestigationId, setExpandedInvestigationId] = useState<string | null>(null);
+  const [selectedThresholdObservationId, setSelectedThresholdObservationId] = useState<string | null>(null);
+
+  const [factorName, setFactorName] = useState("");
+  const [factorClassification, setFactorClassification] = useState<FactorClassification>("main");
+  const [investigationArea, setInvestigationArea] = useState("bedroom_bed");
+
+  const [observationDate, setObservationDate] = useState("");
+  const [amountDegree, setAmountDegree] = useState("");
+  const [factorTime, setFactorTime] = useState("");
+  const [sleepOnsetMinutes, setSleepOnsetMinutes] = useState("");
+  const [sleepQuality, setSleepQuality] = useState("5");
+
+  const activeInvestigation = investigations.find((item) => item.status === "active") ?? null;
+
+  const activeObservations = activeInvestigation
+    ? observations
+        .filter((item) => item.investigation_id === activeInvestigation.id)
+        .sort((a, b) =>
+          `${a.observation_date}T${a.factor_time_local}`.localeCompare(
+            `${b.observation_date}T${b.factor_time_local}`,
+          ),
+        )
+    : [];
+
+  const completedInvestigations = investigations
+    .filter((item) => item.status === "completed")
+    .sort((a, b) => (b.completed_at ?? b.created_at).localeCompare(a.completed_at ?? a.created_at));
 
   useEffect(() => {
-    setTodayYMD(toYMD(new Date()));
+    setObservationDate(toYMD(new Date()));
   }, []);
 
-  const fromYMD = useMemo(
-    () => (todayYMD ? addDays(todayYMD, -29) : ""),
-    [todayYMD],
-  );
+  async function reloadData(uid: string) {
+    const [investigationResult, observationResult] = await Promise.all([
+      supabase.from("sleep_investigations").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
+      supabase
+        .from("sleep_investigation_observations")
+        .select("*")
+        .eq("user_id", uid)
+        .order("observation_date", { ascending: true })
+        .order("factor_time_local", { ascending: true }),
+    ]);
 
-  const dayList = useMemo(
-    () => (todayYMD ? buildDayList(fromYMD, todayYMD) : []),
-    [fromYMD, todayYMD],
-  );
+    if (investigationResult.error) throw investigationResult.error;
+    if (observationResult.error) throw observationResult.error;
 
-  useEffect(() => {
-    if (todayYMD && !selectedDate) setSelectedDate(todayYMD);
-  }, [todayYMD, selectedDate]);
+    setInvestigations((investigationResult.data ?? []) as Investigation[]);
+    setObservations((observationResult.data ?? []) as Observation[]);
+  }
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadDiary() {
-      if (!todayYMD || !fromYMD) return;
-
+    async function load() {
       setLoading(true);
       setError(null);
 
-      const { data: authData, error: authErr } = await supabase.auth.getUser();
-
-      if (authErr || !authData?.user) {
+      const { data, error: authError } = await supabase.auth.getUser();
+      if (authError || !data.user) {
         if (!cancelled) {
-          setError(authErr?.message ?? "Not signed in.");
+          setError(authError?.message ?? "Not signed in.");
           setLoading(false);
         }
         return;
       }
 
-      const uid = authData.user.id;
-      if (!cancelled) setUserId(uid);
+      if (cancelled) return;
+      setUserId(data.user.id);
 
-      const { data, error: fetchErr } = await supabase
-        .from("sleep_diary_entries")
-        .select(
-          "id,user_id,entry_date,day_good_factors,day_bad_factors,night_good_factors,night_bad_factors",
-        )
-        .eq("user_id", uid)
-        .gte("entry_date", fromYMD)
-        .lte("entry_date", todayYMD)
-        .order("entry_date", { ascending: true });
-
-      if (fetchErr) {
-        if (!cancelled) {
-          setError(fetchErr.message);
-          setLoading(false);
-        }
-        return;
-      }
-
-      const map: Record<string, DiaryEntry> = {};
-
-      dayList.forEach((d) => {
-        map[d] = emptyDiary(d);
-      });
-
-      (data ?? []).forEach((row: any) => {
-        map[row.entry_date] = {
-          id: row.id,
-          user_id: row.user_id,
-          entry_date: row.entry_date,
-          day_good_factors: row.day_good_factors ?? "",
-          day_bad_factors: row.day_bad_factors ?? "",
-          night_good_factors: row.night_good_factors ?? "",
-          night_bad_factors: row.night_bad_factors ?? "",
-        };
-      });
-
-      if (!cancelled) {
-        setDiaryByDate(map);
-        setLoading(false);
+      try {
+        await reloadData(data.user.id);
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message ?? "Unable to load investigations.");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
-    loadDiary();
-
+    load();
     return () => {
       cancelled = true;
     };
-  }, [supabase, fromYMD, todayYMD, dayList]);
+  }, [supabase]);
 
-  useEffect(() => {
-    if (!selectedDate) return;
-
-    if (clearDraftsAfterSaveRef.current) {
-      clearDraftsAfterSaveRef.current = false;
-      setDraftDayGoodFactors("");
-      setDraftDayBadFactors("");
-      setDraftNightGoodFactors("");
-      setDraftNightBadFactors("");
-      setIsDirty(false);
+  async function startInvestigation() {
+    if (!userId || !factorName.trim()) return;
+    if (activeInvestigation) {
+      setError(`Finish the current investigation of "${activeInvestigation.factor_name}" before starting another factor.`);
       return;
     }
-
-    const savedEntry = diaryByDate[selectedDate] ?? emptyDiary(selectedDate);
-    setDraftDayGoodFactors(savedEntry.day_good_factors);
-    setDraftDayBadFactors(savedEntry.day_bad_factors);
-    setDraftNightGoodFactors(savedEntry.night_good_factors);
-    setDraftNightBadFactors(savedEntry.night_bad_factors);
-    setIsDirty(false);
-    setDiarySavedMessage("");
-  }, [selectedDate, diaryByDate]);
-
-  function updateDraftDayGoodFactors(value: string) {
-    setDraftDayGoodFactors(value);
-    setDiarySavedMessage("");
-    setIsDirty(true);
-  }
-
-  function updateDraftDayBadFactors(value: string) {
-    setDraftDayBadFactors(value);
-    setDiarySavedMessage("");
-    setIsDirty(true);
-  }
-
-  function updateDraftNightGoodFactors(value: string) {
-    setDraftNightGoodFactors(value);
-    setDiarySavedMessage("");
-    setIsDirty(true);
-  }
-
-  function updateDraftNightBadFactors(value: string) {
-    setDraftNightBadFactors(value);
-    setDiarySavedMessage("");
-    setIsDirty(true);
-  }
-
-  async function saveDiary() {
-    if (!userId || !selectedDate) return;
 
     setSaving(true);
     setError(null);
+    setMessage("");
 
-    const payload = {
+    const { error: insertError } = await supabase.from("sleep_investigations").insert({
       user_id: userId,
-      entry_date: selectedDate,
-      day_good_factors: draftDayGoodFactors.trim() || null,
-      day_bad_factors: draftDayBadFactors.trim() || null,
-      night_good_factors: draftNightGoodFactors.trim() || null,
-      night_bad_factors: draftNightBadFactors.trim() || null,
-    };
+      factor_name: factorName.trim(),
+      factor_classification: factorClassification,
+      investigation_area: investigationArea,
+      status: "active",
+    });
 
-    const { data: existing, error: existingErr } = await supabase
-      .from("sleep_diary_entries")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("entry_date", selectedDate)
-      .maybeSingle();
-
-    if (existingErr) {
-      setError(existingErr.message);
+    if (insertError) {
+      setError(insertError.message);
       setSaving(false);
       return;
     }
 
-    const result = existing?.id
-      ? await supabase
-          .from("sleep_diary_entries")
-          .update(payload)
-          .eq("id", existing.id)
-      : await supabase.from("sleep_diary_entries").insert(payload);
-
-    if (result.error) {
-      setError(result.error.message);
-      setSaving(false);
-      return;
-    }
-
-    clearDraftsAfterSaveRef.current = true;
-
-    setDiaryByDate((prev) => ({
-      ...prev,
-      [selectedDate]: {
-        ...(prev[selectedDate] ?? emptyDiary(selectedDate)),
-        id: existing?.id ?? prev[selectedDate]?.id,
-        user_id: userId,
-        entry_date: selectedDate,
-        day_good_factors: draftDayGoodFactors,
-        day_bad_factors: draftDayBadFactors,
-        night_good_factors: draftNightGoodFactors,
-        night_bad_factors: draftNightBadFactors,
-      },
-    }));
-
-    setDraftDayGoodFactors("");
-    setDraftDayBadFactors("");
-    setDraftNightGoodFactors("");
-    setDraftNightBadFactors("");
-    setDiarySavedMessage("Saved ✅");
-    setIsDirty(false);
+    setFactorName("");
+    setMessage("Investigation started.");
+    await reloadData(userId);
     setSaving(false);
-    window.setTimeout(() => setDiarySavedMessage(""), 2500);
+  }
+
+  async function saveObservation() {
+    if (!userId || !activeInvestigation) return;
+
+    const onset = Number(sleepOnsetMinutes);
+    const quality = Number(sleepQuality);
+    if (
+      !observationDate ||
+      !amountDegree.trim() ||
+      !factorTime ||
+      !Number.isFinite(onset) ||
+      onset < 0 ||
+      !Number.isInteger(onset) ||
+      !Number.isFinite(quality) ||
+      quality < 1 ||
+      quality > 10
+    ) {
+      setError("Complete the date, amount/degree, time, time taken to fall asleep, and sleep quality fields.");
+      return;
+    }
+
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const utcOffsetMinutes = timezoneOffsetMinutesForLocalDateTime(observationDate, factorTime, timezone);
+    const isDst = isDstForLocalDate(observationDate, factorTime, timezone);
+
+    setSaving(true);
+    setError(null);
+    setMessage("");
+
+    const { error: insertError } = await supabase.from("sleep_investigation_observations").insert({
+      investigation_id: activeInvestigation.id,
+      user_id: userId,
+      observation_date: observationDate,
+      amount_degree: amountDegree.trim(),
+      factor_time_local: factorTime,
+      sleep_onset_minutes: onset,
+      sleep_quality: quality,
+      timezone,
+      utc_offset_minutes: utcOffsetMinutes,
+      is_dst: isDst,
+    });
+
+    if (insertError) {
+      setError(insertError.message);
+      setSaving(false);
+      return;
+    }
+
+    setAmountDegree("");
+    setFactorTime("");
+    setSleepOnsetMinutes("");
+    setSleepQuality("5");
+    setMessage("Observation saved.");
+    await reloadData(userId);
+    setSaving(false);
+  }
+
+  async function finishInvestigation() {
+    if (!userId || !activeInvestigation || !selectedThresholdObservationId) {
+      setError("Select the observation that represents the threshold you want to record.");
+      return;
+    }
+
+    const thresholdObservation = observations.find((item) => item.id === selectedThresholdObservationId);
+    if (!thresholdObservation) {
+      setError("The selected threshold observation could not be found.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage("");
+
+    const { error: updateError } = await supabase
+      .from("sleep_investigations")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        threshold_observation_id: thresholdObservation.id,
+        threshold_amount_degree: thresholdObservation.amount_degree,
+        threshold_time_local: thresholdObservation.factor_time_local,
+        threshold_sleep_onset_minutes: thresholdObservation.sleep_onset_minutes,
+        threshold_sleep_quality: thresholdObservation.sleep_quality,
+        threshold_timezone: thresholdObservation.timezone,
+        threshold_utc_offset_minutes: thresholdObservation.utc_offset_minutes,
+        threshold_is_dst: thresholdObservation.is_dst,
+      })
+      .eq("id", activeInvestigation.id)
+      .eq("user_id", userId);
+
+    if (updateError) {
+      setError(updateError.message);
+      setSaving(false);
+      return;
+    }
+
+    setSelectedThresholdObservationId(null);
+    setMessage("Investigation completed and threshold added to your results.");
+    await reloadData(userId);
+    setSaving(false);
+  }
+
+  async function continueInvestigation(investigation: Investigation) {
+    if (!userId) return;
+    if (activeInvestigation && activeInvestigation.id !== investigation.id) {
+      setError(`You already have an active investigation: "${activeInvestigation.factor_name}". Finish it before continuing another factor.`);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage("");
+
+    const { error: updateError } = await supabase
+      .from("sleep_investigations")
+      .update({ status: "active", completed_at: null })
+      .eq("id", investigation.id)
+      .eq("user_id", userId);
+
+    if (updateError) {
+      setError(updateError.message);
+      setSaving(false);
+      return;
+    }
+
+    setExpandedInvestigationId(investigation.id);
+    setMessage(`Continuing investigation: ${investigation.factor_name}.`);
+    await reloadData(userId);
+    setSaving(false);
+  }
+
+  function investigationObservations(investigationId: string) {
+    return observations
+      .filter((item) => item.investigation_id === investigationId)
+      .sort((a, b) =>
+        `${a.observation_date}T${a.factor_time_local}`.localeCompare(`${b.observation_date}T${b.factor_time_local}`),
+      );
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8 text-base">
+    <main className="mx-auto max-w-6xl px-4 py-8 text-base">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Sleep Diary</h1>
-        <p className="mt-2 text-base text-neutral-600">
-          Record the specific factors that may have helped or disrupted sleep so
-          you can compare good and poor nights and identify recurring patterns
-          over time.
+        <h1 className="text-3xl font-bold">Investigation</h1>
+        <p className="mt-2 max-w-4xl text-neutral-700">
+          Investigate one possible contributing factor at a time. Start with the main factors that may be disrupting your sleep, beginning with the bedroom and bed environment. Once those main factors and their threshold limits are understood, move on to secondary factors.
         </p>
 
-        <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
-          <div className="text-sm font-bold text-neutral-900">
-            Diary page = factor tracking and future reference.
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="font-bold">One factor at a time</div>
+            <p className="mt-1 text-sm text-neutral-700">
+              Changing more than one possible contributing factor at the same time can make it difficult to determine which factor affected your sleep.
+            </p>
           </div>
-          <div className="mt-1 text-sm text-neutral-700">
-            Focus on specific elements, not conditions. For example: write
-            “used two blankets and a doona”, not just “too warm”.
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <div className="font-bold">Daylight saving</div>
+            <p className="mt-1 text-sm text-neutral-700">
+              Enter the actual time shown on the clock when the factor occurred. SleepFix automatically records your timezone, UTC offset, and daylight-saving status. Do not adjust the time yourself.
+            </p>
           </div>
         </div>
+
+        <details className="mt-4 rounded-xl border bg-white p-4">
+          <summary className="cursor-pointer font-bold">See example investigation: Coke drink</summary>
+          <div className="mt-3 overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead><tr className="border-b text-left"><th className="px-3 py-2">Factor</th><th className="px-3 py-2">Amount / degree</th><th className="px-3 py-2">Time</th><th className="px-3 py-2">Time to fall asleep</th><th className="px-3 py-2">How did you feel after sleeping?</th></tr></thead>
+              <tbody>
+                <tr className="border-b"><td className="px-3 py-2">Coke drink</td><td className="px-3 py-2">500 ml</td><td className="px-3 py-2">1:00 pm</td><td className="px-3 py-2">30 min</td><td className="px-3 py-2">9 / 10</td></tr>
+                <tr className="border-b"><td className="px-3 py-2">Coke drink</td><td className="px-3 py-2">500 ml</td><td className="px-3 py-2">2:00 pm</td><td className="px-3 py-2">35 min</td><td className="px-3 py-2">9 / 10</td></tr>
+                <tr><td className="px-3 py-2">Coke drink</td><td className="px-3 py-2">500 ml</td><td className="px-3 py-2">3:00 pm</td><td className="px-3 py-2">3 hr</td><td className="px-3 py-2">8 / 10</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-sm text-neutral-700">
+            In this example, the person may still feel good after sleeping, but the time taken to fall asleep increased from about 30 minutes to 3 hours. The sleep-onset change therefore remains an important part of the investigation.
+          </p>
+        </details>
       </div>
 
-      {error ? (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-base text-red-700">
-          {error}
-        </div>
+      {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">{error}</div> : null}
+      {message ? <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-green-800">{message}</div> : null}
+      {loading ? <div className="rounded-xl border bg-white p-6">Loading investigation…</div> : null}
+
+      {!loading && !activeInvestigation ? (
+        <section className="rounded-xl border bg-white p-5">
+          <h2 className="text-xl font-semibold">Start an Investigation</h2>
+          <p className="mt-1 text-neutral-600">Begin with a main contributing factor in the bedroom or bed environment. Move to secondary factors after the main factors have been investigated.</p>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <label className="grid gap-2"><span className="font-semibold">Factor being investigated</span><input value={factorName} onChange={(e) => setFactorName(e.target.value)} className="rounded-lg border px-3 py-2" placeholder="e.g. bedroom temperature" /></label>
+            <label className="grid gap-2"><span className="font-semibold">Factor classification</span><select value={factorClassification} onChange={(e) => setFactorClassification(e.target.value as FactorClassification)} className="rounded-lg border px-3 py-2"><option value="main">Main contributing factor</option><option value="secondary">Secondary contributing factor</option></select></label>
+            <label className="grid gap-2"><span className="font-semibold">Investigation area</span><select value={investigationArea} onChange={(e) => setInvestigationArea(e.target.value)} className="rounded-lg border px-3 py-2">{AREA_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          </div>
+
+          <button type="button" onClick={startInvestigation} disabled={!userId || !factorName.trim() || saving} className="mt-5 rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50">{saving ? "Starting…" : "Start investigation"}</button>
+        </section>
       ) : null}
 
-      <section className="rounded-xl border bg-white p-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold">Diary entry</h2>
-            <p className="mt-1 text-base text-neutral-600">
-              Choose the day/night, write the factor notes, then save before
-              leaving.
-            </p>
+      {!loading && activeInvestigation ? (
+        <section className="rounded-xl border bg-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div><div className="text-sm font-bold uppercase tracking-wide text-green-700">Active investigation</div><h2 className="mt-1 text-2xl font-bold">{activeInvestigation.factor_name}</h2><div className="mt-2 flex flex-wrap gap-2 text-sm"><span className="rounded-full bg-neutral-100 px-3 py-1">{activeInvestigation.factor_classification === "main" ? "Main contributing factor" : "Secondary contributing factor"}</span><span className="rounded-full bg-neutral-100 px-3 py-1">{areaLabel(activeInvestigation.investigation_area)}</span></div></div>
           </div>
 
-          <label className="text-sm font-semibold">
-            Date
-            <select
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="ml-2 rounded-lg border px-3 py-2 text-base"
-              disabled={loading || dayList.length === 0}
-            >
-              {dayList
-                .slice()
-                .reverse()
-                .map((d) => (
-                  <option key={d} value={d}>
-                    {formatDisplayDate(d)}
-                  </option>
-                ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="mt-5 grid gap-6">
-          <section className="rounded-xl border border-neutral-200 p-4">
-            <h3 className="text-lg font-bold">During the Day</h3>
-            <p className="mt-1 text-sm text-neutral-600">
-              Record specific factors from the day that may have influenced sleep.
-            </p>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="grid gap-2">
-                <span className="font-semibold">Good Factors</span>
-                <span className="text-sm text-neutral-600">
-                  What factors may have contributed to a good night's sleep?
-                  Write those factors in for future reference.
-                </span>
-                <textarea
-                  value={draftDayGoodFactors}
-                  onChange={(e) => updateDraftDayGoodFactors(e.target.value)}
-                  rows={6}
-                  className="w-full rounded-lg border p-3 text-base"
-                  placeholder="Examples: finished dinner at 5pm; went for a 10-minute walk after dinner; did some gardening at 8pm; read a book before bed; turned the heater off at 7pm..."
-                />
-              </label>
-
-              <label className="grid gap-2">
-                <span className="font-semibold">Bad Factors</span>
-                <span className="text-sm text-neutral-600">
-                  What factors may have contributed to a poor night's sleep?
-                  Write those factors in for future reference.
-                </span>
-                <textarea
-                  value={draftDayBadFactors}
-                  onChange={(e) => updateDraftDayBadFactors(e.target.value)}
-                  rows={6}
-                  className="w-full rounded-lg border p-3 text-base"
-                  placeholder="Examples: ate dinner at 8pm instead of 5pm; exercised too late; drank tea at 9pm instead of 4pm; smoked at 10pm instead of finishing at 5pm; watched a horror movie..."
-                />
-              </label>
+          <div className="mt-6 rounded-xl border border-neutral-200 p-4">
+            <h3 className="text-lg font-bold">Add observation</h3>
+            <div className="mt-4 grid gap-4 md:grid-cols-5">
+              <label className="grid gap-2"><span className="font-semibold">Date</span><input type="date" value={observationDate} max={toYMD(new Date())} onChange={(e) => setObservationDate(e.target.value)} className="rounded-lg border px-3 py-2" /></label>
+              <label className="grid gap-2"><span className="font-semibold">Amount / degree</span><input value={amountDegree} onChange={(e) => setAmountDegree(e.target.value)} className="rounded-lg border px-3 py-2" placeholder="e.g. 500 ml" /></label>
+              <label className="grid gap-2"><span className="font-semibold">Time factor occurred</span><input type="time" value={factorTime} onChange={(e) => setFactorTime(e.target.value)} className="rounded-lg border px-3 py-2" /></label>
+              <label className="grid gap-2"><span className="font-semibold">Time to fall asleep</span><div className="flex items-center gap-2"><input type="number" min="0" step="1" value={sleepOnsetMinutes} onChange={(e) => setSleepOnsetMinutes(e.target.value)} className="min-w-0 flex-1 rounded-lg border px-3 py-2" placeholder="30" /><span className="text-sm text-neutral-500">min</span></div></label>
+              <label className="grid gap-2"><span className="font-semibold">How did you feel after sleeping?</span><select value={sleepQuality} onChange={(e) => setSleepQuality(e.target.value)} className="rounded-lg border px-3 py-2">{Array.from({ length: 10 }, (_, i) => i + 1).map((score) => <option key={score} value={score}>{score} / 10</option>)}</select><span className="text-xs text-neutral-500">1 = very poor · 10 = excellent</span></label>
             </div>
-          </section>
-
-          <section className="rounded-xl border border-neutral-200 p-4">
-            <h3 className="text-lg font-bold">During the Night / Just Before Bedtime</h3>
-            <p className="mt-1 text-sm text-neutral-600">
-              Record specific factors from just before bedtime or during the night that appeared to help or disrupt sleep.
-            </p>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="grid gap-2">
-                <span className="font-semibold">Good Factors</span>
-                <span className="text-sm text-neutral-600">
-                  What factors do you think contributed to a good night's sleep?
-                  Record the elements that appeared to help.
-                </span>
-                <textarea
-                  value={draftNightGoodFactors}
-                  onChange={(e) => updateDraftNightGoodFactors(e.target.value)}
-                  rows={6}
-                  className="w-full rounded-lg border p-3 text-base"
-                  placeholder="Examples: used two blankets instead of one; opened the window slightly; used a different pillow; removed an extra blanket; rearranged bedding and slept comfortably afterwards..."
-                />
-              </label>
-
-              <label className="grid gap-2">
-                <span className="font-semibold">Bad Factors</span>
-                <span className="text-sm text-neutral-600">
-                  What factors do you think contributed to a poor night's sleep?
-                  Record the elements that appeared to disturb sleep.
-                </span>
-                <textarea
-                  value={draftNightBadFactors}
-                  onChange={(e) => updateDraftNightBadFactors(e.target.value)}
-                  rows={6}
-                  className="w-full rounded-lg border p-3 text-base"
-                  placeholder="Examples: added an extra bed cover before sleep; used doona plus two blankets plus main bed cover; heater stayed on too long; pillow was uncomfortable; bedding needed rearranging several times..."
-                />
-              </label>
-            </div>
-          </section>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={saveDiary}
-              disabled={!userId || !selectedDate || saving}
-              className="rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save diary entry before leaving"}
-            </button>
-
-            {isDirty ? (
-              <span className="text-sm font-semibold text-red-700">
-                Unsaved changes
-              </span>
-            ) : null}
-
-            {diarySavedMessage ? (
-              <span className="text-sm font-semibold text-green-700">
-                {diarySavedMessage}
-              </span>
-            ) : null}
+            <button type="button" onClick={saveObservation} disabled={saving} className="mt-5 rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50">{saving ? "Saving…" : "Save observation"}</button>
           </div>
-        </div>
-      </section>
 
-      <section className="mt-8 rounded-xl border bg-white p-4">
-        <h2 className="text-xl font-semibold">Diary History</h2>
-        <p className="mt-2 text-base text-neutral-600">
-          Only recorded diary entries are shown. Compare good and poor nights. Look for factors that stayed the same and factors that changed.
-        </p>
-
-        <div className="mt-4 grid gap-3">
-          {dayList
-            .slice()
-            .reverse()
-            .map((d) => diaryByDate[d] ?? emptyDiary(d))
-            .filter(hasDiaryEntry)
-            .map((entry) => (
-              <div key={entry.entry_date} className="rounded-lg border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-bold">
-                    {formatDisplayDate(entry.entry_date)}
-                  </div>
-                  <div className="text-sm text-neutral-600">
-                    {diarySignal(entry)}
-                  </div>
-                </div>
-
-                <div className="mt-2 grid gap-2 text-sm text-neutral-700">
-                  {entry.day_good_factors.trim() ? (
-                    <div>
-                      <strong>Day good factors:</strong>{" "}
-                      {entry.day_good_factors}
-                    </div>
-                  ) : null}
-
-                  {entry.day_bad_factors.trim() ? (
-                    <div>
-                      <strong>Day bad factors:</strong>{" "}
-                      {entry.day_bad_factors}
-                    </div>
-                  ) : null}
-
-                  {entry.night_good_factors.trim() ? (
-                    <div>
-                      <strong>Night good factors:</strong>{" "}
-                      {entry.night_good_factors}
-                    </div>
-                  ) : null}
-
-                  {entry.night_bad_factors.trim() ? (
-                    <div>
-                      <strong>Night bad factors:</strong>{" "}
-                      {entry.night_bad_factors}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-
-          {!dayList.some((d) => hasDiaryEntry(diaryByDate[d] ?? emptyDiary(d))) ? (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-neutral-500">
-              No diary entries recorded in the last 30 days.
+          <div className="mt-6">
+            <h3 className="text-lg font-bold">Investigation History</h3>
+            <p className="mt-1 text-sm text-neutral-600">All observations remain attached to this investigation. Select the observation that represents the threshold you want to record.</p>
+            <div className="mt-4 overflow-x-auto rounded-xl border">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="bg-neutral-50"><tr className="border-b text-left"><th className="px-3 py-3">Threshold</th><th className="px-3 py-3">Date</th><th className="px-3 py-3">Amount / degree</th><th className="px-3 py-3">Time</th><th className="px-3 py-3">Time to fall asleep</th><th className="px-3 py-3">After-sleep quality</th><th className="px-3 py-3">DST context</th></tr></thead>
+                <tbody>
+                  {activeObservations.map((observation) => <tr key={observation.id} className="border-b last:border-b-0"><td className="px-3 py-3"><input type="radio" name="threshold" checked={selectedThresholdObservationId === observation.id} onChange={() => setSelectedThresholdObservationId(observation.id)} aria-label={`Use ${formatDate(observation.observation_date)} as threshold`} /></td><td className="px-3 py-3">{formatDate(observation.observation_date)}</td><td className="px-3 py-3">{observation.amount_degree}</td><td className="px-3 py-3">{formatClock(observation.factor_time_local)}</td><td className="px-3 py-3">{formatMinutes(observation.sleep_onset_minutes)}</td><td className="px-3 py-3">{observation.sleep_quality} / 10</td><td className="px-3 py-3">{observation.is_dst ? "DST" : "Standard time"}</td></tr>)}
+                  {!activeObservations.length ? <tr><td colSpan={7} className="px-3 py-5 text-center text-neutral-500">No observations saved yet.</td></tr> : null}
+                </tbody>
+              </table>
             </div>
-          ) : null}
-        </div>
-      </section>
+            <button type="button" onClick={finishInvestigation} disabled={saving || !activeObservations.length || !selectedThresholdObservationId} className="mt-5 rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50">{saving ? "Saving…" : "Finish investigation and save threshold"}</button>
+          </div>
+        </section>
+      ) : null}
+
+      {!loading ? (
+        <section className="mt-8 rounded-xl border bg-white p-5">
+          <h2 className="text-xl font-semibold">Investigation Records</h2>
+          <p className="mt-1 text-neutral-600">Completed investigations remain here as inactive records. Nothing is erased when an investigation is finished.</p>
+          <div className="mt-4 grid gap-3">
+            {investigations.map((investigation) => {
+              const rows = investigationObservations(investigation.id);
+              const expanded = expandedInvestigationId === investigation.id || investigation.status === "active";
+              return <div key={investigation.id} className="rounded-xl border border-neutral-200">
+                <button type="button" onClick={() => setExpandedInvestigationId(expandedInvestigationId === investigation.id ? null : investigation.id)} className="flex w-full flex-wrap items-center justify-between gap-3 p-4 text-left"><div><div className="font-bold">{investigation.factor_name}</div><div className="mt-1 text-sm text-neutral-600">{investigation.factor_classification === "main" ? "Main contributing factor" : "Secondary contributing factor"} · {areaLabel(investigation.investigation_area)}</div></div><span className={`rounded-full px-3 py-1 text-sm font-semibold ${investigation.status === "active" ? "bg-green-100 text-green-800" : "bg-neutral-100 text-neutral-700"}`}>{investigation.status === "active" ? "Active" : "Inactive"}</span></button>
+                {expanded ? <div className="border-t p-4"><div className="overflow-x-auto"><table className="min-w-full border-collapse text-sm"><thead><tr className="border-b text-left"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Amount / degree</th><th className="px-3 py-2">Time</th><th className="px-3 py-2">Time to fall asleep</th><th className="px-3 py-2">After-sleep quality</th><th className="px-3 py-2">DST context</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b last:border-b-0"><td className="px-3 py-2">{formatDate(row.observation_date)}</td><td className="px-3 py-2">{row.amount_degree}</td><td className="px-3 py-2">{formatClock(row.factor_time_local)}</td><td className="px-3 py-2">{formatMinutes(row.sleep_onset_minutes)}</td><td className="px-3 py-2">{row.sleep_quality} / 10</td><td className="px-3 py-2">{row.is_dst ? "DST" : "Standard time"}</td></tr>)}</tbody></table></div>{investigation.status === "completed" ? <button type="button" onClick={() => continueInvestigation(investigation)} disabled={saving || Boolean(activeInvestigation)} className="mt-4 rounded-xl border border-black px-4 py-2 font-bold disabled:opacity-50">Continue investigation</button> : null}</div> : null}
+              </div>;
+            })}
+            {!investigations.length ? <div className="rounded-lg border border-dashed p-4 text-sm text-neutral-500">No investigations recorded yet.</div> : null}
+          </div>
+        </section>
+      ) : null}
+
+      {!loading ? (
+        <section className="mt-8 rounded-xl border bg-white p-5">
+          <h2 className="text-xl font-semibold">Contributing Factors Disrupting Your Sleep</h2>
+          <p className="mt-1 text-neutral-600">This table builds as you complete investigations and record the threshold that you are satisfied with.</p>
+          <div className="mt-4 overflow-x-auto rounded-xl border">
+            <table className="min-w-full border-collapse text-sm">
+              <thead className="bg-neutral-50"><tr className="border-b text-left"><th className="px-3 py-3">Contributing factor</th><th className="px-3 py-3">Type</th><th className="px-3 py-3">Area</th><th className="px-3 py-3">Amount / degree</th><th className="px-3 py-3">Indicated threshold</th><th className="px-3 py-3">Time to fall asleep</th><th className="px-3 py-3">After-sleep quality</th><th className="px-3 py-3">DST context</th></tr></thead>
+              <tbody>
+                {completedInvestigations.map((investigation) => <tr key={investigation.id} className="cursor-pointer border-b last:border-b-0 hover:bg-neutral-50" onClick={() => setExpandedInvestigationId(investigation.id)}><td className="px-3 py-3 font-semibold">{investigation.factor_name}</td><td className="px-3 py-3">{investigation.factor_classification === "main" ? "Main" : "Secondary"}</td><td className="px-3 py-3">{areaLabel(investigation.investigation_area)}</td><td className="px-3 py-3">{investigation.threshold_amount_degree ?? "—"}</td><td className="px-3 py-3">{formatClock(investigation.threshold_time_local)}</td><td className="px-3 py-3">{formatMinutes(investigation.threshold_sleep_onset_minutes)}</td><td className="px-3 py-3">{investigation.threshold_sleep_quality != null ? `${investigation.threshold_sleep_quality} / 10` : "—"}</td><td className="px-3 py-3">{investigation.threshold_is_dst == null ? "—" : investigation.threshold_is_dst ? "DST" : "Standard time"}</td></tr>)}
+                {!completedInvestigations.length ? <tr><td colSpan={8} className="px-3 py-5 text-center text-neutral-500">No completed investigations yet.</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
