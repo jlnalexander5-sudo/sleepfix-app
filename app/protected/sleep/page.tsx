@@ -31,6 +31,24 @@ type NightMetricsRow = {
   metric_value: number | string | null;
 };
 
+type SavedNightRow = {
+  id: string;
+  local_date: string | null;
+  created_at: string;
+  sleep_start: string | null;
+  sleep_end: string | null;
+  sleep_quality: number | string | null;
+  sleep_latency_choice: string | null;
+  wake_ups_choice: string | null;
+  wake_recovery_choice: string | null;
+  mind_tags: string[] | null;
+  environment_tags: string[] | null;
+  bed_tags: string[] | null;
+  body_tags: string[] | null;
+  protocol_followed: string | null;
+  notes: string | null;
+};
+
 function toIsoLocalDate(d: Date) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -228,6 +246,27 @@ function MultiCheckGroup({
 }
 
 
+function formatSavedNightDate(ymd: string | null, createdAt: string) {
+  const value = ymd ?? createdAt.slice(0, 10);
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function splitMindTags(tags: string[] | null | undefined) {
+  const values = Array.isArray(tags) ? tags : [];
+  const emotionalSet = new Set<string>(["Not sure / none", ...EMOTIONAL_TAGS]);
+  const mentalSet = new Set<string>(["Not sure / none", ...MENTAL_TAGS]);
+
+  return {
+    emotional: values.filter((tag) => emotionalSet.has(tag)),
+    mental: values.filter((tag) => mentalSet.has(tag)),
+  };
+}
+
 function OptionalContextSection({
   title,
   value,
@@ -285,12 +324,15 @@ export default function SleepPage() {
   const [latestNightId, setLatestNightId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<NightMetricsRow[]>([]);
   const [adaptiveReminder, setAdaptiveReminder] = useState<AdaptiveReminderState | null>(null);
+  const [recentNights, setRecentNights] = useState<SavedNightRow[]>([]);
+  const [editingNightId, setEditingNightId] = useState<string | null>(null);
 
   const [isSavingNight, setIsSavingNight] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   function resetNightForm() {
+    setEditingNightId(null);
     // Reset *all* user-entered fields so it’s obvious the night was saved
     setSleepQuality("");
     setSleepLatencyChoice("");
@@ -316,6 +358,59 @@ export default function SleepPage() {
     setSleepStartTime(toLocalTimeHHMM(start));
     setSleepEndDate(toIsoLocalDate(end));
     setSleepEndTime(toLocalTimeHHMM(end));
+  }
+
+  async function reloadRecentNights(uid: string) {
+    const { data, error } = await supabase
+      .from("sleep_nights")
+      .select(
+        "id,local_date,created_at,sleep_start,sleep_end,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice,mind_tags,environment_tags,bed_tags,body_tags,protocol_followed,notes",
+      )
+      .eq("user_id", uid)
+      .order("local_date", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(14);
+
+    if (!error) setRecentNights((data ?? []) as SavedNightRow[]);
+  }
+
+  function beginEditNight(night: SavedNightRow) {
+    const start = night.sleep_start ? new Date(night.sleep_start) : null;
+    const end = night.sleep_end ? new Date(night.sleep_end) : null;
+    const split = splitMindTags(night.mind_tags);
+
+    setEditingNightId(night.id);
+
+    if (start) {
+      setSleepStartDate(toIsoLocalDate(start));
+      setSleepStartTime(toLocalTimeHHMM(start));
+    }
+    if (end) {
+      setSleepEndDate(toIsoLocalDate(end));
+      setSleepEndTime(toLocalTimeHHMM(end));
+    }
+
+    setSleepQuality(night.sleep_quality == null ? "" : String(night.sleep_quality));
+    setSleepLatencyChoice(night.sleep_latency_choice ?? "");
+    setWakeUpsChoice(night.wake_ups_choice ?? "");
+    setWakeRecoveryChoice(night.wake_recovery_choice ?? "");
+    setEmotionalTags(split.emotional);
+    setMentalTags(split.mental);
+    setEnvironmentTags(Array.isArray(night.environment_tags) ? night.environment_tags : []);
+    setBedTags(Array.isArray(night.bed_tags) ? night.bed_tags : []);
+    setBodyTags(Array.isArray(night.body_tags) ? night.body_tags : []);
+    setProtocolFollowed(night.protocol_followed ?? "");
+    setUnusualNotes(night.notes ?? "");
+    setSaveNotice(null);
+    setSaveError(null);
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEditNight() {
+    resetNightForm();
+    setSaveNotice("Edit cancelled.");
+    setSaveError(null);
   }
 
   useEffect(() => setMounted(true), []);
@@ -402,6 +497,7 @@ export default function SleepPage() {
         .limit(30);
 
       setAdaptiveReminder(buildAdaptiveReminderState((recentRows ?? []) as any[]));
+      await reloadRecentNights(userId);
     })();
   }, [supabase, userId]);
 
@@ -457,8 +553,8 @@ export default function SleepPage() {
         return;
       }
 
-      if (existingNight?.id) {
-        setSaveError(`A night for ${endLocalDate} has already been saved. Please edit that date instead of creating a duplicate.`);
+      if (existingNight?.id && existingNight.id !== editingNightId) {
+        setSaveError(`A night for ${endLocalDate} has already been saved. Please edit that saved night instead of creating a duplicate.`);
         return;
       }
 
@@ -489,23 +585,32 @@ export default function SleepPage() {
         notes: unusualNotes.trim() || null,
       };
 
-      const { data: inserted, error } = await supabase
-        .from("sleep_nights")
-        .insert(payload)
-        .select("id")
-        .single();
+      const saveResult = editingNightId
+        ? await supabase
+            .from("sleep_nights")
+            .update(payload)
+            .eq("id", editingNightId)
+            .eq("user_id", userId)
+            .select("id")
+            .single()
+        : await supabase
+            .from("sleep_nights")
+            .insert(payload)
+            .select("id")
+            .single();
 
-      if (error) {
-        setSaveError(error.message || "Failed to save.");
+      if (saveResult.error) {
+        setSaveError(saveResult.error.message || "Failed to save.");
         return;
       }
 
-      setLatestNightId(inserted?.id ?? null);
+      const wasEditing = Boolean(editingNightId);
+      setLatestNightId(saveResult.data?.id ?? null);
       setAdaptiveReminder(null);
+      await reloadRecentNights(userId);
 
-      // Optimistically reset form + refresh list.
       resetNightForm();
-      setSaveNotice("Saved ✅");
+      setSaveNotice(wasEditing ? "Night updated ✅" : "Saved ✅");
     } finally {
       setIsSavingNight(false);
     }
@@ -561,6 +666,22 @@ const canSaveNight = missingRequired.length === 0;
       `}</style>
 
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18, fontFamily: "Verdana, sans-serif", color: "#000080" }}>Sleep</h1>
+
+      {editingNightId ? (
+        <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+          <div className="font-extrabold">Editing a saved night</div>
+          <div className="mt-1 text-sm">
+            Update any field or note, then choose <strong>Update night</strong>. This changes the existing record rather than creating a duplicate.
+          </div>
+          <button
+            type="button"
+            onClick={cancelEditNight}
+            className="mt-3 rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-bold"
+          >
+            Cancel edit
+          </button>
+        </div>
+      ) : null}
 
       {adaptiveReminder?.shouldShow ? (
         <div
@@ -841,7 +962,7 @@ const canSaveNight = missingRequired.length === 0;
       </div>
 
       <button type="button" onClick={saveNight} disabled={!canSaveNight || isSavingNight} className="sf-button">
-        {isSavingNight ? "Saving…" : saveNotice ? "Saved" : "Save night"}
+        {isSavingNight ? "Saving…" : editingNightId ? "Update night" : "Save night"}
       </button>
       {saveNotice && (
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#000080" }}>{saveNotice}</div>
@@ -849,6 +970,54 @@ const canSaveNight = missingRequired.length === 0;
       {saveError && (
         <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600, color: "#B00020" }}>{saveError}</div>
       )}
+
+      <section className="mt-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="sf-section-title">Recent saved nights</div>
+        <div className="sf-help" style={{ marginBottom: 14 }}>
+          Review the last 14 saved nights, including anything unusual or different that you recorded. Use Edit night if you need to correct or add information.
+        </div>
+
+        <div className="grid gap-3">
+          {recentNights.map((night) => (
+            <details key={night.id} className="rounded-xl border border-gray-200 bg-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
+                <div>
+                  <div className="font-extrabold text-gray-900">
+                    {formatSavedNightDate(night.local_date, night.created_at)}
+                  </div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    Quality {night.sleep_quality ?? "—"}/10 · Latency {night.sleep_latency_choice ? `${night.sleep_latency_choice} min` : "—"} · Wake-ups {night.wake_ups_choice ?? "—"}
+                  </div>
+                </div>
+                <span className="text-sm font-semibold text-gray-500">
+                  {night.notes?.trim() ? "Note saved" : "No note"}
+                </span>
+              </summary>
+
+              <div className="border-t border-gray-100 p-4">
+                <div className="text-sm font-bold text-gray-700">Anything unusual or different</div>
+                <div className="mt-2 whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-800">
+                  {night.notes?.trim() || "No unusual/different note was recorded for this night."}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => beginEditNight(night)}
+                  className="mt-4 rounded-lg border border-gray-300 bg-white px-4 py-2 font-bold text-gray-900"
+                >
+                  Edit night
+                </button>
+              </div>
+            </details>
+          ))}
+
+          {!recentNights.length ? (
+            <div className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+              No saved nights yet.
+            </div>
+          ) : null}
+        </div>
+      </section>
       </div>
   );
 }
