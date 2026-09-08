@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 const ADMIN_EMAIL = "jlnalexander5@gmail.com";
@@ -14,19 +15,34 @@ type SleepNightAdminRow = {
   sleep_latency_choice: string | null;
   wake_ups_choice: string | null;
   wake_recovery_choice: string | null;
-  primary_trigger: string | null;
-  mind_tags: string[] | null;
-  environment_tags: string[] | null;
-  bed_tags: string[] | null;
-  body_tags: string[] | null;
-  protocol_used_name: string | null;
-  protocol_followed: string | null;
+};
+
+type InvestigationRow = {
+  id: string;
+  user_id: string;
+  factor_name: string;
+  factor_classification: string | null;
+  investigation_area: string | null;
+  status: string;
+  threshold_amount_degree: string | null;
+  threshold_time_local: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+type CandidateNoteRow = {
+  id: string;
+  user_id: string;
+  note_date: string;
+  factor_name: string;
+  effect_observed: string;
+  note_text: string | null;
+  created_at: string;
 };
 
 type EngineFeedbackRow = {
   id: string;
   user_id: string;
-  sleep_night_id: string | null;
   local_date: string | null;
   engine_category: string | null;
   engine_protocol: string | null;
@@ -35,566 +51,496 @@ type EngineFeedbackRow = {
   created_at: string;
 };
 
-type DateWindow = {
-  today: string;
-  weekStart: string;
-  monthStart: string;
-};
-
-type ProblemGroup =
-  | "Thermal / environment"
-  | "Wake maintenance"
-  | "Body recovery / DOMS"
-  | "Mind / emotional activation"
-  | "Sleep onset"
-  | "Sleep hygiene / habits"
-  | "Timing / circadian"
-  | "Unclear / needs review";
-
-type ProblemGroupSummary = {
-  group: ProblemGroup;
-  count: number;
-  users: number;
-  records: SleepNightAdminRow[];
-  missingFeedback: EngineFeedbackRow[];
-};
-
-function ymdFromDate(d: Date) {
+function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function buildDateWindow(): DateWindow {
-  const now = new Date(Date.now());
-  const today = ymdFromDate(now);
-
-  const week = new Date(now.getTime());
-  week.setDate(week.getDate() - 6);
-
-  const month = new Date(now.getTime());
-  month.setDate(1);
-
-  return {
-    today,
-    weekStart: ymdFromDate(week),
-    monthStart: ymdFromDate(month),
-  };
-}
-
 function dateKey(row: SleepNightAdminRow) {
-  return row.local_date ?? String(row.created_at ?? "").slice(0, 10);
+  return row.local_date ?? row.created_at.slice(0, 10);
 }
 
-function textFromArray(value?: string[] | null) {
-  return Array.isArray(value) ? value.join(" ").toLowerCase() : "";
+function shortUser(userId: string) {
+  return userId ? `User ${userId.slice(0, 8)}` : "Unknown user";
 }
 
-function allText(row: SleepNightAdminRow) {
-  return [
-    row.primary_trigger ?? "",
-    textFromArray(row.mind_tags),
-    textFromArray(row.environment_tags),
-    textFromArray(row.bed_tags),
-    textFromArray(row.body_tags),
-    row.protocol_used_name ?? "",
-  ]
-    .join(" ")
-    .toLowerCase();
+function fmtDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const raw = String(value).slice(0, 10);
+  const [year, month, day] = raw.split("-").map(Number);
+
+  if (year && month && day) {
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  return raw;
 }
 
-function lowerIncludes(value: string, needles: string[]) {
-  return needles.some((n) => value.includes(n));
+function prettyArea(value: string | null | undefined) {
+  switch (value) {
+    case "bedroom_bed":
+      return "Bedroom / bed environment";
+    case "house":
+      return "House";
+    case "food_drink":
+      return "Food / drink";
+    case "physical_activity":
+      return "Physical activity";
+    case "environment":
+      return "Environment";
+    case "other":
+      return "Other";
+    default:
+      return value ? value.replaceAll("_", " ") : "—";
+  }
 }
 
-function parseChoiceToNumber(choice: string | number | null | undefined): number | null {
-  if (choice === null || choice === undefined) return null;
-  if (typeof choice === "number" && Number.isFinite(choice)) return choice;
-  const n = parseInt(String(choice).replace(/[^0-9]/g, ""), 10);
-  return Number.isFinite(n) ? n : null;
+function prettyEffect(value: string) {
+  if (value === "no_noticeable_effect") return "No noticeable effect";
+  if (value === "possible_effect") return "Possible effect";
+  return "Not sure yet";
 }
 
-function parseWakeRecovery(choice: string | null | undefined): number | null {
-  if (!choice) return null;
-  const cleaned = choice.toLowerCase().trim();
-  if (cleaned.includes("0-5")) return 5;
-  if (cleaned.includes("5-15")) return 15;
-  if (cleaned.includes("15-30")) return 30;
-  if (cleaned.includes("30-60")) return 60;
-  if (cleaned.includes("60+")) return 90;
-  return parseChoiceToNumber(cleaned);
+function formatThreshold(row: InvestigationRow) {
+  const bits = [
+    row.threshold_amount_degree,
+    row.threshold_time_local ? row.threshold_time_local.slice(0, 5) : null,
+  ].filter(Boolean);
+
+  return bits.length ? bits.join(" · ") : "Threshold recorded";
 }
 
-function classifyProblemGroup(row: SleepNightAdminRow): ProblemGroup {
-  const text = allText(row);
-  const latency = parseChoiceToNumber(row.sleep_latency_choice);
-  const wakeups = parseChoiceToNumber(row.wake_ups_choice) ?? 0;
-  const wakeRecovery = parseWakeRecovery(row.wake_recovery_choice);
-
-  const thermal = lowerIncludes(text, [
-    "hot",
-    "cold",
-    "humid",
-    "dry",
-    "stuffy",
-    "poor airflow",
-    "mattress",
-    "blanket",
-    "bedding",
-    "bed felt",
-    "partner body heat",
-    "sleepwear",
-    "pillow",
-    "room too",
-    "temperature",
-  ]);
-
-  const body = lowerIncludes(text, [
-    "pain",
-    "sore",
-    "soreness",
-    "doms",
-    "discomfort",
-    "pressure",
-    "tense",
-    "restless",
-    "inflammation",
-    "inflamed",
-    "body",
-    "heavy fatigue",
-  ]);
-
-  const mind = lowerIncludes(text, [
-    "racing",
-    "thought",
-    "mental",
-    "wired",
-    "alert",
-    "overstimulated",
-    "anxious",
-    "worry",
-    "worried",
-    "stress",
-    "stressed",
-    "upset",
-    "emotional",
-    "low",
-    "flat",
-    "euphoric",
-  ]);
-
-  const hygiene = lowerIncludes(text, ["screen", "phone", "caffeine", "alcohol", "food", "late meal", "nicotine", "late exercise"]);
-  const timing = lowerIncludes(text, ["circadian", "schedule", "shift", "travel", "irregular", "jet lag", "early starts", "late finishes"]);
-
-  if (thermal) return "Thermal / environment";
-  if (body) return "Body recovery / DOMS";
-  if (mind) return "Mind / emotional activation";
-  if ((wakeups >= 3 || (wakeRecovery !== null && wakeRecovery >= 30)) && !thermal && !body && !mind) return "Wake maintenance";
-  if (latency !== null && latency >= 30) return "Sleep onset";
-  if (hygiene) return "Sleep hygiene / habits";
-  if (timing) return "Timing / circadian";
-  return "Unclear / needs review";
-}
-
-function classifyThermal(row: SleepNightAdminRow) {
-  const text = [textFromArray(row.environment_tags), textFromArray(row.bed_tags), row.primary_trigger ?? ""].join(" ").toLowerCase();
-  const heat = lowerIncludes(text, ["hot", "too many blankets", "partner body heat", "sleepwear too warm", "pillow too warm", "bed felt hot"]);
-  const cold = lowerIncludes(text, ["cold", "too few blankets", "sleepwear too light", "pillow too cold", "bed felt cold"]);
-  if (heat && cold) return "Hot/cold oscillation";
-  if (heat) return "Heat load";
-  if (cold) return "Cold exposure";
-  if (lowerIncludes(text, ["mattress", "blanket", "bedding", "pillow"])) return "Mixed / unclear";
-  return "No thermal signal";
-}
-
-function classifyAdaptation(row: SleepNightAdminRow) {
-  const text = textFromArray(row.bed_tags);
-  if (lowerIncludes(text, ["new mattress", "new pillow", "still adjusting"])) return "New setup adaptation";
-  if (lowerIncludes(text, ["removed covers", "added covers", "changed pillow", "got out of bed", "changed blankets"])) return "Active self-correction";
-  if (lowerIncludes(text, ["overcorrected"])) return "Overcorrection";
-  return "None";
-}
-
-function feedbackGroup(row: EngineFeedbackRow): ProblemGroup {
-  const text = `${row.engine_category ?? ""} ${row.engine_protocol ?? ""} ${row.missing_reason ?? ""}`.toLowerCase();
-  if (lowerIncludes(text, ["thermal", "environment", "room", "bed", "cold", "hot", "blanket", "pillow", "bedding"])) return "Thermal / environment";
-  if (lowerIncludes(text, ["body", "doms", "pain", "sore", "pressure", "discomfort"])) return "Body recovery / DOMS";
-  if (lowerIncludes(text, ["mind", "emotional", "stress", "anxious", "worry", "wired", "racing"])) return "Mind / emotional activation";
-  if (lowerIncludes(text, ["wake", "fragment", "maintenance"])) return "Wake maintenance";
-  if (lowerIncludes(text, ["latency", "onset", "fall asleep"])) return "Sleep onset";
-  if (lowerIncludes(text, ["hygiene", "caffeine", "screen", "alcohol", "food"])) return "Sleep hygiene / habits";
-  if (lowerIncludes(text, ["circadian", "shift", "timing", "travel", "schedule"])) return "Timing / circadian";
-  return "Unclear / needs review";
-}
-
-function countBy(values: string[]) {
-  const map = new Map<string, number>();
-  values.forEach((v) => map.set(v, (map.get(v) ?? 0) + 1));
-  return [...map.entries()].sort((a, b) => b[1] - a[1]);
-}
-
-function pct(n: number, d: number) {
-  if (!d) return "0%";
-  return `${Math.round((n / d) * 100)}%`;
-}
-
-function StatCard({ label, value, note }: { label: string; value: React.ReactNode; note?: string }) {
+function OverviewCard({
+  title,
+  value,
+  note,
+}: {
+  title: string;
+  value: React.ReactNode;
+  note: string;
+}) {
   return (
-    <div className="sf-card" style={{ padding: 16 }}>
-      <div style={{ fontSize: 14, fontWeight: 800, color: "#555", textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6, color: "#111" }}>{value}</div>
-      {note ? <div style={{ marginTop: 6, color: "#555", fontSize: 14 }}>{note}</div> : null}
-    </div>
-  );
-}
-
-function TopList({ title, rows }: { title: string; rows: Array<[string, number]> }) {
-  return (
-    <div className="sf-card" style={{ padding: 16 }}>
-      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>{title}</div>
-      {rows.length ? (
-        <div style={{ display: "grid", gap: 8 }}>
-          {rows.slice(0, 6).map(([label, count]) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <span>{label}</span>
-              <strong>{count}</strong>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ color: "#666" }}>No data yet.</div>
-      )}
-    </div>
-  );
-}
-
-function ProblemGroupCard({ item }: { item: ProblemGroupSummary }) {
-  const topProtocols = countBy(item.records.map((r) => r.protocol_used_name || "No protocol logged")).slice(0, 3);
-  const followCounts = countBy(item.records.map((r) => r.protocol_followed || "No response")).slice(0, 3);
-
-  return (
-    <div className="sf-card" style={{ padding: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "start" }}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 950, color: "var(--sf-brand)" }}>{item.group}</div>
-          <div style={{ marginTop: 4, color: "#555" }}>{item.users} users · {item.count} sleep records</div>
-        </div>
-        <div style={{ fontSize: 28, fontWeight: 950 }}>{item.count}</div>
-      </div>
-
-      <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 14, fontWeight: 900, color: "#555", textTransform: "uppercase" }}>Recent records</div>
-        {item.records.slice(0, 4).map((r) => (
-          <div key={r.id} style={{ borderTop: "1px solid #eee", paddingTop: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#666" }}>
-              {dateKey(r)} · User {r.user_id.slice(0, 8)}
-            </div>
-            <div style={{ marginTop: 3, color: "#111" }}>
-              Q {r.sleep_quality ?? "—"} · latency {r.sleep_latency_choice ?? "—"} · wakes {r.wake_ups_choice ?? "—"} · recovery {r.wake_recovery_choice ?? "—"}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#555", textTransform: "uppercase" }}>Protocols</div>
-          {topProtocols.length ? topProtocols.map(([p, n]) => <div key={p} style={{ marginTop: 4 }}>{p}: <strong>{n}</strong></div>) : <div style={{ color: "#666" }}>No data.</div>}
-        </div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#555", textTransform: "uppercase" }}>Followed?</div>
-          {followCounts.length ? followCounts.map(([p, n]) => <div key={p} style={{ marginTop: 4 }}>{p}: <strong>{n}</strong></div>) : <div style={{ color: "#666" }}>No data.</div>}
-        </div>
-      </div>
-
-      {item.missingFeedback.length ? (
-        <div style={{ marginTop: 14, borderTop: "1px solid #eee", paddingTop: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#b45309", textTransform: "uppercase" }}>Mismatch notes</div>
-          {item.missingFeedback.slice(0, 3).map((f) => (
-            <div key={f.id} style={{ marginTop: 6, color: "#111" }}>
-              <strong>{f.local_date ?? String(f.created_at).slice(0, 10)}:</strong> {f.missing_reason}
-            </div>
-          ))}
-        </div>
-      ) : null}
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="text-sm font-bold uppercase tracking-wide text-gray-600">{title}</div>
+      <div className="mt-2 text-3xl font-extrabold text-gray-900">{value}</div>
+      <div className="mt-2 text-sm leading-relaxed text-gray-600">{note}</div>
     </div>
   );
 }
 
 export default function AdminPage() {
   const supabase = useMemo(() => createClient(), []);
+
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<SleepNightAdminRow[]>([]);
-  const [feedbackRows, setFeedbackRows] = useState<EngineFeedbackRow[]>([]);
-  const [dateWindow, setDateWindow] = useState<DateWindow | null>(null);
 
-  useEffect(() => {
-    setDateWindow(buildDateWindow());
-  }, []);
+  const [nights, setNights] = useState<SleepNightAdminRow[]>([]);
+  const [investigations, setInvestigations] = useState<InvestigationRow[]>([]);
+  const [candidateNotes, setCandidateNotes] = useState<CandidateNoteRow[]>([]);
+  const [feedback, setFeedback] = useState<EngineFeedbackRow[]>([]);
+  const [optionalWarning, setOptionalWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadAdminStats() {
+    async function loadAdmin() {
       setLoading(true);
       setError(null);
+      setOptionalWarning(null);
 
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       const email = authData?.user?.email ?? "";
 
-      if (authErr || email.toLowerCase() !== ADMIN_EMAIL) {
+      if (authErr || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
         if (!cancelled) {
           setAccessDenied(true);
-          setRows([]);
           setLoading(false);
         }
         return;
       }
 
-      const { data, error: rowsErr } = await supabase
-        .from("sleep_nights")
-        .select([
-          "id",
-          "user_id",
-          "created_at",
-          "local_date",
-          "sleep_quality",
-          "sleep_latency_choice",
-          "wake_ups_choice",
-          "wake_recovery_choice",
-          "primary_trigger",
-          "mind_tags",
-          "environment_tags",
-          "bed_tags",
-          "body_tags",
-          "protocol_used_name",
-          "protocol_followed",
-        ].join(","))
-        .order("local_date", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false })
-        .limit(5000);
+      const [nightRes, investigationRes, candidateRes, feedbackRes] = await Promise.all([
+        supabase
+          .from("sleep_nights")
+          .select(
+            "id,user_id,created_at,local_date,sleep_quality,sleep_latency_choice,wake_ups_choice,wake_recovery_choice",
+          )
+          .order("local_date", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .limit(500),
 
-      const { data: feedbackData, error: feedbackErr } = await supabase
-        .from("sleep_engine_feedback")
-        .select([
-          "id",
-          "user_id",
-          "sleep_night_id",
-          "local_date",
-          "engine_category",
-          "engine_protocol",
-          "user_agreed",
-          "missing_reason",
-          "created_at",
-        ].join(","))
-        .order("created_at", { ascending: false })
-        .limit(5000);
+        supabase
+          .from("sleep_investigations")
+          .select(
+            "id,user_id,factor_name,factor_classification,investigation_area,status,threshold_amount_degree,threshold_time_local,completed_at,created_at",
+          )
+          .order("created_at", { ascending: false })
+          .limit(500),
 
-      if (!cancelled) {
-        if (rowsErr) {
-          setError(rowsErr.message);
-          setRows([]);
-        } else if (feedbackErr) {
-          setError(feedbackErr.message);
-          setRows((data ?? []) as unknown as SleepNightAdminRow[]);
-          setFeedbackRows([]);
-        } else {
-          setRows((data ?? []) as unknown as SleepNightAdminRow[]);
-          setFeedbackRows((feedbackData ?? []) as unknown as EngineFeedbackRow[]);
-        }
+        supabase
+          .from("sleep_investigation_candidate_notes")
+          .select("id,user_id,note_date,factor_name,effect_observed,note_text,created_at")
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(100),
+
+        supabase
+          .from("sleep_engine_feedback")
+          .select(
+            "id,user_id,local_date,engine_category,engine_protocol,user_agreed,missing_reason,created_at",
+          )
+          .order("created_at", { ascending: false })
+          .limit(200),
+      ]);
+
+      if (cancelled) return;
+
+      if (nightRes.error) {
+        setError(nightRes.error.message);
         setLoading(false);
+        return;
       }
+
+      if (investigationRes.error) {
+        setError(investigationRes.error.message);
+        setLoading(false);
+        return;
+      }
+
+      setNights((nightRes.data ?? []) as unknown as SleepNightAdminRow[]);
+      setInvestigations((investigationRes.data ?? []) as unknown as InvestigationRow[]);
+
+      if (candidateRes.error) {
+        setCandidateNotes([]);
+        setOptionalWarning("Possible-factor notes could not be loaded.");
+      } else {
+        setCandidateNotes((candidateRes.data ?? []) as unknown as CandidateNoteRow[]);
+      }
+
+      if (feedbackRes.error) {
+        setFeedback([]);
+        setOptionalWarning((current) =>
+          current
+            ? `${current} Protocol feedback could not be loaded.`
+            : "Protocol feedback could not be loaded.",
+        );
+      } else {
+        setFeedback((feedbackRes.data ?? []) as unknown as EngineFeedbackRow[]);
+      }
+
+      setLoading(false);
     }
 
-    loadAdminStats();
+    loadAdmin();
+
     return () => {
       cancelled = true;
     };
   }, [supabase]);
 
-  const stats = useMemo(() => {
-    const today = dateWindow?.today ?? "";
-    const weekStart = dateWindow?.weekStart ?? "";
-    const monthStart = dateWindow?.monthStart ?? "";
+  const summary = useMemo(() => {
+    const now = new Date();
+    const weekStartDate = new Date(now);
+    weekStartDate.setDate(weekStartDate.getDate() - 6);
+    const weekStart = ymd(weekStartDate);
+    const today = ymd(now);
 
-    const totalNights = rows.length;
-    const usersTotal = new Set(rows.map((r) => r.user_id)).size;
+    const userIds = new Set<string>();
+    nights.forEach((row) => userIds.add(row.user_id));
+    investigations.forEach((row) => userIds.add(row.user_id));
+    candidateNotes.forEach((row) => userIds.add(row.user_id));
+    feedback.forEach((row) => userIds.add(row.user_id));
 
-    const todayRows = today ? rows.filter((r) => dateKey(r) === today) : [];
-    const weekRows = weekStart && today ? rows.filter((r) => dateKey(r) >= weekStart && dateKey(r) <= today) : [];
-    const monthRows = monthStart && today ? rows.filter((r) => dateKey(r) >= monthStart && dateKey(r) <= today) : [];
+    const activeUsersThisWeek = new Set(
+      nights
+        .filter((row) => {
+          const key = dateKey(row);
+          return key >= weekStart && key <= today;
+        })
+        .map((row) => row.user_id),
+    );
 
-    const weeklyActiveUsers = new Set(weekRows.map((r) => r.user_id)).size;
-    const monthlyActiveUsers = new Set(monthRows.map((r) => r.user_id)).size;
-
-    const protocolAnswered = rows.filter((r) => r.protocol_followed);
-    const protocolUsed = rows.filter((r) => r.protocol_followed === "yes" || r.protocol_followed === "partial");
-
-    const totalFeedback = feedbackRows.length;
-    const agreedFeedback = feedbackRows.filter((f) => f.user_agreed === true).length;
-    const missingFeedback = feedbackRows.filter((f) => f.user_agreed === false).length;
-
-    const latestMissingReasons = feedbackRows
-      .filter((f) => f.user_agreed === false && f.missing_reason && f.missing_reason.trim())
-      .slice(0, 8);
-
-    const problemGroups: ProblemGroup[] = [
-      "Thermal / environment",
-      "Wake maintenance",
-      "Body recovery / DOMS",
-      "Mind / emotional activation",
-      "Sleep onset",
-      "Sleep hygiene / habits",
-      "Timing / circadian",
-      "Unclear / needs review",
-    ];
-
-    const groupedProblems: ProblemGroupSummary[] = problemGroups.map((group) => {
-      const groupRecords = rows.filter((r) => classifyProblemGroup(r) === group);
-      const groupFeedback = feedbackRows.filter((f) => f.user_agreed === false && feedbackGroup(f) === group);
-      return {
-        group,
-        count: groupRecords.length,
-        users: new Set(groupRecords.map((r) => r.user_id)).size,
-        records: groupRecords.slice(0, 8),
-        missingFeedback: groupFeedback.slice(0, 6),
-      };
-    }).filter((item) => item.count > 0 || item.missingFeedback.length > 0);
+    const activeInvestigations = investigations.filter((row) => row.status === "active");
+    const completedInvestigations = investigations.filter((row) => row.status === "completed");
+    const mismatches = feedback.filter((row) => row.user_agreed === false);
+    const matches = feedback.filter((row) => row.user_agreed === true);
 
     return {
-      today,
-      weekStart,
-      monthStart,
-      totalNights,
-      usersTotal,
-      todayNights: todayRows.length,
-      weekNights: weekRows.length,
-      monthNights: monthRows.length,
-      weeklyActiveUsers,
-      monthlyActiveUsers,
-      weeklyUsagePct: pct(weeklyActiveUsers, usersTotal),
-      monthlyUsagePct: pct(monthlyActiveUsers, usersTotal),
-      protocolUsagePct: pct(protocolUsed.length, protocolAnswered.length),
-      todayUsers: new Set(todayRows.map((r) => r.user_id)).size,
-      problemCounts: countBy(rows.map(classifyProblemGroup)),
-      thermalCounts: countBy(rows.map(classifyThermal)),
-      adaptationCounts: countBy(rows.map(classifyAdaptation)),
-      protocolCounts: countBy(rows.map((r) => r.protocol_used_name || "No protocol logged")),
-      protocolFollowedCounts: countBy(rows.map((r) => r.protocol_followed || "No response")),
-      totalFeedback,
-      agreedFeedback,
-      missingFeedback,
-      feedbackAgreementPct: pct(agreedFeedback, totalFeedback),
-      feedbackMissingPct: pct(missingFeedback, totalFeedback),
-      missedCategoryCounts: countBy(feedbackRows.filter((f) => f.user_agreed === false).map((f) => f.engine_category || "Unknown")),
-      missedProtocolCounts: countBy(feedbackRows.filter((f) => f.user_agreed === false).map((f) => f.engine_protocol || "Unknown")),
-      latestMissingReasons,
-      groupedProblems,
+      users: userIds.size,
+      activeUsersThisWeek: activeUsersThisWeek.size,
+      activeInvestigations,
+      completedInvestigations,
+      mismatches,
+      matches,
     };
-  }, [rows, feedbackRows, dateWindow]);
+  }, [nights, investigations, candidateNotes, feedback]);
 
-  if (loading || !dateWindow) return <div style={{ padding: 28 }}>Loading admin stats...</div>;
+  if (loading) {
+    return <div className="mx-auto max-w-6xl p-7">Loading admin...</div>;
+  }
 
   if (accessDenied) {
     return (
-      <div style={{ padding: 28 }}>
-        <h1 style={{ fontSize: 32, fontWeight: 900, color: "var(--sf-brand)" }}>Admin</h1>
-        <p style={{ marginTop: 12 }}>Access denied.</p>
+      <div className="mx-auto max-w-4xl p-7">
+        <h1 className="text-3xl font-extrabold text-blue-900">Admin</h1>
+        <p className="mt-3 text-gray-700">Access denied.</p>
       </div>
     );
   }
 
   return (
-    <div style={{ width: "100%", maxWidth: 1200, margin: "0 auto", padding: "28px 18px" }}>
-      <h1 style={{ fontSize: 34, fontWeight: 900, color: "var(--sf-brand)" }}>Admin Calibration</h1>
-      <p style={{ marginTop: 6, color: "#555" }}>
-        Problem-grouped calibration console for checking whether SleepFix is finding the right sleep issue, protocol, and missing factors.
+    <main className="mx-auto w-full max-w-6xl px-4 py-8">
+      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Admin</h1>
+      <p className="mt-2 max-w-4xl text-gray-700">
+        A practical overview of what people are doing in SleepFix, what they are investigating,
+        and where the interpretation engine may be missing something.
       </p>
 
-      {error ? <div style={{ marginTop: 18, color: "#b00020", fontWeight: 700 }}>{error}</div> : null}
-
-      <section style={{ marginTop: 18 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900 }}>Core usage</h2>
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-          <StatCard label="Users with entries" value={stats.usersTotal} note="Distinct users who recorded sleep" />
-          <StatCard label="Total nights" value={stats.totalNights} note="All accessible saved nights" />
-          <StatCard label="Today" value={stats.todayNights} note={stats.today} />
-          <StatCard label="This week" value={stats.weekNights} note={`${stats.weekStart} → ${stats.today}`} />
-          <StatCard label="This month" value={stats.monthNights} note={`${stats.monthStart} → ${stats.today}`} />
+      {error ? (
+        <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-gray-900">
+          {error}
         </div>
-      </section>
+      ) : null}
 
-      <section style={{ marginTop: 22 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900 }}>Engagement</h2>
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-          <StatCard label="Weekly active users" value={stats.weeklyActiveUsers} note={`${stats.weeklyUsagePct} of users with entries`} />
-          <StatCard label="Monthly active users" value={stats.monthlyActiveUsers} note={`${stats.monthlyUsagePct} of users with entries`} />
-          <StatCard label="Protocol usage" value={stats.protocolUsagePct} note="Yes/partial among protocol responses" />
+      {optionalWarning ? (
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-gray-900">
+          {optionalWarning}
         </div>
-      </section>
+      ) : null}
 
-      <section style={{ marginTop: 22 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900 }}>Problem groups</h2>
-        <p style={{ marginTop: 4, color: "#555" }}>
-          This is the main admin view. It groups nights by the sleep problem SleepFix should be learning from.
+      {/* Simple overview */}
+      <section className="mt-7 rounded-2xl border border-blue-200 bg-blue-50/40 p-6 shadow-sm">
+        <h2 className="text-2xl font-extrabold text-gray-900">At a glance</h2>
+        <p className="mt-1 text-gray-700">
+          Just the numbers that are useful for running the app.
         </p>
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-          <TopList title="Problem group counts" rows={stats.problemCounts} />
-          <TopList title="Thermal system patterns" rows={stats.thermalCounts} />
-          <TopList title="Active management patterns" rows={stats.adaptationCounts} />
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <OverviewCard
+            title="Users"
+            value={summary.users}
+            note="People who have generated activity in the app."
+          />
+          <OverviewCard
+            title="Active this week"
+            value={summary.activeUsersThisWeek}
+            note="Users who recorded at least one sleep night in the last 7 days."
+          />
+          <OverviewCard
+            title="Investigating now"
+            value={summary.activeInvestigations.length}
+            note="Formal investigations currently underway."
+          />
+          <OverviewCard
+            title="Findings recorded"
+            value={summary.completedInvestigations.length}
+            note="Completed investigations with a recorded result."
+          />
         </div>
       </section>
 
-      <section style={{ marginTop: 22 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900 }}>Grouped review</h2>
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 12 }}>
-          {stats.groupedProblems.length ? stats.groupedProblems.map((item) => (
-            <ProblemGroupCard key={item.group} item={item} />
-          )) : <div className="sf-card" style={{ padding: 16, color: "#666" }}>No grouped records yet.</div>}
-        </div>
-      </section>
+      {/* What needs attention */}
+      <section className="mt-7 rounded-2xl border border-amber-200 bg-amber-50/50 p-6 shadow-sm">
+        <h2 className="text-2xl font-extrabold text-gray-900">What needs attention?</h2>
+        <p className="mt-1 text-gray-700">
+          The most useful admin information is where SleepFix may have misunderstood the user.
+        </p>
 
-      <section style={{ marginTop: 22 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900 }}>Protocol calibration</h2>
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-          <TopList title="Protocol recommendations logged" rows={stats.protocolCounts} />
-          <TopList title="Protocol followed responses" rows={stats.protocolFollowedCounts} />
-        </div>
-      </section>
-
-      <section style={{ marginTop: 22 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900 }}>Accuracy feedback</h2>
-
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-          <StatCard label="Total feedback" value={stats.totalFeedback} note="All saved engine confirmations/corrections" />
-          <StatCard label="Agreed" value={stats.agreedFeedback} note={`${stats.feedbackAgreementPct} of feedback`} />
-          <StatCard label="Missing / wrong" value={stats.missingFeedback} note={`${stats.feedbackMissingPct} of feedback`} />
-        </div>
-
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-          <TopList title="Missed categories" rows={stats.missedCategoryCounts} />
-          <TopList title="Missed protocols" rows={stats.missedProtocolCounts} />
-        </div>
-
-        <div className="sf-card" style={{ marginTop: 12, padding: 16 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>Latest missing-factor notes</div>
-
-          {stats.latestMissingReasons.length ? (
-            <div style={{ display: "grid", gap: 12 }}>
-              {stats.latestMissingReasons.map((item) => (
-                <div key={item.id} style={{ borderTop: "1px solid #eee", paddingTop: 10 }}>
-                  <div style={{ fontSize: 13, color: "#666", fontWeight: 800 }}>
-                    {item.local_date ?? String(item.created_at).slice(0, 10)} · {item.engine_category ?? "Unknown"} · {item.engine_protocol ?? "No protocol"}
+        {summary.mismatches.length ? (
+          <div className="mt-5 grid gap-3">
+            {summary.mismatches.slice(0, 8).map((item) => (
+              <div key={item.id} className="rounded-xl border border-amber-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="font-bold text-gray-900">{shortUser(item.user_id)}</div>
+                  <div className="text-sm text-gray-600">
+                    {fmtDate(item.local_date ?? item.created_at)}
                   </div>
-                  <div style={{ marginTop: 4, color: "#111" }}>{item.missing_reason}</div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ color: "#666" }}>No missing-factor notes yet.</div>
-          )}
+
+                <div className="mt-2 text-sm text-gray-600">
+                  SleepFix focus: {item.engine_category ?? "Unknown"}
+                  {item.engine_protocol ? ` · ${item.engine_protocol.replace(/^RRSM\b/, "RSM")}` : ""}
+                </div>
+
+                <div className="mt-3 rounded-lg bg-gray-50 p-3 text-gray-900">
+                  <strong>User said something was missing:</strong>{" "}
+                  {item.missing_reason?.trim() || "No explanation was entered."}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-dashed border-amber-300 bg-white p-5 text-gray-700">
+            No engine-mismatch notes yet.
+          </div>
+        )}
+      </section>
+
+      {/* Current investigations */}
+      <section className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-6 shadow-sm">
+        <h2 className="text-2xl font-extrabold text-gray-900">Current investigations</h2>
+        <p className="mt-1 text-gray-700">
+          What users are actively trying to understand right now.
+        </p>
+
+        {summary.activeInvestigations.length ? (
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {summary.activeInvestigations.slice(0, 12).map((item) => (
+              <div key={item.id} className="rounded-xl border border-emerald-200 bg-white p-4">
+                <div className="font-extrabold text-gray-900">{item.factor_name}</div>
+                <div className="mt-1 text-sm text-gray-600">
+                  {shortUser(item.user_id)} · {prettyArea(item.investigation_area)}
+                </div>
+                <div className="mt-2 text-sm text-gray-600">
+                  Started {fmtDate(item.created_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-dashed border-emerald-300 bg-white p-5 text-gray-700">
+            No active investigations at the moment.
+          </div>
+        )}
+      </section>
+
+      {/* Completed findings */}
+      <section className="mt-7 rounded-2xl border border-violet-200 bg-violet-50/40 p-6 shadow-sm">
+        <h2 className="text-2xl font-extrabold text-gray-900">Recent findings</h2>
+        <p className="mt-1 text-gray-700">
+          Completed investigations and the thresholds users decided were useful.
+        </p>
+
+        {summary.completedInvestigations.length ? (
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {summary.completedInvestigations.slice(0, 12).map((item) => (
+              <div key={item.id} className="rounded-xl border border-violet-200 bg-white p-4">
+                <div className="font-extrabold text-gray-900">{item.factor_name}</div>
+                <div className="mt-1 text-sm text-gray-600">{shortUser(item.user_id)}</div>
+                <div className="mt-3">
+                  <span className="text-sm font-bold text-gray-600">Recorded threshold: </span>
+                  <span className="font-bold text-gray-900">{formatThreshold(item)}</span>
+                </div>
+                <div className="mt-2 text-sm text-gray-600">
+                  Completed {fmtDate(item.completed_at ?? item.created_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-dashed border-violet-300 bg-white p-5 text-gray-700">
+            No completed investigation findings yet.
+          </div>
+        )}
+      </section>
+
+      {/* Possible factors */}
+      <section className="mt-7 rounded-2xl border border-sky-200 bg-sky-50/40 p-6 shadow-sm">
+        <h2 className="text-2xl font-extrabold text-gray-900">Possible factors users are noticing</h2>
+        <p className="mt-1 text-gray-700">
+          Useful for seeing what people are considering before they decide whether a formal investigation is needed.
+        </p>
+
+        {candidateNotes.length ? (
+          <div className="mt-5 grid gap-3">
+            {candidateNotes.slice(0, 10).map((item) => (
+              <div key={item.id} className="rounded-xl border border-sky-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-extrabold text-gray-900">{item.factor_name}</div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      {shortUser(item.user_id)} · {fmtDate(item.note_date)}
+                    </div>
+                  </div>
+                  <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm font-semibold text-gray-900">
+                    {prettyEffect(item.effect_observed)}
+                  </span>
+                </div>
+
+                {item.note_text ? (
+                  <div className="mt-3 rounded-lg bg-gray-50 p-3 text-sm leading-relaxed text-gray-800">
+                    {item.note_text}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-dashed border-sky-300 bg-white p-5 text-gray-700">
+            No possible-factor notes yet.
+          </div>
+        )}
+      </section>
+
+      {/* Protocol feedback */}
+      <section className="mt-7 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-extrabold text-gray-900">Protocol feedback</h2>
+        <p className="mt-1 text-gray-700">
+          A simple check of whether users thought SleepFix was focusing on the right thing.
+        </p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <OverviewCard
+            title="Matched"
+            value={summary.matches.length}
+            note='Users who chose "Yes, this matches".'
+          />
+          <OverviewCard
+            title="Something missing"
+            value={summary.mismatches.length}
+            note='Users who chose "No, something is missing".'
+          />
         </div>
       </section>
-    </div>
+
+      {/* Recent sleep activity - collapsed */}
+      <details className="mt-7 rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <summary className="cursor-pointer p-6">
+          <span className="text-xl font-extrabold text-gray-900">Recent sleep activity</span>
+          <span className="ml-3 text-sm text-gray-600">Optional reference</span>
+        </summary>
+
+        <div className="border-t border-gray-200 p-6">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="p-3 text-sm text-gray-600">Date</th>
+                  <th className="p-3 text-sm text-gray-600">User</th>
+                  <th className="p-3 text-sm text-gray-600">Quality</th>
+                  <th className="p-3 text-sm text-gray-600">Latency</th>
+                  <th className="p-3 text-sm text-gray-600">Wake-ups</th>
+                  <th className="p-3 text-sm text-gray-600">Awake after waking</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nights.slice(0, 25).map((row) => (
+                  <tr key={row.id} className="border-t border-gray-100">
+                    <td className="p-3">{fmtDate(dateKey(row))}</td>
+                    <td className="p-3">{shortUser(row.user_id)}</td>
+                    <td className="p-3">{row.sleep_quality ?? "—"}</td>
+                    <td className="p-3">
+                      {row.sleep_latency_choice ? `${row.sleep_latency_choice} min` : "—"}
+                    </td>
+                    <td className="p-3">{row.wake_ups_choice ?? "—"}</td>
+                    <td className="p-3">
+                      {row.wake_recovery_choice ? `${row.wake_recovery_choice} min` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <div className="mt-7 text-sm text-gray-600">
+        Admin access is restricted to <strong>{ADMIN_EMAIL}</strong>.
+      </div>
+    </main>
   );
 }
