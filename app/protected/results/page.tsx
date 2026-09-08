@@ -267,7 +267,7 @@ export default function ResultsPage() {
         return;
       }
 
-      const mappedNights: NightRow[] = (nightRes.data ?? []).map((row: any) => {
+      const mappedNights: NightRow[] = ((nightRes.data ?? []) as unknown as any[]).map((row: any) => {
         const quality = parseChoiceToNumber(row.sleep_quality);
         const latency = parseChoiceToNumber(row.sleep_latency_choice);
         const wakeups = parseChoiceToNumber(row.wake_ups_choice);
@@ -288,8 +288,8 @@ export default function ResultsPage() {
       });
 
       setNights(mappedNights);
-      setInvestigations((investigationRes.data ?? []) as InvestigationRow[]);
-      setProfile(profileRes.error ? null : ((profileRes.data ?? null) as Record<string, any> | null));
+      setInvestigations((investigationRes.data ?? []) as unknown as InvestigationRow[]);
+      setProfile(profileRes.error ? null : ((profileRes.data ?? null) as unknown as Record<string, any> | null));
       setLoading(false);
     }
 
