@@ -3,12 +3,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import RRSMInsightCard from "@/components/RRSMInsightCard";
-import { runRRSMEngineV2 } from "@/lib/rrsm/engine-v2";
 
 type NightRow = {
   night_id: string;
-  user_id: string;
   created_at: string;
   local_date: string | null;
   duration_min: number | null;
@@ -16,22 +13,25 @@ type NightRow = {
   wakeups_count: number | null;
   wake_recovery_min: number | null;
   estimated_sleep_min: number | null;
-  sleep_efficiency_pct: number | null;
   quality_num: number | null;
-  primary_driver: string | null;
-  secondary_driver: string | null;
-  notes?: string | null;
 };
 
-type RRSMInsight = {
-  title: string;
-  why: string[];
-  actions: string[];
-  confidence: "low" | "medium" | "high";
-  risk?: "low" | "moderate" | "high";
-  primaryIssue?: "recovery" | "onset" | "fragmentation" | "mixed";
-  topDriver?: string;
-  scores?: { recovery: number; onset: number; fragmentation: number; stability: number };
+type InvestigationRow = {
+  id: string;
+  factor_name: string;
+  factor_classification: "main" | "secondary" | string | null;
+  investigation_area: string | null;
+  status: "active" | "completed" | string;
+  threshold_amount_degree: string | null;
+  threshold_time_local: string | null;
+  threshold_sleep_onset_minutes: number | null;
+  threshold_sleep_quality: number | null;
+  threshold_timezone: string | null;
+  threshold_utc_offset_minutes: number | null;
+  threshold_is_dst: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  completed_at?: string | null;
 };
 
 function parseChoiceToNumber(choice: string | number | null | undefined): number | null {
@@ -67,15 +67,13 @@ function deriveDurationMin(row: any): number | null {
   return null;
 }
 
-function calculateTimeStats(duration: number | null, latency: number | null, wakeRecovery: number | null) {
-  const awake = (latency ?? 0) + (wakeRecovery ?? 0);
-  const estimatedSleep = typeof duration === "number" ? Math.max(0, duration - awake) : null;
-  const efficiency =
-    typeof duration === "number" && duration > 0 && typeof estimatedSleep === "number"
-      ? Math.round((estimatedSleep / duration) * 100)
-      : null;
-
-  return { estimatedSleep, efficiency };
+function calculateEstimatedSleep(
+  duration: number | null,
+  latency: number | null,
+  wakeRecovery: number | null,
+) {
+  if (typeof duration !== "number") return null;
+  return Math.max(0, duration - (latency ?? 0) - (wakeRecovery ?? 0));
 }
 
 function formatHours(min: number | null | undefined) {
@@ -83,129 +81,90 @@ function formatHours(min: number | null | undefined) {
   return `${Math.round((min / 60) * 10) / 10}h`;
 }
 
-function round1(n: number) {
-  return Math.round(n * 10) / 10;
-}
-
-function safeAvg(nums: Array<number | null | undefined>) {
-  const xs = nums.filter((n): n is number => typeof n === "number" && Number.isFinite(n));
-  if (!xs.length) return null;
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
-}
-
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      weekday: "short",
-      year: "numeric",
-      month: "short",
+  const raw = String(iso).slice(0, 10);
+  const [year, month, day] = raw.split("-").map(Number);
+
+  if (year && month && day) {
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, {
       day: "numeric",
+      month: "short",
+      year: "numeric",
     });
-  } catch {
-    return iso;
+  }
+
+  return raw;
+}
+
+function formatTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const [hRaw, mRaw] = value.split(":");
+  const h = Number(hRaw);
+  const m = Number(mRaw);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return value;
+
+  const suffix = h >= 12 ? "pm" : "am";
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
+function prettyArea(value: string | null | undefined) {
+  switch (value) {
+    case "bedroom_bed":
+      return "Bedroom / bed environment";
+    case "house":
+      return "House";
+    case "food_drink":
+      return "Food / drink";
+    case "physical_activity":
+      return "Physical activity";
+    case "environment":
+      return "Environment";
+    case "other":
+      return "Other";
+    default:
+      return value ? value.replaceAll("_", " ") : "—";
   }
 }
 
-function dateKey(r: NightRow) {
-  if (r.local_date && String(r.local_date).trim()) return String(r.local_date).slice(0, 10);
-  return String(r.created_at ?? "").slice(0, 10);
+function prettyClassification(value: string | null | undefined) {
+  if (value === "main") return "Main contributing factor";
+  if (value === "secondary") return "Secondary contributing factor";
+  return value || "Contributing factor";
 }
 
-function addDaysYMD(ymd: string, days: number) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
-  date.setDate(date.getDate() + days);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+function getStartingHypothesis(profile: Record<string, any> | null) {
+  if (!profile) return "";
 
-function dedupeByNightDate(rows: NightRow[], maxUnique: number) {
-  const out: NightRow[] = [];
-  const seen = new Set<string>();
-  const sorted = [...rows].sort((a, b) => dateKey(b).localeCompare(dateKey(a)));
+  // The Profile field was added after the original rrsm_profiles schema.
+  // select("*") lets this Results page tolerate the exact deployed column name.
+  const candidates = [
+    "suspected_factors",
+    "sleep_suspicions",
+    "user_suspicions",
+    "starting_hypothesis",
+    "own_view",
+    "user_view",
+    "what_affects_sleep",
+    "suspected_sleep_factors",
+  ];
 
-  for (const row of sorted) {
-    const key = dateKey(row);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(row);
-    if (out.length >= maxUnique) break;
+  for (const key of candidates) {
+    const value = profile[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
 
-  return out;
+  return "";
 }
 
-function filterToLatest7CalendarDays(rows: NightRow[]) {
-  const unique = dedupeByNightDate(rows, 30);
-  const latestDate = unique.map(dateKey).filter(Boolean).sort().at(-1);
-  if (!latestDate) return [];
+function thresholdSummary(row: InvestigationRow) {
+  const parts = [
+    row.threshold_amount_degree,
+    row.threshold_time_local ? formatTime(row.threshold_time_local) : null,
+  ].filter(Boolean);
 
-  const earliestAllowed = addDaysYMD(latestDate, -6);
-  return unique.filter((r) => dateKey(r) >= earliestAllowed && dateKey(r) <= latestDate).slice(0, 7);
-}
-
-function includesAny(text: string, terms: string[]) {
-  const lower = text.toLowerCase();
-  return terms.some((term) => lower.includes(term));
-}
-
-function detectRelevantFocus(rows: NightRow[], insight: RRSMInsight | null) {
-  const latest = rows[0];
-  const avgLatency = safeAvg(rows.map((r) => r.latency_min));
-  const avgWakeups = safeAvg(rows.map((r) => r.wakeups_count));
-  const avgWakeRecovery = safeAvg(rows.map((r) => r.wake_recovery_min));
-  const avgQuality = safeAvg(rows.map((r) => r.quality_num));
-  const combined = rows.map((r) => `${r.primary_driver ?? ""} ${r.secondary_driver ?? ""} ${r.notes ?? ""}`).join(" ");
-
-  const focus: string[] = [];
-
-  if (includesAny(combined, ["hot", "cold", "temperature", "thermal", "room", "bed", "blanket", "pillow", "humid"])) {
-    focus.push("thermal");
-  }
-
-  if (includesAny(combined, ["doms", "sore", "pain", "body", "pressure", "muscle", "tense", "inflammation"])) {
-    focus.push("body");
-  }
-
-  if ((avgWakeups ?? 0) >= 2 || (avgWakeRecovery ?? 0) >= 15 || insight?.primaryIssue === "fragmentation") {
-    focus.push("wake-maintenance");
-  }
-
-  if ((avgLatency ?? 0) >= 30 || insight?.primaryIssue === "onset") {
-    focus.push("sleep-onset");
-  }
-
-  if ((avgQuality ?? 10) <= 6 || insight?.primaryIssue === "recovery") {
-    focus.push("recovery");
-  }
-
-  if (!focus.length && latest) focus.push("baseline");
-  return Array.from(new Set(focus));
-}
-
-function MetricCard({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="sf-card" style={{ padding: 16 }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: "#4b5563" }}>{label}</div>
-      <div style={{ marginTop: 6, fontSize: 30, lineHeight: 1.1, fontWeight: 950, color: "#000080" }}>{value}</div>
-      <div style={{ marginTop: 6, color: "#4b5563", fontSize: 14 }}>{note}</div>
-    </div>
-  );
-}
-
-function TrendLine({ rows, metric }: { rows: NightRow[]; metric: keyof NightRow }) {
-  const values = [...rows]
-    .reverse()
-    .map((row) => row[metric])
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-
-  if (values.length < 2) return <span style={{ color: "#6b7280" }}>Need more nights</span>;
-
-  const first = values[0];
-  const last = values[values.length - 1];
-  const delta = round1(last - first);
-  if (delta === 0) return <span>No major change</span>;
-  return <span>{delta > 0 ? `Up ${delta}` : `Down ${Math.abs(delta)}`}</span>;
+  return parts.length ? parts.join(" · ") : "Threshold saved";
 }
 
 export default function ResultsPage() {
@@ -214,9 +173,11 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [rows, setRows] = useState<NightRow[]>([]);
-  const [insight, setInsight] = useState<RRSMInsight | null>(null);
-  const [insightErr, setInsightErr] = useState<string | null>(null);
+
+  const [nights, setNights] = useState<NightRow[]>([]);
+  const [investigations, setInvestigations] = useState<InvestigationRow[]>([]);
+  const [profile, setProfile] = useState<Record<string, any> | null>(null);
+  const [supportingOpen, setSupportingOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -224,244 +185,507 @@ export default function ResultsPage() {
     async function loadResults() {
       setLoading(true);
       setErr(null);
-      setInsightErr(null);
 
-      const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id ?? null;
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      const uid = authData?.user?.id ?? null;
+
       if (cancelled) return;
+
+      if (authErr || !uid) {
+        setUserId(null);
+        setErr(authErr?.message ?? null);
+        setLoading(false);
+        return;
+      }
 
       setUserId(uid);
-      if (!uid) {
-        setRows([]);
-        setLoading(false);
-        return;
-      }
 
-      const { data, error } = await supabase
-        .from("sleep_nights")
-        .select([
-          "id",
-          "user_id",
-          "created_at",
-          "local_date",
-          "sleep_quality",
-          "sleep_latency_choice",
-          "wake_ups_choice",
-          "wake_recovery_choice",
-          "duration_min",
-          "sleep_start",
-          "sleep_end",
-          "primary_driver",
-          "secondary_driver",
-          "notes",
-        ].join(","))
-        .eq("user_id", uid)
-        .order("local_date", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false })
-        .limit(30);
+      const [nightRes, investigationRes, profileRes] = await Promise.all([
+        supabase
+          .from("sleep_nights")
+          .select(
+            [
+              "id",
+              "created_at",
+              "local_date",
+              "sleep_quality",
+              "sleep_latency_choice",
+              "wake_ups_choice",
+              "wake_recovery_choice",
+              "duration_min",
+              "sleep_start",
+              "sleep_end",
+            ].join(","),
+          )
+          .eq("user_id", uid)
+          .order("local_date", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .limit(15),
+
+        supabase
+          .from("sleep_investigations")
+          .select(
+            [
+              "id",
+              "factor_name",
+              "factor_classification",
+              "investigation_area",
+              "status",
+              "threshold_amount_degree",
+              "threshold_time_local",
+              "threshold_sleep_onset_minutes",
+              "threshold_sleep_quality",
+              "threshold_timezone",
+              "threshold_utc_offset_minutes",
+              "threshold_is_dst",
+              "created_at",
+              "updated_at",
+              "completed_at",
+            ].join(","),
+          )
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false }),
+
+        supabase
+          .from("rrsm_profiles")
+          .select("*")
+          .eq("user_id", uid)
+          .maybeSingle(),
+      ]);
 
       if (cancelled) return;
 
-      if (error) {
-        setErr(error.message);
-        setRows([]);
+      if (nightRes.error) {
+        setErr(nightRes.error.message);
         setLoading(false);
         return;
       }
 
-      const mapped: NightRow[] = (data ?? []).map((r: any) => {
-        const quality = parseChoiceToNumber(r.sleep_quality);
-        const latency = parseChoiceToNumber(r.sleep_latency_choice);
-        const wakeups = parseChoiceToNumber(r.wake_ups_choice);
-        const wakeRecovery = parseWakeRecovery(r.wake_recovery_choice);
-        const duration = deriveDurationMin(r);
-        const timeStats = calculateTimeStats(duration, latency, wakeRecovery);
+      if (investigationRes.error) {
+        setErr(investigationRes.error.message);
+        setLoading(false);
+        return;
+      }
+
+      const mappedNights: NightRow[] = (nightRes.data ?? []).map((row: any) => {
+        const quality = parseChoiceToNumber(row.sleep_quality);
+        const latency = parseChoiceToNumber(row.sleep_latency_choice);
+        const wakeups = parseChoiceToNumber(row.wake_ups_choice);
+        const wakeRecovery = parseWakeRecovery(row.wake_recovery_choice);
+        const duration = deriveDurationMin(row);
 
         return {
-          night_id: r.id,
-          user_id: r.user_id,
-          created_at: r.created_at,
-          local_date: r.local_date ?? null,
+          night_id: row.id,
+          created_at: row.created_at,
+          local_date: row.local_date ?? null,
           duration_min: duration,
           latency_min: latency,
           wakeups_count: wakeups,
           wake_recovery_min: wakeRecovery,
-          estimated_sleep_min: timeStats.estimatedSleep,
-          sleep_efficiency_pct: timeStats.efficiency,
+          estimated_sleep_min: calculateEstimatedSleep(duration, latency, wakeRecovery),
           quality_num: quality,
-          primary_driver: r.primary_driver ?? null,
-          secondary_driver: r.secondary_driver ?? null,
-          notes: r.notes ?? null,
         };
       });
 
-      const latest7 = filterToLatest7CalendarDays(mapped);
-      setRows(latest7);
-
-      try {
-        const rrsm = runRRSMEngineV2(
-          latest7.map((r) => ({
-            dateKey: r.local_date ?? String(r.created_at).slice(0, 10),
-            quality: r.quality_num,
-            latencyMin: r.latency_min,
-            wakeUps: r.wakeups_count,
-            primaryDriver: r.primary_driver,
-            secondaryDriver: r.secondary_driver,
-          })),
-        );
-        setInsight(rrsm);
-      } catch (e: any) {
-        setInsight(null);
-        setInsightErr(e?.message ?? "Failed to build SleepFix result.");
-      }
-
+      setNights(mappedNights);
+      setInvestigations((investigationRes.data ?? []) as InvestigationRow[]);
+      setProfile(profileRes.error ? null : ((profileRes.data ?? null) as Record<string, any> | null));
       setLoading(false);
     }
 
     loadResults();
+
     return () => {
       cancelled = true;
     };
   }, [supabase]);
 
-  const latestNight = rows[0] ?? null;
-  const avgQuality = useMemo(() => safeAvg(rows.map((r) => r.quality_num)), [rows]);
-  const avgLatency = useMemo(() => safeAvg(rows.map((r) => r.latency_min)), [rows]);
-  const avgWakeups = useMemo(() => safeAvg(rows.map((r) => r.wakeups_count)), [rows]);
-  const avgWakeRecovery = useMemo(() => safeAvg(rows.map((r) => r.wake_recovery_min)), [rows]);
-  const avgSleepEfficiency = useMemo(() => safeAvg(rows.map((r) => r.sleep_efficiency_pct)), [rows]);
-  const focus = useMemo(() => detectRelevantFocus(rows, insight), [rows, insight]);
+  const completed = useMemo(
+    () => investigations.filter((item) => item.status === "completed"),
+    [investigations],
+  );
+
+  const active = useMemo(
+    () => investigations.find((item) => item.status === "active") ?? null,
+    [investigations],
+  );
+
+  const startingHypothesis = useMemo(() => getStartingHypothesis(profile), [profile]);
+
+  const latestNight = nights[0] ?? null;
 
   return (
-    <div style={{ width: "100%", maxWidth: 1180, margin: "0 auto", padding: "28px 18px" }}>
-      <div>
-        <div style={{ fontSize: 34, fontWeight: 950, color: "var(--sf-brand)" }}>Results</div>
-        <div style={{ marginTop: 6, color: "#444" }}>
-          Last night first, then only the trends that look relevant to your sleep pattern.
-        </div>
-      </div>
+    <main className="mx-auto w-full max-w-6xl px-4 py-8">
+      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Results</h1>
+      <p className="mt-2 max-w-4xl text-base leading-relaxed text-gray-700">
+        This page brings together what your Investigation has actually shown, what you originally suspected,
+        and what is most useful to focus on next. Sleep data remains available as supporting information rather
+        than being the result itself.
+      </p>
 
       {loading ? (
-        <div style={{ marginTop: 18 }}>Loading results…</div>
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 text-gray-700">
+          Loading your results...
+        </div>
       ) : err ? (
-        <div style={{ marginTop: 18, color: "#b00020" }}>{err}</div>
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-gray-900">
+          {err}
+        </div>
       ) : !userId ? (
-        <div style={{ marginTop: 18 }}>Please sign in.</div>
-      ) : !latestNight ? (
-        <section className="sf-card" style={{ marginTop: 22, padding: 22 }}>
-          <h2 style={{ margin: 0, fontSize: 24, color: "#000080" }}>No results yet</h2>
-          <p style={{ marginTop: 8, color: "#4b5563" }}>
-            Save your first sleep night before using Results. SleepFix needs at least one real night before it can interpret anything.
-          </p>
-          <Link href="/protected/sleep" style={{ display: "inline-block", marginTop: 12, fontWeight: 900 }}>
-            Log sleep now →
-          </Link>
-        </section>
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6">
+          Please sign in.
+        </div>
       ) : (
-        <>
-          <section
-            style={{
-              marginTop: 22,
-              border: "1px solid #c9d2ff",
-              background: "linear-gradient(135deg, #eef3ff 0%, #ffffff 70%)",
-              borderRadius: 18,
-              padding: 20,
-              boxShadow: "0 10px 30px rgba(20, 30, 90, 0.06)",
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: 0.8, textTransform: "uppercase", color: "#2636b8" }}>
-              Last night result
+        <div className="mt-7 grid gap-7">
+          {/* 1. Main payoff */}
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50/45 p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+              What SleepFix has identified
             </div>
-            <p style={{ margin: 0, color: "#374151" }}>
-              Night date: <strong>{fmtDate(latestNight.local_date ?? latestNight.created_at)}</strong>
+            <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+              Your current sleep findings
+            </h2>
+            <p className="mt-2 max-w-4xl text-gray-700">
+              These are completed investigations where you decided that a useful threshold or disruptive point
+              had been identified.
             </p>
 
-            <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
-              <MetricCard label="Quality" value={latestNight.quality_num === null ? "—" : `${latestNight.quality_num}/10`} note="Your felt recovery." />
-              <MetricCard label="Latency" value={latestNight.latency_min === null ? "—" : `${latestNight.latency_min}m`} note="Sleep onset delay." />
-              <MetricCard label="Wake-ups" value={latestNight.wakeups_count === null ? "—" : String(latestNight.wakeups_count)} note="Maintenance disruption." />
-              <MetricCard label="Wake recovery" value={latestNight.wake_recovery_min === null ? "—" : `${latestNight.wake_recovery_min}m`} note="Time awake after waking." />
+            {completed.length ? (
+              <div className="mt-5 grid gap-4">
+                {completed.map((item) => (
+                  <article
+                    key={item.id}
+                    className="rounded-xl border border-emerald-200 bg-white p-5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-xl font-extrabold text-gray-900">{item.factor_name}</h3>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {prettyClassification(item.factor_classification)} · {prettyArea(item.investigation_area)}
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-bold text-gray-900">
+                        Finding recorded
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <div className="text-sm font-bold text-gray-600">Indicated threshold</div>
+                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                          {thresholdSummary(item)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <div className="text-sm font-bold text-gray-600">Sleep onset at threshold</div>
+                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                          {item.threshold_sleep_onset_minutes == null
+                            ? "—"
+                            : `${item.threshold_sleep_onset_minutes} min`}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <div className="text-sm font-bold text-gray-600">After-sleep quality</div>
+                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                          {item.threshold_sleep_quality == null
+                            ? "—"
+                            : `${item.threshold_sleep_quality} / 10`}
+                        </div>
+                      </div>
+                    </div>
+
+                    {item.threshold_is_dst !== null ? (
+                      <div className="mt-3 text-sm text-gray-600">
+                        Time context: {item.threshold_is_dst ? "Daylight saving time" : "Standard time"}
+                        {item.threshold_timezone ? ` · ${item.threshold_timezone}` : ""}
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-5 rounded-xl border border-dashed border-emerald-300 bg-white p-5 text-gray-700">
+                <strong>No completed factor finding yet.</strong>
+                <div className="mt-1">
+                  Results will build here as you complete investigations and record the thresholds that matter to you.
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 2. Investigation map */}
+          <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+              Your investigation map
+            </div>
+            <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+              What is established, and what is still being tested?
+            </h2>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-blue-200 bg-white p-5">
+                <div className="text-lg font-extrabold text-gray-900">Completed findings</div>
+                {completed.length ? (
+                  <div className="mt-3 grid gap-3">
+                    {completed.map((item) => (
+                      <div key={item.id} className="border-t border-gray-100 pt-3 first:border-0 first:pt-0">
+                        <div className="font-bold text-gray-900">{item.factor_name}</div>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {thresholdSummary(item)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-gray-600">None completed yet.</p>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-blue-200 bg-white p-5">
+                <div className="text-lg font-extrabold text-gray-900">Currently investigating</div>
+                {active ? (
+                  <>
+                    <div className="mt-3 text-xl font-extrabold text-gray-900">{active.factor_name}</div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      {prettyClassification(active.factor_classification)} · {prettyArea(active.investigation_area)}
+                    </div>
+                    <Link
+                      href="/protected/habits"
+                      className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 font-bold text-gray-900 no-underline"
+                    >
+                      Continue investigation →
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-2 text-gray-600">No active investigation at the moment.</p>
+                    <Link
+                      href="/protected/habits"
+                      className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 font-bold text-gray-900 no-underline"
+                    >
+                      Start an investigation →
+                    </Link>
+                  </>
+                )}
+              </div>
             </div>
           </section>
 
-          <section style={{ marginTop: 18 }}>
-            {insightErr ? (
-              <div style={{ color: "#b00020" }}>{insightErr}</div>
-            ) : insight ? (
-              <RRSMInsightCard insight={insight} />
+          {/* 3. Hypothesis vs findings */}
+          <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+              Your view compared with your findings
+            </div>
+            <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+              What you suspected vs what Investigation has shown
+            </h2>
+            <p className="mt-2 max-w-4xl text-gray-700">
+              Your starting view remains separate from the investigation findings. A suspicion is not turned into
+              a cause simply because you entered it in Profile.
+            </p>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-violet-200 bg-white p-5">
+                <div className="text-lg font-extrabold text-gray-900">What you originally suspected</div>
+                {startingHypothesis ? (
+                  <p className="mt-3 whitespace-pre-wrap leading-relaxed text-gray-800">
+                    {startingHypothesis}
+                  </p>
+                ) : (
+                  <div className="mt-3 text-gray-600">
+                    No starting hypothesis is available here yet.
+                    <div className="mt-3">
+                      <Link href="/protected/profile" className="font-bold text-blue-900">
+                        Review your Profile →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-violet-200 bg-white p-5">
+                <div className="text-lg font-extrabold text-gray-900">What Investigation has shown</div>
+                {completed.length ? (
+                  <div className="mt-3 grid gap-3">
+                    {completed.map((item) => (
+                      <div key={item.id}>
+                        <div className="font-bold text-gray-900">{item.factor_name}</div>
+                        <div className="text-sm text-gray-600">
+                          Recorded threshold: {thresholdSummary(item)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-gray-600">
+                    No completed investigation yet, so SleepFix does not convert your suspicions into findings.
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* 4. Next focus */}
+          <section className="rounded-2xl border border-amber-200 bg-amber-50/55 p-6 shadow-sm">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+              What to focus on next
+            </div>
+
+            {active ? (
+              <>
+                <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+                  Continue: {active.factor_name}
+                </h2>
+                <p className="mt-2 max-w-4xl text-gray-700">
+                  This is your active investigation. Keep this factor isolated where practical and continue recording
+                  its amount, degree, timing and the sleep response until you decide the investigation has reached a
+                  useful conclusion.
+                </p>
+                <Link
+                  href="/protected/habits"
+                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-bold text-white no-underline"
+                >
+                  Continue investigation
+                </Link>
+              </>
+            ) : completed.length ? (
+              <>
+                <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+                  Decide whether another factor needs testing
+                </h2>
+                <p className="mt-2 max-w-4xl text-gray-700">
+                  You already have at least one completed finding. If another possible factor keeps appearing, move it
+                  into Investigation and test it separately. Otherwise, use what you have learned rather than collecting
+                  more data for its own sake.
+                </p>
+                <Link
+                  href="/protected/habits"
+                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-bold text-white no-underline"
+                >
+                  Review Investigation
+                </Link>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+                  Begin with one possible contributing factor
+                </h2>
+                <p className="mt-2 max-w-4xl text-gray-700">
+                  There is not yet a completed factor finding. Start with the most relevant main factor, beginning with
+                  the bedroom or bed environment where appropriate, and investigate one factor at a time.
+                </p>
+                <Link
+                  href="/protected/habits"
+                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-bold text-white no-underline"
+                >
+                  Go to Investigation
+                </Link>
+              </>
+            )}
+          </section>
+
+          {/* Supporting data, deliberately demoted */}
+          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={() => setSupportingOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-4 p-5 text-left"
+            >
+              <div>
+                <div className="text-lg font-extrabold text-gray-900">Supporting sleep data</div>
+                <div className="mt-1 text-sm text-gray-600">
+                  Optional reference only — these numbers support the investigation; they are not the result itself.
+                </div>
+              </div>
+              <span className="text-xl text-gray-700">{supportingOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {supportingOpen ? (
+              <div className="border-t border-gray-200 p-5">
+                {latestNight ? (
+                  <>
+                    <div className="text-sm font-bold text-gray-600">
+                      Latest recorded night · {fmtDate(latestNight.local_date ?? latestNight.created_at)}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <div className="text-sm text-gray-600">Sleep quality</div>
+                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                          {latestNight.quality_num == null ? "—" : `${latestNight.quality_num} / 10`}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <div className="text-sm text-gray-600">Time to fall asleep</div>
+                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                          {latestNight.latency_min == null ? "—" : `${latestNight.latency_min} min`}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <div className="text-sm text-gray-600">Wake-ups</div>
+                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                          {latestNight.wakeups_count ?? "—"}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-gray-200 p-4">
+                        <div className="text-sm text-gray-600">Time awake after waking</div>
+                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                          {latestNight.wake_recovery_min == null ? "—" : `${latestNight.wake_recovery_min} min`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <details className="mt-5 rounded-xl border border-gray-200">
+                      <summary className="cursor-pointer p-4 font-bold text-gray-900">
+                        Recent sleep records
+                      </summary>
+                      <div className="overflow-x-auto border-t border-gray-200">
+                        <table className="w-full border-collapse text-left">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="p-3 text-sm text-gray-600">Date</th>
+                              <th className="p-3 text-sm text-gray-600">Quality</th>
+                              <th className="p-3 text-sm text-gray-600">Latency</th>
+                              <th className="p-3 text-sm text-gray-600">Wake-ups</th>
+                              <th className="p-3 text-sm text-gray-600">Wake recovery</th>
+                              <th className="p-3 text-sm text-gray-600">Est. sleep</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {nights.map((row) => (
+                              <tr key={row.night_id} className="border-t border-gray-100">
+                                <td className="p-3">{fmtDate(row.local_date ?? row.created_at)}</td>
+                                <td className="p-3">{row.quality_num ?? "—"}</td>
+                                <td className="p-3">
+                                  {row.latency_min == null ? "—" : `${row.latency_min}m`}
+                                </td>
+                                <td className="p-3">{row.wakeups_count ?? "—"}</td>
+                                <td className="p-3">
+                                  {row.wake_recovery_min == null ? "—" : `${row.wake_recovery_min}m`}
+                                </td>
+                                <td className="p-3">{formatHours(row.estimated_sleep_min)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </>
+                ) : (
+                  <div className="text-gray-600">
+                    No sleep records yet.{" "}
+                    <Link href="/protected/sleep" className="font-bold text-blue-900">
+                      Record your first night →
+                    </Link>
+                  </div>
+                )}
+              </div>
             ) : null}
           </section>
-
-          <section className="sf-card" style={{ marginTop: 18, padding: 18 }}>
-            <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: 0.8, textTransform: "uppercase", color: "#6b7280" }}>
-              Relevant 7-day trends
-            </div>
-            <h2 style={{ marginTop: 6, marginBottom: 6, color: "#000080" }}>Trends matched to your current issue</h2>
-            <p style={{ marginTop: 0, color: "#4b5563" }}>
-              SleepFix does not show every metric here. It shows the ones most likely to explain your current sleep problem.
-            </p>
-
-            <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-              {focus.includes("thermal") ? (
-                <MetricCard label="Thermal / environment" value="Active signal" note="Room, bed, heat/cold, bedding, or airflow may be relevant." />
-              ) : null}
-
-              {focus.includes("body") ? (
-                <MetricCard label="Body recovery" value="Active signal" note="DOMS, soreness, pressure, pain, or body activation may be relevant." />
-              ) : null}
-
-              {focus.includes("wake-maintenance") ? (
-                <MetricCard
-                  label="Wake maintenance"
-                  value={avgWakeups === null ? "—" : `${round1(avgWakeups)} avg`}
-                  note={`7-day wake-up trend: `}
-                />
-              ) : null}
-
-              {focus.includes("sleep-onset") ? (
-                <MetricCard label="Sleep onset" value={avgLatency === null ? "—" : `${round1(avgLatency)}m avg`} note="Relevant because latency looks elevated." />
-              ) : null}
-
-              {focus.includes("recovery") || focus.includes("baseline") ? (
-                <MetricCard label="Recovery" value={avgQuality === null ? "—" : `${round1(avgQuality)}/10 avg`} note="Relevant because felt quality drives interpretation." />
-              ) : null}
-
-              <MetricCard label="Sleep efficiency" value={avgSleepEfficiency === null ? "—" : `${round1(avgSleepEfficiency)}%`} note="Useful only as a rough interpretation, not a final truth." />
-              <MetricCard label="Wake recovery" value={avgWakeRecovery === null ? "—" : `${round1(avgWakeRecovery)}m avg`} note="This separates brief wakes from destructive wake periods." />
-            </div>
-          </section>
-
-          <section style={{ marginTop: 18 }}>
-            <div style={{ fontSize: 20, fontWeight: 950, marginBottom: 8 }}>Recent nights used for this result</div>
-            <div className="sf-card" style={{ padding: 0, overflow: "hidden" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "#f7f7f7" }}>
-                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>Date</th>
-                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>Quality</th>
-                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>Latency</th>
-                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>Wake-ups</th>
-                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>Wake recovery</th>
-                    <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 13, color: "#666" }}>Est. sleep</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.night_id} style={{ borderTop: "1px solid #eee" }}>
-                      <td style={{ padding: "10px 12px" }}>{fmtDate(r.local_date ?? r.created_at)}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.quality_num ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.latency_min === null ? "—" : `${r.latency_min}m`}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.wakeups_count ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.wake_recovery_min === null ? "—" : `${r.wake_recovery_min}m`}</td>
-                      <td style={{ padding: "10px 12px" }}>{formatHours(r.estimated_sleep_min)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
+        </div>
       )}
-    </div>
+    </main>
   );
 }
