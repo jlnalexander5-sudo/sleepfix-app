@@ -409,7 +409,7 @@ export default function ProtocolsPage() {
             </h2>
 
             {escalatedProtocol ? (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="mt-3 rounded-xl border border-amber-200 bg-white/80 p-3 text-sm text-amber-900">
                 <div className="font-bold">Deeper protocol</div>
                 <div className="mt-1">
                   SleepFix is showing the deeper version because the issue appears recurring or unresolved.
@@ -417,7 +417,7 @@ export default function ProtocolsPage() {
               </div>
             ) : null}
 
-            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-blue-950">
+            <div className="mt-4 rounded-xl border border-blue-200 bg-white/80 p-4 text-blue-950">
               <div className="text-sm font-bold uppercase tracking-wide text-blue-700">
                 Pattern being addressed
               </div>
@@ -540,9 +540,9 @@ export default function ProtocolsPage() {
               </ol>
 
               {displayProtocol.doNot?.length ? (
-                <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900">
-                  <div className="font-bold text-rose-900">Do not</div>
-                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                <div className="mt-5 rounded-xl border border-rose-200 bg-white/80 p-5 text-base text-rose-900">
+                  <div className="text-lg font-bold text-rose-900">Do not</div>
+                  <ul className="mt-3 list-disc space-y-2 pl-6 leading-relaxed">
                     {displayProtocol.doNot.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
@@ -551,12 +551,12 @@ export default function ProtocolsPage() {
               ) : null}
 
               {displayProtocol.diaryPrompt ? (
-                <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/70 p-4 text-sm text-violet-950">
-                  <div className="font-bold text-violet-900">If this does not work</div>
-                  <div className="mt-1">
+                <div className="mt-5 rounded-xl border border-violet-200 bg-white/80 p-5 text-base text-violet-950">
+                  <div className="text-lg font-bold text-violet-900">If this does not work</div>
+                  <div className="mt-2 leading-relaxed">
                     Record anything that remained active or seemed unusual. If a possible factor keeps appearing, add it to Possible Factor Notes and investigate it separately if needed.
                   </div>
-                  <div className="mt-2 text-xs text-violet-800">
+                  <div className="mt-3 text-sm leading-relaxed text-violet-800">
                     Protocol note: {displayProtocol.diaryPrompt}
                   </div>
                 </div>
