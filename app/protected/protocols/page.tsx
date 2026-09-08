@@ -339,37 +339,37 @@ export default function ProtocolsPage() {
       </p>
 
       {!loading && latestNightRow ? (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
-          <div className="text-sm font-bold uppercase tracking-wide text-amber-700">
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-gray-900">
+          <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
             Protocol timing
           </div>
 
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <div>
-              <div className="text-sm font-bold text-amber-800">Based on sleep recorded</div>
-              <div className="mt-1 text-base font-extrabold">{formatProtocolDate(analysedDate)}</div>
+              <div className="text-sm font-bold text-gray-900">Based on sleep recorded</div>
+              <div className="mt-1 text-base font-extrabold text-gray-900">{formatProtocolDate(analysedDate)}</div>
             </div>
 
             <div>
-              <div className="text-sm font-bold text-amber-800">Intended for next sleep</div>
-              <div className="mt-1 text-base font-extrabold">{formatProtocolDate(recommendedDate)}</div>
+              <div className="text-sm font-bold text-gray-900">Intended for next sleep</div>
+              <div className="mt-1 text-base font-extrabold text-gray-900">{formatProtocolDate(recommendedDate)}</div>
             </div>
           </div>
 
           {freshnessStatus === "current" ? (
-            <p className="mt-3 text-sm font-semibold text-amber-800">
+            <p className="mt-3 text-sm font-semibold text-gray-900">
               Current recommendation — use this for the next sleep after that record.
             </p>
           ) : null}
 
           {freshnessStatus === "aging" ? (
-            <p className="mt-3 text-sm font-semibold text-amber-800">
+            <p className="mt-3 text-sm font-semibold text-gray-900">
               Recommendation aging — update your sleep log for a more accurate protocol.
             </p>
           ) : null}
 
           {freshnessStatus === "stale" ? (
-            <p className="mt-3 text-sm font-semibold text-red-700">
+            <p className="mt-3 text-sm font-semibold text-gray-900">
               Protocol may be out of date. SleepFix needs a newer sleep entry before treating this as the best next action.
             </p>
           ) : null}
