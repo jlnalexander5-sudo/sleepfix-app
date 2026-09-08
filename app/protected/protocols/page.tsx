@@ -400,16 +400,16 @@ export default function ProtocolsPage() {
       {result && nightCount > 0 && displayProtocol ? (
         <>
           <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/45 p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
               Focus for tonight
             </div>
 
-            <h2 className="mt-2 text-2xl font-extrabold text-emerald-950">
+            <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
               {displayProtocol.title.replace(/^RRSM\b/, "RSM")}
             </h2>
 
             {escalatedProtocol ? (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-white/80 p-3 text-sm text-amber-900">
+              <div className="mt-3 rounded-xl border border-amber-200 bg-white/80 p-3 text-sm text-gray-900">
                 <div className="font-bold">Deeper protocol</div>
                 <div className="mt-1">
                   SleepFix is showing the deeper version because the issue appears recurring or unresolved.
@@ -417,8 +417,8 @@ export default function ProtocolsPage() {
               </div>
             ) : null}
 
-            <div className="mt-4 rounded-xl border border-blue-200 bg-white/80 p-4 text-blue-950">
-              <div className="text-sm font-bold uppercase tracking-wide text-blue-700">
+            <div className="mt-4 rounded-xl border border-blue-200 bg-white/80 p-4 text-gray-900">
+              <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
                 Pattern being addressed
               </div>
               <div className="mt-1 text-lg font-extrabold">
@@ -430,7 +430,7 @@ export default function ProtocolsPage() {
             </div>
 
             <div className="mt-4 rounded-xl border border-emerald-200 bg-white/85 p-4">
-              <div className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+              <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
                 Best for
               </div>
               <p className="mt-1 text-gray-800">{displayProtocol.bestFor}</p>
@@ -438,7 +438,7 @@ export default function ProtocolsPage() {
           </section>
 
           <section className="mt-6 rounded-2xl border border-violet-200 bg-violet-50/45 p-6 shadow-sm">
-            <h3 className="text-xl font-bold text-violet-900">Is this the right focus?</h3>
+            <h3 className="text-xl font-bold text-gray-900">Is this the right focus?</h3>
             <p className="mt-2 text-gray-700">
               Confirm this so SleepFix can keep improving the interpretation engine.
             </p>
@@ -469,7 +469,7 @@ export default function ProtocolsPage() {
                 }}
                 className={`rounded-xl border px-4 py-3 font-bold ${
                   accuracyFeedback === "no"
-                    ? "border-amber-700 bg-amber-50 text-amber-900"
+                    ? "border-amber-700 bg-amber-50 text-gray-900"
                     : "border-gray-200 bg-white text-gray-900"
                 }`}
               >
@@ -540,8 +540,8 @@ export default function ProtocolsPage() {
               </ol>
 
               {displayProtocol.doNot?.length ? (
-                <div className="mt-5 rounded-xl border border-rose-200 bg-white/80 p-5 text-base text-rose-900">
-                  <div className="text-lg font-bold text-rose-900">Do not</div>
+                <div className="mt-5 rounded-xl border border-rose-200 bg-white/80 p-5 text-base text-gray-900">
+                  <div className="text-lg font-bold text-gray-900">Do not</div>
                   <ul className="mt-3 list-disc space-y-2 pl-6 leading-relaxed">
                     {displayProtocol.doNot.map((item) => (
                       <li key={item}>{item}</li>
@@ -551,12 +551,12 @@ export default function ProtocolsPage() {
               ) : null}
 
               {displayProtocol.diaryPrompt ? (
-                <div className="mt-5 rounded-xl border border-violet-200 bg-white/80 p-5 text-base text-violet-950">
-                  <div className="text-lg font-bold text-violet-900">If this does not work</div>
+                <div className="mt-5 rounded-xl border border-violet-200 bg-white/80 p-5 text-base text-gray-900">
+                  <div className="text-lg font-bold text-gray-900">If this does not work</div>
                   <div className="mt-2 leading-relaxed">
                     Record anything that remained active or seemed unusual. If a possible factor keeps appearing, add it to Possible Factor Notes and investigate it separately if needed.
                   </div>
-                  <div className="mt-3 text-sm leading-relaxed text-violet-800">
+                  <div className="mt-3 text-sm leading-relaxed text-gray-700">
                     Protocol note: {displayProtocol.diaryPrompt}
                   </div>
                 </div>
@@ -564,8 +564,8 @@ export default function ProtocolsPage() {
             </section>
           ) : (
             <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-              <h3 className="text-xl font-bold text-amber-900">Protocol paused</h3>
-              <p className="mt-2 text-amber-900">
+              <h3 className="text-xl font-bold text-gray-900">Protocol paused</h3>
+              <p className="mt-2 text-gray-900">
                 Because you said the focus is missing something, do not treat this protocol as final. Save what SleepFix missed, add any recurring possibility to Possible Factor Notes, and investigate it separately if needed before relying on the next recommendation.
               </p>
             </section>
