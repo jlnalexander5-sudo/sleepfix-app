@@ -143,6 +143,18 @@ export default function AdminPage() {
   const [candidateNotes, setCandidateNotes] = useState<CandidateNoteRow[]>([]);
   const [feedback, setFeedback] = useState<EngineFeedbackRow[]>([]);
   const [optionalWarning, setOptionalWarning] = useState<string | null>(null);
+  const [dateWindow, setDateWindow] = useState<{ today: string; weekStart: string } | null>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    const weekStartDate = new Date(now);
+    weekStartDate.setDate(weekStartDate.getDate() - 6);
+
+    setDateWindow({
+      today: ymd(now),
+      weekStart: ymd(weekStartDate),
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -243,11 +255,8 @@ export default function AdminPage() {
   }, [supabase]);
 
   const summary = useMemo(() => {
-    const now = new Date();
-    const weekStartDate = new Date(now);
-    weekStartDate.setDate(weekStartDate.getDate() - 6);
-    const weekStart = ymd(weekStartDate);
-    const today = ymd(now);
+    const weekStart = dateWindow?.weekStart ?? "";
+    const today = dateWindow?.today ?? "";
 
     const userIds = new Set<string>();
     nights.forEach((row) => userIds.add(row.user_id));
@@ -256,12 +265,14 @@ export default function AdminPage() {
     feedback.forEach((row) => userIds.add(row.user_id));
 
     const activeUsersThisWeek = new Set(
-      nights
-        .filter((row) => {
-          const key = dateKey(row);
-          return key >= weekStart && key <= today;
-        })
-        .map((row) => row.user_id),
+      weekStart && today
+        ? nights
+            .filter((row) => {
+              const key = dateKey(row);
+              return key >= weekStart && key <= today;
+            })
+            .map((row) => row.user_id)
+        : [],
     );
 
     const activeInvestigations = investigations.filter((row) => row.status === "active");
@@ -277,9 +288,9 @@ export default function AdminPage() {
       mismatches,
       matches,
     };
-  }, [nights, investigations, candidateNotes, feedback]);
+  }, [nights, investigations, candidateNotes, feedback, dateWindow]);
 
-  if (loading) {
+  if (loading || !dateWindow) {
     return <div className="mx-auto max-w-6xl p-7">Loading admin...</div>;
   }
 
