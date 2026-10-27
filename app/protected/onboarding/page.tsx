@@ -299,7 +299,7 @@ export default function OnboardingPage() {
         <div
           style={{
             fontSize: 13,
-            fontWeight: 900,
+            fontWeight: 500,
             color: "#2636b8",
             textTransform: "uppercase",
             letterSpacing: 0.8,
@@ -313,7 +313,7 @@ export default function OnboardingPage() {
             marginTop: 8,
             fontSize: 38,
             lineHeight: 1.1,
-            fontWeight: 950,
+            fontWeight: 600,
             color: "#08105c",
           }}
         >
@@ -359,7 +359,7 @@ export default function OnboardingPage() {
             <div
               style={{
                 fontSize: 13,
-                fontWeight: 900,
+                fontWeight: 500,
                 color: "#4f46e5",
                 textTransform: "uppercase",
               }}
@@ -371,7 +371,7 @@ export default function OnboardingPage() {
               style={{
                 marginTop: 8,
                 fontSize: 18,
-                fontWeight: 950,
+                fontWeight: 600,
                 color: "#111827",
               }}
             >
@@ -396,7 +396,7 @@ export default function OnboardingPage() {
             <div
               style={{
                 fontSize: 13,
-                fontWeight: 900,
+                fontWeight: 500,
                 color: "#4f46e5",
                 textTransform: "uppercase",
               }}
@@ -408,7 +408,7 @@ export default function OnboardingPage() {
               style={{
                 marginTop: 8,
                 fontSize: 18,
-                fontWeight: 950,
+                fontWeight: 600,
                 color: "#111827",
               }}
             >
@@ -434,7 +434,7 @@ export default function OnboardingPage() {
             <div
               style={{
                 fontSize: 13,
-                fontWeight: 900,
+                fontWeight: 500,
                 color: "#4f46e5",
                 textTransform: "uppercase",
               }}
@@ -446,7 +446,7 @@ export default function OnboardingPage() {
               style={{
                 marginTop: 8,
                 fontSize: 18,
-                fontWeight: 950,
+                fontWeight: 600,
                 color: "#111827",
               }}
             >
@@ -467,7 +467,7 @@ export default function OnboardingPage() {
             style={{
               marginTop: 20,
               color: "#555",
-              fontWeight: 700,
+              fontWeight: 500,
             }}
           >
             Loading your current SleepFix path...
@@ -483,7 +483,7 @@ export default function OnboardingPage() {
               color: "#991b1b",
               borderRadius: 14,
               padding: 14,
-              fontWeight: 800,
+              fontWeight: 500,
             }}
           >
             {error}
@@ -513,7 +513,7 @@ export default function OnboardingPage() {
                   <div
                     style={{
                       fontSize: 14,
-                      fontWeight: 900,
+                      fontWeight: 500,
                       color: "#6b7280",
                       textTransform: "uppercase",
                     }}
@@ -526,7 +526,7 @@ export default function OnboardingPage() {
                       marginTop: 6,
                       color: "#111827",
                       fontSize: 20,
-                      fontWeight: 900,
+                      fontWeight: 500,
                     }}
                   >
                     {nextActionText(progress)}
@@ -556,7 +556,7 @@ export default function OnboardingPage() {
                     textDecoration: "none",
                     padding: "12px 18px",
                     borderRadius: 12,
-                    fontWeight: 900,
+                    fontWeight: 500,
                   }}
                 >
                   Continue: {action.title}
@@ -626,7 +626,7 @@ export default function OnboardingPage() {
                       <div
                         style={{
                           fontSize: 13,
-                          fontWeight: 900,
+                          fontWeight: 500,
                           color: complete
                             ? "#15803d"
                             : current
@@ -655,7 +655,7 @@ export default function OnboardingPage() {
                       style={{
                         marginTop: 10,
                         fontSize: 22,
-                        fontWeight: 950,
+                        fontWeight: 600,
                         color: "#111827",
                       }}
                     >
@@ -676,7 +676,7 @@ export default function OnboardingPage() {
                       style={{
                         marginTop: 12,
                         fontSize: 13,
-                        fontWeight: 900,
+                        fontWeight: 500,
                         color: complete
                           ? "#15803d"
                           : current
@@ -712,7 +712,7 @@ export default function OnboardingPage() {
               <h2
                 style={{
                   fontSize: 22,
-                  fontWeight: 950,
+                  fontWeight: 600,
                   color: "#111827",
                 }}
               >
@@ -747,7 +747,7 @@ export default function OnboardingPage() {
                   rel="noopener noreferrer"
                   style={{
                     color: "#000080",
-                    fontWeight: 800,
+                    fontWeight: 500,
                   }}
                 >
                   rhythmicsystems.com
