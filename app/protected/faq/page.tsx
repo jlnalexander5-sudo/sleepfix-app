@@ -46,7 +46,7 @@ function FAQAccordionItem({
           alignItems: "center",
           gap: 12,
           fontSize: 16,
-          fontWeight: 700,
+          fontWeight: 500,
         }}
         aria-expanded={isOpen}
       >
@@ -327,7 +327,7 @@ export default function FAQPage() {
                     href="https://rhythmicsystems.com/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: "var(--sf-brand)", fontWeight: 700 }}
+                    style={{ color: "var(--sf-brand)", fontWeight: 500 }}
                   >
                     rhythmicsystems.com
                   </a>.
@@ -695,7 +695,7 @@ export default function FAQPage() {
     <div style={{ maxWidth: 980, margin: "0 auto", padding: "28px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 34, fontWeight: 800, color: "var(--sf-brand)" }}>FAQ</div>
+          <div style={{ fontSize: 30, fontWeight: 600, color: "var(--sf-brand)" }}>FAQ</div>
           <div style={{ marginTop: 8, color: "#444", fontSize: 16, maxWidth: 760 }}>
             A help and explanation center for common questions, concerns, and deeper understanding of how SleepFixMe
             works.
@@ -714,7 +714,7 @@ export default function FAQPage() {
         <div>
           <label
             htmlFor="faq-section"
-            style={{ display: "block", fontSize: 14, fontWeight: 700, marginBottom: 8, color: "#444" }}
+            style={{ display: "block", fontSize: 14, fontWeight: 500, marginBottom: 8, color: "#444" }}
           >
             Jump to section
           </label>
@@ -748,7 +748,7 @@ export default function FAQPage() {
                 border: "1px solid #d1d5db",
                 background: "#fff",
                 cursor: "pointer",
-                fontWeight: 600,
+                fontWeight: 500,
               }}
             >
               Open all in section
@@ -762,7 +762,7 @@ export default function FAQPage() {
                 border: "1px solid #d1d5db",
                 background: "#fff",
                 cursor: "pointer",
-                fontWeight: 600,
+                fontWeight: 500,
               }}
             >
               Close all in section
@@ -779,7 +779,7 @@ export default function FAQPage() {
     transition: "all 0.2s ease",
   }}
 >
-        <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>
+        <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
   {currentSection.title}
 </div>
 {currentSection.intro ? (
@@ -812,7 +812,7 @@ export default function FAQPage() {
         }}
       >
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>Still not sure about something?</div>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>Still not sure about something?</div>
           <div style={{ color: "#555", marginTop: 4 }}>
             Use the Results, Sleep, Investigation, and Protocol pages together — the FAQ is here to explain how those
             pieces fit.
