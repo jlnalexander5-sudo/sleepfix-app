@@ -280,9 +280,9 @@ function OptionalContextSection({
 
   return (
     <details className="rounded-xl border border-amber-200 bg-white/90">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 font-extrabold text-gray-900">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 font-semibold text-gray-900">
         <span>{title}</span>
-        <span className="text-sm font-semibold text-gray-500">
+        <span className="text-sm font-medium text-gray-500">
           {selectedCount > 0
             ? `${selectedCount} selected`
             : "Optional"}
@@ -633,8 +633,13 @@ if (!wakeRecoveryChoice) missingRequired.push("Total awake time after wake-ups")
 const canSaveNight = missingRequired.length === 0;
 
   return (
-    <div style={{ maxWidth: 920, margin: "0 auto", padding: "24px 18px" }}>
+    <div className="sleep-page-typography" style={{ maxWidth: 920, margin: "0 auto", padding: "24px 18px" }}>
       <style jsx global>{`
+        .sleep-page-typography .sf-section-title { font-weight: 600; }
+        .sleep-page-typography .sf-field-label { font-weight: 500; }
+        .sleep-page-typography .sf-button { font-weight: 500; }
+        .sleep-page-typography .sf-checkitem { font-weight: 400; }
+        .sleep-page-typography .sf-checkitem.is-checked { font-weight: 500; }
         .react-datepicker-wrapper,
         .react-datepicker__input-container {
           width: 100%;
@@ -666,18 +671,18 @@ const canSaveNight = missingRequired.length === 0;
         }
       `}</style>
 
-      <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 18, fontFamily: "Verdana, sans-serif", color: "#000080" }}>Sleep</h1>
+      <h1 style={{ fontSize: 36, fontWeight: 600, marginBottom: 18, fontFamily: "Verdana, sans-serif", color: "#000080" }}>Sleep</h1>
 
       {editingNightId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
-          <div className="font-extrabold">Editing a saved night</div>
+          <div className="font-semibold">Editing a saved night</div>
           <div className="mt-1 text-sm">
             Update any field or note, then choose <strong>Update night</strong>. This changes the existing record rather than creating a duplicate.
           </div>
           <button
             type="button"
             onClick={cancelEditNight}
-            className="mt-3 rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-bold"
+            className="mt-3 rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-medium"
           >
             Cancel edit
           </button>
@@ -695,7 +700,7 @@ const canSaveNight = missingRequired.length === 0;
             color: "#1e1b4b",
           }}
         >
-          <div style={{ fontWeight: 900 }}>{adaptiveReminder.title}</div>
+          <div style={{ fontWeight: 600 }}>{adaptiveReminder.title}</div>
           <div style={{ marginTop: 4 }}>{adaptiveReminder.message}</div>
         </div>
       ) : null}
@@ -708,7 +713,7 @@ const canSaveNight = missingRequired.length === 0;
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep Start</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Sleep Start</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sf-input-box">
               <DatePicker
@@ -731,7 +736,7 @@ const canSaveNight = missingRequired.length === 0;
         </div>
 
         <div>
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>Sleep End</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Sleep End</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sf-input-box">
               <DatePicker
@@ -966,10 +971,10 @@ const canSaveNight = missingRequired.length === 0;
         {isSavingNight ? "Saving…" : editingNightId ? "Update night" : "Save night"}
       </button>
       {saveNotice && (
-        <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "#000080" }}>{saveNotice}</div>
+        <div style={{ marginTop: 10, fontSize: 14, fontWeight: 500, color: "#000080" }}>{saveNotice}</div>
       )}
       {saveError && (
-        <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600, color: "#B00020" }}>{saveError}</div>
+        <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "#B00020" }}>{saveError}</div>
       )}
 
       <section className="mt-8 rounded-2xl border border-sky-200 bg-sky-50/40 p-6 shadow-sm">
@@ -984,10 +989,10 @@ const canSaveNight = missingRequired.length === 0;
             .map((night) => (
               <details key={night.id} className="rounded-xl border border-sky-200 bg-white/90">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
-                  <div className="font-extrabold text-gray-900">
+                  <div className="font-semibold text-gray-900">
                     {formatSavedNightDate(night.local_date, night.created_at)}
                   </div>
-                  <span className="text-sm font-semibold text-gray-500">
+                  <span className="text-sm font-medium text-gray-500">
                     View note
                   </span>
                 </summary>
@@ -1000,7 +1005,7 @@ const canSaveNight = missingRequired.length === 0;
                   <button
                     type="button"
                     onClick={() => beginEditNight(night)}
-                    className="mt-4 rounded-lg border border-gray-300 bg-white px-4 py-2 font-bold text-gray-900"
+                    className="mt-4 rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-900"
                   >
                     Edit night
                   </button>
