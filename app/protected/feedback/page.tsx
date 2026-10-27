@@ -64,7 +64,7 @@ export default function FeedbackPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">
+      <h1 className="text-3xl font-semibold tracking-tight text-blue-900">
         Feedback
       </h1>
 
@@ -74,7 +74,7 @@ export default function FeedbackPage() {
       </p>
 
       <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <label className="text-sm font-bold text-gray-700">
+        <label className="text-sm font-medium text-gray-700">
           Type of feedback
         </label>
 
@@ -90,7 +90,7 @@ export default function FeedbackPage() {
           ))}
         </select>
 
-        <label className="mt-5 block text-sm font-bold text-gray-700">
+        <label className="mt-5 block text-sm font-medium text-gray-700">
           What should we know?
         </label>
 
@@ -106,19 +106,19 @@ export default function FeedbackPage() {
             type="button"
             onClick={submitFeedback}
             disabled={saving || message.trim().length < 5}
-            className="rounded-xl bg-blue-900 px-5 py-3 font-bold text-white disabled:opacity-50"
+            className="rounded-xl bg-blue-900 px-5 py-3 font-medium text-white disabled:opacity-50"
           >
             {saving ? "Sending..." : "Send feedback"}
           </button>
 
           {success ? (
-            <span className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-bold text-green-700">
+            <span className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-medium text-green-700">
               {success}
             </span>
           ) : null}
 
           {error ? (
-            <span className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-bold text-red-700">
+            <span className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-medium text-red-700">
               {error}
             </span>
           ) : null}
@@ -126,7 +126,7 @@ export default function FeedbackPage() {
       </section>
 
       <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5 text-sm text-gray-700">
-        <div className="font-bold text-gray-900">Why this matters</div>
+        <div className="font-semibold text-gray-900">Why this matters</div>
         <p className="mt-1">
           SleepFix is being refined through real sleep records and real user
           corrections. If the app misses something, that feedback helps identify
