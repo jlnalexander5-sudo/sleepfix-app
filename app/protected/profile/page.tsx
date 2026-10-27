@@ -60,7 +60,7 @@ function CheckboxGrid({
 }) {
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-extrabold text-gray-900">{title}</h2>
+      <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
       <p className="mt-1 text-gray-600">{description}</p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -72,7 +72,7 @@ function CheckboxGrid({
               key={option}
               type="button"
               onClick={() => onChange(toggleValue(values, option))}
-              className={`rounded-xl border px-4 py-3 text-left font-semibold ${
+              className={`rounded-xl border px-4 py-3 text-left font-medium ${
                 checked
                   ? "border-blue-700 bg-blue-50 text-blue-950"
                   : "border-gray-200 bg-white text-gray-900"
@@ -181,7 +181,7 @@ export default function ProfilePage() {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Profile</h1>
+      <h1 className="text-3xl font-semibold tracking-tight text-blue-900">Profile</h1>
       <p className="mt-2 text-base text-gray-600">
         Tell SleepFix about your usual sleep and lifestyle context. These background details help the engine interpret
         nightly records, while your own view of what affects your sleep is stored separately for later comparison with
@@ -195,13 +195,13 @@ export default function ProfilePage() {
       ) : null}
 
       {error ? (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-700">
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-medium text-red-700">
           {error}
         </div>
       ) : null}
 
       {message ? (
-        <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-700">
+        <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-medium text-green-700">
           {message}
         </div>
       ) : null}
@@ -226,7 +226,7 @@ export default function ProfilePage() {
 
 
           <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-6 shadow-sm">
-            <h2 className="text-xl font-extrabold text-gray-900">Your own view</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Your own view</h2>
             <p className="mt-1 text-gray-700">
               What do you currently think affects your sleep?
             </p>
@@ -250,7 +250,7 @@ export default function ProfilePage() {
           </section>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-extrabold text-gray-900">Why this matters</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Why this matters</h2>
             <p className="mt-2 text-gray-700">
               The profile does not decide what is causing your insomnia. It gives SleepFix background context that can
               modify the engine&apos;s interpretation when the nightly sleep record points in the same direction. Your own
@@ -262,19 +262,19 @@ export default function ProfilePage() {
     type="button"
     onClick={saveProfile}
     disabled={saving}
-    className="rounded-xl bg-blue-900 px-5 py-3 font-bold text-white disabled:opacity-60"
+    className="rounded-xl bg-blue-900 px-5 py-3 font-medium text-white disabled:opacity-60"
   >
     {saving ? "Saving..." : "Save profile"}
   </button>
 
   {message ? (
-    <span className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-bold text-green-700">
+    <span className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-medium text-green-700">
       {message}
     </span>
   ) : null}
 
   {error ? (
-    <span className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-bold text-red-700">
+    <span className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-medium text-red-700">
       {error}
     </span>
   ) : null}
