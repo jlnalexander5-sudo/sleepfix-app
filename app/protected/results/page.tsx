@@ -316,7 +316,7 @@ export default function ResultsPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8">
-      <h1 className="text-3xl font-extrabold tracking-tight text-blue-900">Results</h1>
+      <h1 className="text-3xl font-semibold tracking-tight text-blue-900">Results</h1>
       <p className="mt-2 max-w-4xl text-base leading-relaxed text-gray-700">
         This page brings together what your Investigation has actually shown, what you originally suspected,
         and what is most useful to focus on next. Sleep data remains available as supporting information rather
@@ -339,10 +339,10 @@ export default function ResultsPage() {
         <div className="mt-7 grid gap-7">
           {/* 1. Main payoff */}
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50/45 p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+            <div className="text-sm font-medium uppercase tracking-wide text-gray-900">
               What SleepFix has identified
             </div>
-            <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+            <h2 className="mt-2 text-2xl font-semibold text-gray-900">
               Your current sleep findings
             </h2>
             <p className="mt-2 max-w-4xl text-gray-700">
@@ -359,27 +359,27 @@ export default function ResultsPage() {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-xl font-extrabold text-gray-900">{item.factor_name}</h3>
+                        <h3 className="text-xl font-semibold text-gray-900">{item.factor_name}</h3>
                         <div className="mt-1 text-sm text-gray-600">
                           {prettyClassification(item.factor_classification)} · {prettyArea(item.investigation_area)}
                         </div>
                       </div>
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-bold text-gray-900">
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-gray-900">
                         Finding recorded
                       </span>
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-3">
                       <div className="rounded-xl border border-gray-200 p-4">
-                        <div className="text-sm font-bold text-gray-600">Indicated threshold</div>
-                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                        <div className="text-sm font-medium text-gray-600">Indicated threshold</div>
+                        <div className="mt-1 text-lg font-semibold text-gray-900">
                           {thresholdSummary(item)}
                         </div>
                       </div>
 
                       <div className="rounded-xl border border-gray-200 p-4">
-                        <div className="text-sm font-bold text-gray-600">Sleep onset at threshold</div>
-                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                        <div className="text-sm font-medium text-gray-600">Sleep onset at threshold</div>
+                        <div className="mt-1 text-lg font-semibold text-gray-900">
                           {item.threshold_sleep_onset_minutes == null
                             ? "—"
                             : `${item.threshold_sleep_onset_minutes} min`}
@@ -387,8 +387,8 @@ export default function ResultsPage() {
                       </div>
 
                       <div className="rounded-xl border border-gray-200 p-4">
-                        <div className="text-sm font-bold text-gray-600">After-sleep quality</div>
-                        <div className="mt-1 text-lg font-extrabold text-gray-900">
+                        <div className="text-sm font-medium text-gray-600">After-sleep quality</div>
+                        <div className="mt-1 text-lg font-semibold text-gray-900">
                           {item.threshold_sleep_quality == null
                             ? "—"
                             : `${item.threshold_sleep_quality} / 10`}
@@ -417,21 +417,21 @@ export default function ResultsPage() {
 
           {/* 2. Investigation map */}
           <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+            <div className="text-sm font-medium uppercase tracking-wide text-gray-900">
               Your investigation map
             </div>
-            <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+            <h2 className="mt-2 text-2xl font-semibold text-gray-900">
               What is established, and what is still being tested?
             </h2>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-blue-200 bg-white p-5">
-                <div className="text-lg font-extrabold text-gray-900">Completed findings</div>
+                <div className="text-lg font-semibold text-gray-900">Completed findings</div>
                 {completed.length ? (
                   <div className="mt-3 grid gap-3">
                     {completed.map((item) => (
                       <div key={item.id} className="border-t border-gray-100 pt-3 first:border-0 first:pt-0">
-                        <div className="font-bold text-gray-900">{item.factor_name}</div>
+                        <div className="font-medium text-gray-900">{item.factor_name}</div>
                         <div className="mt-1 text-sm text-gray-600">
                           {thresholdSummary(item)}
                         </div>
@@ -444,16 +444,16 @@ export default function ResultsPage() {
               </div>
 
               <div className="rounded-xl border border-blue-200 bg-white p-5">
-                <div className="text-lg font-extrabold text-gray-900">Currently investigating</div>
+                <div className="text-lg font-semibold text-gray-900">Currently investigating</div>
                 {active ? (
                   <>
-                    <div className="mt-3 text-xl font-extrabold text-gray-900">{active.factor_name}</div>
+                    <div className="mt-3 text-xl font-semibold text-gray-900">{active.factor_name}</div>
                     <div className="mt-1 text-sm text-gray-600">
                       {prettyClassification(active.factor_classification)} · {prettyArea(active.investigation_area)}
                     </div>
                     <Link
                       href="/protected/habits"
-                      className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 font-bold text-gray-900 no-underline"
+                      className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 font-medium text-gray-900 no-underline"
                     >
                       Continue investigation →
                     </Link>
@@ -463,7 +463,7 @@ export default function ResultsPage() {
                     <p className="mt-2 text-gray-600">No active investigation at the moment.</p>
                     <Link
                       href="/protected/habits"
-                      className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 font-bold text-gray-900 no-underline"
+                      className="mt-4 inline-block rounded-xl border border-gray-300 bg-white px-4 py-2 font-medium text-gray-900 no-underline"
                     >
                       Start an investigation →
                     </Link>
@@ -475,10 +475,10 @@ export default function ResultsPage() {
 
           {/* 3. Hypothesis vs findings */}
           <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+            <div className="text-sm font-medium uppercase tracking-wide text-gray-900">
               Your view compared with your findings
             </div>
-            <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+            <h2 className="mt-2 text-2xl font-semibold text-gray-900">
               What you suspected vs what Investigation has shown
             </h2>
             <p className="mt-2 max-w-4xl text-gray-700">
@@ -488,7 +488,7 @@ export default function ResultsPage() {
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-violet-200 bg-white p-5">
-                <div className="text-lg font-extrabold text-gray-900">What you originally suspected</div>
+                <div className="text-lg font-semibold text-gray-900">What you originally suspected</div>
                 {startingHypothesis ? (
                   <p className="mt-3 whitespace-pre-wrap leading-relaxed text-gray-800">
                     {startingHypothesis}
@@ -497,7 +497,7 @@ export default function ResultsPage() {
                   <div className="mt-3 text-gray-600">
                     No starting hypothesis is available here yet.
                     <div className="mt-3">
-                      <Link href="/protected/profile" className="font-bold text-blue-900">
+                      <Link href="/protected/profile" className="font-medium text-blue-900">
                         Review your Profile →
                       </Link>
                     </div>
@@ -506,12 +506,12 @@ export default function ResultsPage() {
               </div>
 
               <div className="rounded-xl border border-violet-200 bg-white p-5">
-                <div className="text-lg font-extrabold text-gray-900">What Investigation has shown</div>
+                <div className="text-lg font-semibold text-gray-900">What Investigation has shown</div>
                 {completed.length ? (
                   <div className="mt-3 grid gap-3">
                     {completed.map((item) => (
                       <div key={item.id}>
-                        <div className="font-bold text-gray-900">{item.factor_name}</div>
+                        <div className="font-medium text-gray-900">{item.factor_name}</div>
                         <div className="text-sm text-gray-600">
                           Recorded threshold: {thresholdSummary(item)}
                         </div>
@@ -529,13 +529,13 @@ export default function ResultsPage() {
 
           {/* 4. Next focus */}
           <section className="rounded-2xl border border-amber-200 bg-amber-50/55 p-6 shadow-sm">
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-900">
+            <div className="text-sm font-medium uppercase tracking-wide text-gray-900">
               What to focus on next
             </div>
 
             {active ? (
               <>
-                <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+                <h2 className="mt-2 text-2xl font-semibold text-gray-900">
                   Continue: {active.factor_name}
                 </h2>
                 <p className="mt-2 max-w-4xl text-gray-700">
@@ -545,14 +545,14 @@ export default function ResultsPage() {
                 </p>
                 <Link
                   href="/protected/habits"
-                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-bold text-white no-underline"
+                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-medium text-white no-underline"
                 >
                   Continue investigation
                 </Link>
               </>
             ) : completed.length ? (
               <>
-                <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+                <h2 className="mt-2 text-2xl font-semibold text-gray-900">
                   Decide whether another factor needs testing
                 </h2>
                 <p className="mt-2 max-w-4xl text-gray-700">
@@ -562,14 +562,14 @@ export default function ResultsPage() {
                 </p>
                 <Link
                   href="/protected/habits"
-                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-bold text-white no-underline"
+                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-medium text-white no-underline"
                 >
                   Review Investigation
                 </Link>
               </>
             ) : (
               <>
-                <h2 className="mt-2 text-2xl font-extrabold text-gray-900">
+                <h2 className="mt-2 text-2xl font-semibold text-gray-900">
                   Begin with one possible contributing factor
                 </h2>
                 <p className="mt-2 max-w-4xl text-gray-700">
@@ -578,7 +578,7 @@ export default function ResultsPage() {
                 </p>
                 <Link
                   href="/protected/habits"
-                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-bold text-white no-underline"
+                  className="mt-5 inline-block rounded-xl bg-black px-5 py-3 font-medium text-white no-underline"
                 >
                   Go to Investigation
                 </Link>
@@ -594,7 +594,7 @@ export default function ResultsPage() {
               className="flex w-full items-center justify-between gap-4 p-5 text-left"
             >
               <div>
-                <div className="text-lg font-extrabold text-gray-900">Supporting sleep data</div>
+                <div className="text-lg font-semibold text-gray-900">Supporting sleep data</div>
                 <div className="mt-1 text-sm text-gray-600">
                   Optional reference only — these numbers support the investigation; they are not the result itself.
                 </div>
@@ -606,39 +606,39 @@ export default function ResultsPage() {
               <div className="border-t border-gray-200 p-5">
                 {latestNight ? (
                   <>
-                    <div className="text-sm font-bold text-gray-600">
+                    <div className="text-sm font-medium text-gray-600">
                       Latest recorded night · {fmtDate(latestNight.local_date ?? latestNight.created_at)}
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       <div className="rounded-xl border border-gray-200 p-4">
                         <div className="text-sm text-gray-600">Sleep quality</div>
-                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                        <div className="mt-1 text-xl font-semibold text-gray-900">
                           {latestNight.quality_num == null ? "—" : `${latestNight.quality_num} / 10`}
                         </div>
                       </div>
                       <div className="rounded-xl border border-gray-200 p-4">
                         <div className="text-sm text-gray-600">Time to fall asleep</div>
-                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                        <div className="mt-1 text-xl font-semibold text-gray-900">
                           {latestNight.latency_min == null ? "—" : `${latestNight.latency_min} min`}
                         </div>
                       </div>
                       <div className="rounded-xl border border-gray-200 p-4">
                         <div className="text-sm text-gray-600">Wake-ups</div>
-                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                        <div className="mt-1 text-xl font-semibold text-gray-900">
                           {latestNight.wakeups_count ?? "—"}
                         </div>
                       </div>
                       <div className="rounded-xl border border-gray-200 p-4">
                         <div className="text-sm text-gray-600">Time awake after waking</div>
-                        <div className="mt-1 text-xl font-extrabold text-gray-900">
+                        <div className="mt-1 text-xl font-semibold text-gray-900">
                           {latestNight.wake_recovery_min == null ? "—" : `${latestNight.wake_recovery_min} min`}
                         </div>
                       </div>
                     </div>
 
                     <details className="mt-5 rounded-xl border border-gray-200">
-                      <summary className="cursor-pointer p-4 font-bold text-gray-900">
+                      <summary className="cursor-pointer p-4 font-medium text-gray-900">
                         Recent sleep records
                       </summary>
                       <div className="overflow-x-auto border-t border-gray-200">
@@ -676,7 +676,7 @@ export default function ResultsPage() {
                 ) : (
                   <div className="text-gray-600">
                     No sleep records yet.{" "}
-                    <Link href="/protected/sleep" className="font-bold text-blue-900">
+                    <Link href="/protected/sleep" className="font-medium text-blue-900">
                       Record your first night →
                     </Link>
                   </div>
