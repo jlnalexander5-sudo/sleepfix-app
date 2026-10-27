@@ -671,7 +671,7 @@ const canSaveNight = missingRequired.length === 0;
         }
       `}</style>
 
-      <h1 style={{ fontSize: 36, fontWeight: 600, marginBottom: 18, fontFamily: "Verdana, sans-serif", color: "#000080" }}>Sleep</h1>
+      <h1 className="mb-[18px] text-3xl font-semibold tracking-tight text-blue-900">Sleep</h1>
 
       {editingNightId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
