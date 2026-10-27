@@ -764,7 +764,7 @@ export default function HabitsPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 text-base">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Investigation</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-blue-900">Investigation</h1>
 
         <p className="mt-2 max-w-4xl text-neutral-700">
           Investigate one possible contributing factor at a time. Start with
@@ -775,7 +775,7 @@ export default function HabitsPage() {
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <div className="font-bold">One factor at a time</div>
+            <div className="font-semibold">One factor at a time</div>
             <p className="mt-1 text-sm text-neutral-700">
               Changing more than one possible contributing factor at the same
               time can make it difficult to determine which factor affected
@@ -784,7 +784,7 @@ export default function HabitsPage() {
           </div>
 
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-            <div className="font-bold">Daylight saving</div>
+            <div className="font-semibold">Daylight saving</div>
             <p className="mt-1 text-sm text-neutral-700">
               Enter the actual time shown on the clock when the factor
               occurred. SleepFix automatically records your timezone, UTC
@@ -795,7 +795,7 @@ export default function HabitsPage() {
         </div>
 
         <details className="mt-4 rounded-xl border bg-white p-4">
-          <summary className="cursor-pointer font-bold">
+          <summary className="cursor-pointer font-semibold">
             See example investigation: Coke drink
           </summary>
 
@@ -876,7 +876,7 @@ export default function HabitsPage() {
 
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-12">
             <label className="grid gap-2 xl:col-span-2">
-              <span className="font-semibold">Date</span>
+              <span className="font-medium">Date</span>
               <input
                 type="date"
                 value={candidateDate}
@@ -887,7 +887,7 @@ export default function HabitsPage() {
             </label>
 
             <label className="grid gap-2 xl:col-span-3">
-              <span className="font-semibold">Possible factor</span>
+              <span className="font-medium">Possible factor</span>
               <input
                 value={candidateFactorName}
                 onChange={(e) => setCandidateFactorName(e.target.value)}
@@ -897,7 +897,7 @@ export default function HabitsPage() {
             </label>
 
             <label className="grid gap-2 xl:col-span-3">
-              <span className="font-semibold">What happened to sleep?</span>
+              <span className="font-medium">What happened to sleep?</span>
               <select
                 value={candidateEffect}
                 onChange={(e) =>
@@ -912,7 +912,7 @@ export default function HabitsPage() {
             </label>
 
             <label className="grid gap-2 md:col-span-2 xl:col-span-4">
-              <span className="font-semibold">Reference note</span>
+              <span className="font-medium">Reference note</span>
               <textarea
                 value={candidateNoteText}
                 onChange={(e) => setCandidateNoteText(e.target.value)}
@@ -928,7 +928,7 @@ export default function HabitsPage() {
               type="button"
               onClick={saveCandidateNote}
               disabled={saving || !candidateDate || !candidateFactorName.trim()}
-              className="rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
+              className="rounded-xl bg-black px-5 py-3 font-semibold text-white disabled:opacity-50"
             >
               {saving
                 ? "Saving…"
@@ -941,7 +941,7 @@ export default function HabitsPage() {
               <button
                 type="button"
                 onClick={clearCandidateForm}
-                className="rounded-xl border border-neutral-300 px-5 py-3 font-bold"
+                className="rounded-xl border border-neutral-300 px-5 py-3 font-medium"
               >
                 Cancel edit
               </button>
@@ -953,13 +953,13 @@ export default function HabitsPage() {
               <div key={note.id} className="rounded-xl border bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="font-bold">{note.factor_name}</div>
+                    <div className="font-semibold">{note.factor_name}</div>
                     <div className="mt-1 text-sm text-neutral-600">
                       {formatDate(note.note_date)} · {candidateEffectLabel(note.effect_observed)}
                     </div>
                   </div>
 
-                  <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-semibold text-neutral-700">
+                  <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-medium text-neutral-700">
                     Possible factor
                   </span>
                 </div>
@@ -974,7 +974,7 @@ export default function HabitsPage() {
                   <button
                     type="button"
                     onClick={() => beginEditCandidateNote(note)}
-                    className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold"
+                    className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium"
                   >
                     Edit
                   </button>
@@ -983,7 +983,7 @@ export default function HabitsPage() {
                     type="button"
                     onClick={() => useCandidateForInvestigation(note)}
                     disabled={Boolean(activeInvestigation)}
-                    className="rounded-lg border border-black px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                    className="rounded-lg border border-black px-3 py-2 text-sm font-medium disabled:opacity-50"
                   >
                     Use for investigation
                   </button>
@@ -992,7 +992,7 @@ export default function HabitsPage() {
                     type="button"
                     onClick={() => deleteCandidateNote(note.id)}
                     disabled={saving}
-                    className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"
+                    className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
                   >
                     Delete
                   </button>
@@ -1021,7 +1021,7 @@ export default function HabitsPage() {
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <label className="grid gap-2">
-              <span className="font-semibold">Factor being investigated</span>
+              <span className="font-medium">Factor being investigated</span>
               <input
                 value={factorName}
                 onChange={(e) => setFactorName(e.target.value)}
@@ -1031,7 +1031,7 @@ export default function HabitsPage() {
             </label>
 
             <label className="grid gap-2">
-              <span className="font-semibold">Factor classification</span>
+              <span className="font-medium">Factor classification</span>
               <select
                 value={factorClassification}
                 onChange={(e) =>
@@ -1049,7 +1049,7 @@ export default function HabitsPage() {
             </label>
 
             <label className="grid gap-2">
-              <span className="font-semibold">Investigation area</span>
+              <span className="font-medium">Investigation area</span>
               <select
                 value={investigationArea}
                 onChange={(e) => setInvestigationArea(e.target.value)}
@@ -1068,7 +1068,7 @@ export default function HabitsPage() {
             type="button"
             onClick={startInvestigation}
             disabled={!userId || !factorName.trim() || saving}
-            className="mt-5 rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
+            className="mt-5 rounded-xl bg-black px-5 py-3 font-medium text-white disabled:opacity-50"
           >
             {saving ? "Starting…" : "Start investigation"}
           </button>
@@ -1079,13 +1079,13 @@ export default function HabitsPage() {
         <section className="rounded-xl border border-emerald-200 bg-emerald-50/45 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-bold uppercase tracking-wide text-green-700">
+              <div className="text-sm font-medium uppercase tracking-wide text-green-700">
                 Active investigation
               </div>
 
               {!editingInvestigation ? (
                 <>
-                  <h2 className="mt-1 text-2xl font-bold">
+                  <h2 className="mt-1 text-2xl font-semibold">
                     {activeInvestigation.factor_name}
                   </h2>
 
@@ -1103,7 +1103,7 @@ export default function HabitsPage() {
                     <button
                       type="button"
                       onClick={beginEditInvestigation}
-                      className="rounded-lg border border-neutral-300 px-3 py-1.5 font-semibold hover:bg-neutral-50"
+                      className="rounded-lg border border-neutral-300 px-3 py-1.5 font-medium hover:bg-neutral-50"
                     >
                       Edit investigation
                     </button>
@@ -1113,7 +1113,7 @@ export default function HabitsPage() {
                 <div className="mt-3 rounded-xl border border-neutral-200 p-4">
                   <div className="grid gap-4 md:grid-cols-3">
                     <label className="grid gap-2">
-                      <span className="font-semibold">
+                      <span className="font-medium">
                         Contributing factor
                       </span>
                       <input
@@ -1126,7 +1126,7 @@ export default function HabitsPage() {
                     </label>
 
                     <label className="grid gap-2">
-                      <span className="font-semibold">
+                      <span className="font-medium">
                         Factor classification
                       </span>
                       <select
@@ -1148,7 +1148,7 @@ export default function HabitsPage() {
                     </label>
 
                     <label className="grid gap-2">
-                      <span className="font-semibold">
+                      <span className="font-medium">
                         Investigation area
                       </span>
                       <select
@@ -1175,7 +1175,7 @@ export default function HabitsPage() {
                       type="button"
                       onClick={saveInvestigationDetails}
                       disabled={saving || !editFactorName.trim()}
-                      className="rounded-xl bg-black px-4 py-2 font-bold text-white disabled:opacity-50"
+                      className="rounded-xl bg-black px-4 py-2 font-semibold text-white disabled:opacity-50"
                     >
                       {saving ? "Saving…" : "Save investigation changes"}
                     </button>
@@ -1184,7 +1184,7 @@ export default function HabitsPage() {
                       type="button"
                       onClick={cancelEditInvestigation}
                       disabled={saving}
-                      className="rounded-xl border border-neutral-300 px-4 py-2 font-bold disabled:opacity-50"
+                      className="rounded-xl border border-neutral-300 px-4 py-2 font-medium disabled:opacity-50"
                     >
                       Cancel
                     </button>
@@ -1196,7 +1196,7 @@ export default function HabitsPage() {
 
           <div className="mt-6 rounded-xl border border-emerald-200 bg-white/85 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-lg font-bold">
+              <h3 className="text-lg font-semibold">
                 {editingObservationId
                   ? "Edit observation"
                   : "Add observation"}
@@ -1206,7 +1206,7 @@ export default function HabitsPage() {
                 <button
                   type="button"
                   onClick={clearObservationForm}
-                  className="rounded-lg border px-3 py-2 text-sm font-semibold"
+                  className="rounded-lg border px-3 py-2 text-sm font-medium"
                 >
                   Cancel edit
                 </button>
@@ -1215,7 +1215,7 @@ export default function HabitsPage() {
 
             <div className="mt-4 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               <label className="grid gap-2">
-                <span className="font-semibold">Date</span>
+                <span className="font-medium">Date</span>
                 <input
                   type="date"
                   value={observationDate}
@@ -1226,7 +1226,7 @@ export default function HabitsPage() {
               </label>
 
               <label className="grid gap-2">
-                <span className="font-semibold">Amount / degree</span>
+                <span className="font-medium">Amount / degree</span>
                 <input
                   value={amountDegree}
                   onChange={(e) => setAmountDegree(e.target.value)}
@@ -1236,7 +1236,7 @@ export default function HabitsPage() {
               </label>
 
               <label className="grid gap-2">
-                <span className="font-semibold">Time factor occurred</span>
+                <span className="font-medium">Time factor occurred</span>
                 <input
                   type="time"
                   value={factorTime}
@@ -1246,7 +1246,7 @@ export default function HabitsPage() {
               </label>
 
               <label className="grid gap-2">
-                <span className="font-semibold">Time to fall asleep</span>
+                <span className="font-medium">Time to fall asleep</span>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -1266,7 +1266,7 @@ export default function HabitsPage() {
               </label>
 
               <label className="grid gap-2 md:col-span-2 xl:col-span-1">
-                <span className="font-semibold">
+                <span className="font-medium">
                   How did you feel after sleeping?
                 </span>
 
@@ -1302,7 +1302,7 @@ export default function HabitsPage() {
               type="button"
               onClick={saveObservation}
               disabled={saving}
-              className="mt-5 rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
+              className="mt-5 rounded-xl bg-black px-5 py-3 font-medium text-white disabled:opacity-50"
             >
               {saving
                 ? "Saving…"
@@ -1313,7 +1313,7 @@ export default function HabitsPage() {
           </div>
 
           <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-            <h3 className="text-lg font-bold text-amber-900">Investigation History</h3>
+            <h3 className="text-lg font-medium text-amber-900">Investigation History</h3>
 
             <p className="mt-1 text-sm text-neutral-600">
               All observations remain attached to this investigation. Edit any
@@ -1427,7 +1427,7 @@ export default function HabitsPage() {
                 !activeObservations.length ||
                 !selectedThresholdObservationId
               }
-              className="mt-5 rounded-xl bg-black px-5 py-3 font-bold text-white disabled:opacity-50"
+              className="mt-5 rounded-xl bg-black px-5 py-3 font-semibold text-white disabled:opacity-50"
             >
               {saving
                 ? "Saving…"
@@ -1470,7 +1470,7 @@ export default function HabitsPage() {
                     className="flex w-full flex-wrap items-center justify-between gap-3 p-4 text-left"
                   >
                     <div>
-                      <div className="font-bold">
+                      <div className="font-semibold">
                         {investigation.factor_name}
                       </div>
 
@@ -1483,7 +1483,7 @@ export default function HabitsPage() {
                     </div>
 
                     <span
-                      className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                      className={`rounded-full px-3 py-1 text-sm font-medium ${
                         investigation.status === "active"
                           ? "bg-green-100 text-green-800"
                           : "bg-neutral-100 text-neutral-700"
@@ -1561,7 +1561,7 @@ export default function HabitsPage() {
                           disabled={
                             saving || Boolean(activeInvestigation)
                           }
-                          className="mt-4 rounded-xl border border-black px-4 py-2 font-bold disabled:opacity-50"
+                          className="mt-4 rounded-xl border border-black px-4 py-2 font-semibold disabled:opacity-50"
                         >
                           Continue investigation
                         </button>
