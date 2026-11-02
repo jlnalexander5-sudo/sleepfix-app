@@ -58,10 +58,9 @@ export default function PrivacyPage() {
           providers used to operate the app, such as hosting, authentication, and database services.
         </p>
 
-        <h2 style={{ fontWeight: 600 }}>7. User control</h2>
+        <h2 style={{ fontWeight: 600 }}>7. User control and data deletion</h2>
         <p>
-          You may choose what information to enter. You may stop using the app at any time. Future account deletion or
-          data export features may be added as the app develops.
+          You may choose what information to enter and stop using the app at any time. To request the deletion of your account and associated data, you can contact support through the feedback form at <a href="https://sleepfix-app.vercel.app/protected/feedback" style={{ color: "#1e3a8a", textDecoration: "underline" }}>https://sleepfix-app.vercel.app/protected/feedback</a>, and your data will be permanently removed from our database.
         </p>
 
         <h2 style={{ fontWeight: 600 }}>8. Cookies and technical data</h2>
